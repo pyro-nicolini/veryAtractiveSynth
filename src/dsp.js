@@ -45,8 +45,6 @@ export function synthBeat(sampleRate=48000,bpm=104,bars=8) {
     strike(t,.13,(x)=>noise()*Math.exp(-x*55)*.095, i%2===0?-.25:.25);
     strike(t+beat/2,.09,(x)=>noise()*Math.exp(-x*72)*.065, i%2===0?.3:-.3);
   }
-  const peak=Math.max(1,...[0]); // retain headroom, no artificial clip
-  void peak;
   return [left,right];
 }
 export function encodeWav(buffer,depth=24){

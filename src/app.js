@@ -34,6 +34,7 @@ const HELP={
   offline:['Tus sonidos son privados','Nada se envía a servidores. Guarda la sesión en este navegador con GUARDAR. El almacenamiento local puede borrarse al limpiar los datos del navegador; exporta tus mezclas importantes.']
 };
 let toastTimer,raf=0;
+const modalStack=[];
 const html=(text)=>String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trackColor=(t)=>COLORS.includes(t.color)?t.color:COLORS[0];
 const current=()=>state.tracks.find(t=>t.id===state.selected);
@@ -44,10 +45,12 @@ function help(key){
   modal(title,'<p>'+html(body)+'</p>',[{label:'ENTENDIDO',type:'close',primary:true}]);
 }
 function modal(title,content,actions=[]){
+  if($('#modalRoot').innerHTML)modalStack.push($('#modalRoot').innerHTML);
   $('#modalRoot').innerHTML='<div class="modal-backdrop" id="modalBackdrop"><section class="focus-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"><div class="focus-header"><div><div class="section-overline">VERY ATRACTIVE / FOCUS MODE</div><h2 id="modalTitle">'+html(title)+'</h2></div><button type="button" class="focus-close" data-action="close-modal" title="Cerrar">×</button></div><div class="focus-content">'+content+'</div><div class="focus-footer">'+actions.map(a=>'<button class="button '+(a.primary?'button-primary':'button-muted')+'" type="button" data-action="'+a.type+'">'+html(a.label)+'</button>').join('')+'</div></section></div>';
   $('.focus-panel')?.focus();
 }
 function closeModal(){
+  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();return;}
   if(state.recording){toast('Detén la grabación antes de cerrar');return;}
   $('#modalRoot').innerHTML='';
 }
@@ -231,7 +234,7 @@ async function startRecording(){
         Object.assign(t,{autotune:tune,clean,retune:70,space:12,preset:'star'});
         render();toast('¡Voz agregada! Puedes afinarla y escucharla con la base.');
       }catch(err){toast('No se pudo preparar la toma: '+err.message);}
-      finally{state.recording=null;$('#modalRoot').innerHTML='';}
+      finally{state.recording=null;modalStack.length=0;$('#modalRoot').innerHTML='';}
     };
     if(monitor)await engine.monitor(stream,monitorTrack);
     state.recording={recorder,stream,started:Date.now(),monitorTrack};
@@ -267,7 +270,7 @@ async function performExport(){
   try{
     const blob=await engine.exportMix(state.tracks,{depth,rate,onlyId});
     downloadBlob(blob,safeFilename(onlyId?current().name:'veryAtractiveSynth-mi-mezcla')+'-'+rate/1000+'k-'+depth+'bit.wav');
-    $('#modalRoot').innerHTML='';toast('Tu archivo WAV está listo.');
+    modalStack.length=0;$('#modalRoot').innerHTML='';toast('Tu archivo WAV está listo.');
   }catch(e){toast('Exportación: '+e.message);}
   finally{state.busy=false;if(btn)btn.textContent='CREAR MI WAV';}
 }
@@ -307,7 +310,8 @@ async function setTiming(key,value){
   const maxTrim=t.buffer.duration-.02;
   if(t.trimStart+t.trimEnd>maxTrim){if(key==='trimStart')t.trimEnd=Math.max(0,maxTrim-t.trimStart);else t.trimStart=Math.max(0,maxTrim-t.trimEnd);}
   t.fadeIn=clamp(t.fadeIn,0,effectiveDuration(t));t.fadeOut=clamp(t.fadeOut,0,effectiveDuration(t));
-  render();await restartPlayback();
+  const note=$('.focus-content .hint');
+  if(note)note.textContent='Duración audible: '+clock(effectiveDuration(t))+' · Original: '+clock(t.buffer.duration);
 }
 function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
@@ -325,15 +329,15 @@ function handleModalAction(action){
   if(action==='stop-record'){stopRecording();return;}
   if(action==='do-export'){performExport();return;}
   const t=current();if(!t)return;
-  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');t.name=name.slice(0,80);$('#modalRoot').innerHTML='';render();}
+  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
   if(action==='duplicate-track'){
     const clone={...t,id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
-    state.tracks.push(clone);state.selected=clone.id;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
+    state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
   }
   if(action==='delete-track'){
     if(!confirm('¿Eliminar la capa "'+t.name+'"?'))return;
     state.tracks=state.tracks.filter(x=>x.id!==t.id);state.selected=state.tracks[0]?.id||null;
-    $('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa eliminada');
+    modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa eliminada');
   }
 }
 function wire(){
@@ -375,8 +379,15 @@ function wire(){
   });
   document.addEventListener('change',e=>{
     if(e.target.matches('select[data-setting]'))renderInspector();
+    if(e.target.matches('[data-timing]')){render();restartPlayback();}
   });
   document.addEventListener('keydown',e=>{
+    if(e.key==='Tab'&&$('#modalBackdrop')){
+      const targets=$('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',$('.focus-panel'));
+      if(targets.length){const first=targets[0],last=targets[targets.length-1];
+        if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
+    }
     if(e.key==='Escape'&&$('#modalBackdrop')){closeModal();return;}
     if(e.key===' '&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement?.tagName||'')&&!$('#modalBackdrop')){e.preventDefault();playPause();}
   });
