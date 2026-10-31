@@ -1,1 +1,112 @@
-# veryAtractiveSynth
+# VERY ATRACTIVE SYNTH 🎛️
+
+**Un estudio de audio para crear canciones sin aprender producción musical.**
+
+> **Estado actual: DesignPhase · MVP 0.1.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+
+## Inicio rápido
+
+Requisitos: **Node.js 20+** y **Chrome o Edge moderno** (para el micrófono y el motor de efectos, HTTPS o localhost). No se requieren dependencias ni cuentas.
+
+~~~bash
+git clone https://github.com/pyro-nicolini/veryAtractiveSynth.git
+cd veryAtractiveSynth
+git switch DesignPhase
+npm start
+~~~
+
+Abre **http://127.0.0.1:4173/** en el navegador. **No necesitas npm install.**
+
+Alternativa con Python: ejecuta el servidor desde la raíz del repo.
+
+~~~bash
+python -m http.server 4173 --bind 127.0.0.1
+~~~
+
+Para pruebas automatizadas: **npm test**.
+
+No abras el HTML directamente por doble clic: el proyecto utiliza módulos y AudioWorklet que deben servirse desde un origen válido.
+
+## Tu primera canción: paso a paso
+
+1. **PROBAR UN RITMO** carga una batería original de ocho compases (generada en tu equipo, sin descargar muestras).
+2. **AGREGAR SONIDO** importa uno o varios MP3, WAV, M4A y otros archivos compatibles con el navegador. También puedes arrastrarlos sobre la ventana. Límite individual: 350 MB.
+3. **GRABAR MI VOZ** pide permiso de micrófono. Reproduce tu base con auriculares y presiona COMENZAR A GRABAR; DETENER Y AGREGAR incorpora una nueva capa. Opcionalmente puedes escucharte con afinación mientras grabas.
+4. **SELECCIONA UNA CAPA** para aplicar tres ajustes esenciales: Volumen, Afinación y Limpieza.
+5. **ESTILOS RÁPIDOS** cambia varios ajustes de golpe: Natural, Voz limpia, Pop brillante, Robot pop, Sueño espacial y Radio vintage.
+6. **TONO / ESCALA** elige Do, Re, Mi, etc., y Mayor, Menor o Cromática. La afinación funciona mejor cuando la escala coincide con la base musical.
+7. **MÁS EFECTOS** permite experimentar con velocidad de afinación, brillo, calidez, eco, espacio/reverb, distorsión y panorámica.
+8. **AJUSTAR TIEMPOS** permite mover una grabación para sincronizarla, recortar su inicio/final y crear fades de entrada/salida. Son operaciones no destructivas.
+9. **REPRODUCE** con ▶, pausa o detener; haz clic sobre la forma de onda para ir a otro punto. M silencia, S escucha solo esa capa; ⋯ permite renombrar, duplicar o eliminar.
+10. **EXPORTAR** crea un WAV estéreo con efectos. Puedes elegir la mezcla o una sola capa, 44.1/48 kHz y PCM 16/24/32-bit float.
+11. **GUARDAR / ABRIR** conserva y recupera una sesión local en IndexedDB con el audio original y los parámetros. Es una única sesión por navegador.
+
+Los íconos **i** de cada función explican el control con palabras sencillas. Focus Mode abre herramientas adicionales en diálogos con ligero desenfoque, sin perder contexto del estudio.
+
+## ¿Qué está implementado?
+
+| Función | Estado | Nota |
+|---|---|---|
+| Audio multipista, importar, arrastrar | ✅ | Decodificación depende del navegador |
+| Grabar micrófono y cantar sobre una base | ✅ | MediaRecorder, permiso explícito |
+| Escucha opcional con efectos | ✅ | Recomendados auriculares cableados |
+| Mezclar capas, mute, solo, duplicar | ✅ | Volumen independiente y paneo |
+| Autotune por tono/escala | 🧪 Experimental | Pitch detection y pitch shifting granular en AudioWorklet |
+| Limpiar grabaciones | 🟡 Básico | Puerta de ruido, EQ, filtros, compresión; no restauración IA |
+| Eco, reverb, distorsión, tono y presets | ✅ | Por pista, no destructivos |
+| Formas de onda, offset, recorte y fades | ✅ | Reproducción sincronizada con AudioContext |
+| Exportar WAV 16/24/32 | ✅ / sujeto a navegador | Render offline con efectos; error explícito si el navegador no soporta AudioWorklet offline |
+| Guardar y recuperar proyecto | ✅ | IndexedDB del navegador; sin servidor |
+| PWA con cache local | ✅ / sujeto a origen | Instalación en HTTPS/localhost; cachea solo código |
+| Autotune comercial, separación de ruido por IA | ❌ | Para fases siguientes |
+| Undo/redo y metrónomo | ❌ | Pendientes |
+
+## Calidad del sonido: límites importantes
+
+**Ningún cambio de frecuencia de muestreo o profundidad de bits reconstruye información perdida.** Exportar a 24-bit/48 kHz da un archivo útil para continuar produciendo, pero no convierte un micrófono malo o un MP3 muy comprimido en una fuente profesional. La limpieza inicial atenúa ruido en silencios y retira frecuencias indeseadas; no puede eliminar de forma fiable voces o música mezcladas con la grabación.
+
+El algoritmo de afinación del MVP **es experimental**. Utiliza detección monofónica aproximada y síntesis granular, que pueden introducir artefactos, latencia y saltos en voces difíciles o material polifónico. Para producto comercial debe sustituirse o complementarse con un motor DSP probado (WASM, pitch tracking mejorado, validaciones auditivas).
+
+Grabación: el audio se guarda original, sin procesamiento destructivo. MediaRecorder y el hardware pueden introducir retraso; usa AJUSTAR TIEMPOS para alinear una toma con la base. El modo de monitoreo puede generar acoples si no usas auriculares. Bluetooth suele aumentar mucho la latencia.
+
+**Los datos se quedan en tu dispositivo.** El audio nunca se envía a servidores ni se almacena en la nube. IndexedDB guarda una sesión, no un backup garantizado; si borras los datos del sitio, pierdes la sesión. Exporta los WAV importantes. La exportación se limita conservadoramente a 20 minutos por mezcla y a la memoria que permita el dispositivo.
+
+## Teléfono y uso offline
+
+Para el micrófono, el navegador necesita un **origen seguro**: localhost en el mismo dispositivo o HTTPS. El teléfono NO podrá abrir el micrófono desde un simple enlace HTTP a la IP local de otro computador. Puedes servir la aplicación como sitio estático HTTPS desde la rama DesignPhase, por ejemplo con GitHub Pages: Settings → Pages → Deploy from a branch → DesignPhase / (root). La URL habitual es https://pyro-nicolini.github.io/veryAtractiveSynth/ **solo después de habilitar Pages**. No se ha realizado ese despliegue.
+
+El service worker cachea únicamente la interfaz/código. Después de la primera visita en un origen seguro, la app se puede abrir offline según políticas del navegador, pero **los permisos y la disponibilidad de almacenamiento** dependen del dispositivo.
+
+## Arquitectura
+
+~~~text
+index.html                    interfaz semántica
+src/styles.css                neón responsive, perillas, vinilos, Focus Mode
+src/app.js                    UI, grabación, pistas, presets, edición
+src/engine.js                 AudioContext, cadena DSP por capa, render offline
+src/dsp.js                    cuantización de notas, demo, export WAV y tests
+src/worklets/voice-processor.js
+                              afinación/gate en el hilo de audio
+src/project-store.js          persistencia local de sesión IndexedDB
+server.js                     servidor sin dependencias, solo localhost
+sw.js                         cache de aplicación estática, no audio
+tests/dsp.test.js             test automatizados PCM y WAV
+docs/PLAN.md                  roadmap, diseño y QA
+~~~
+
+Audio por capa: **AudioBuffer → AudioWorklet (pitch/gate) → filtros → EQ → saturación → compresión → eco/reverb → paneo → volumen de capa → master/limitador**. Exportación replica la cadena en OfflineAudioContext. Persistencia guarda PCM original y parámetros en IndexedDB. El servidor local no acepta uploads.
+
+## Desarrollo y QA
+
+1. Corre **npm test**.
+2. Prueba un ritmo → play/pause/seek/stop → volumen, mute/solo.
+3. Importa WAV mono y MP3 estéreo; graba 10 segundos de voz.
+4. Mueve perillas durante reproducción y prueba efectos/fades/duplicación.
+5. Exporta los tres WAV y reimpórtalos; verifica duración y efectos.
+6. Guarda sesión, recarga y vuelve a abrirla.
+7. Evalúa Safari iOS y Chrome Android usando HTTPS, auriculares y casos sin permisos.
+8. Comprueba performance y latencia en dispositivos reales. Hasta completar esa auditoría, **no etiquetar como producción**.
+
+Lee [el plan completo de fases y criterios de aceptación](docs/PLAN.md).
+
+**main no se modifica; este trabajo permanece en DesignPhase.**

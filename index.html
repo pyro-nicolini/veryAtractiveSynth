@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#07090d">
+  <meta name="description" content="Very Atractive Synth — estudio de voz y pistas por capas, privado y local.">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./src/styles.css">
+  <title>Very Atractive Synth | Laboratorio de sonido</title>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Very Atractive Synth, inicio">
+      <span class="brand-mark">V<span class="brand-pulse"></span></span>
+      <span class="brand-text">VERY<span>ATRACTIVE</span><small>S Y N T H &nbsp; / &nbsp; S T U D I O</small></span>
+    </a>
+    <div class="top-actions">
+      <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
+      <button type="button" class="button button-muted" id="helpBtn" aria-label="Guía del estudio">? <span class="desktop-only">GUÍA</span></button>
+      <button type="button" class="button button-muted" id="loadBtn">↗ <span class="desktop-only">ABRIR</span></button>
+      <button type="button" class="button button-muted" id="saveBtn">▣ <span class="desktop-only">GUARDAR</span></button>
+      <button type="button" class="button button-primary" id="exportBtn">↓ EXPORTAR</button>
+    </div>
+  </header>
+  <main>
+    <section class="intro">
+      <div><div class="eyebrow"><span class="pulse-line"></span> TU ESTUDIO CREATIVO · VERSIÓN 0.1</div>
+        <h1>Haz que suene <em>increíble.</em></h1>
+        <p>Graba tu voz, agrega una base y transforma cada sonido. Sin tecnicismos.</p>
+      </div>
+      <div class="intro-decoration" aria-hidden="true"><span>/// 48K</span><span>WAVEFORM</span></div>
+    </section>
+    <section class="quick-start" aria-label="Comenzar">
+      <button type="button" class="action-tile action-import" id="importBtn">
+        <span class="action-symbol">＋</span><span class="tile-copy"><strong>Agregar sonido</strong><small>MP3, WAV, M4A y más</small></span><span class="tile-arrow">↗</span>
+      </button>
+      <button type="button" class="action-tile action-record" id="recordBtn">
+        <span class="action-symbol"><span class="record-glyph"></span></span><span class="tile-copy"><strong>Grabar mi voz</strong><small>Un botón, tu micrófono</small></span><span class="tile-arrow">↗</span>
+      </button>
+      <button type="button" class="action-tile action-demo" id="demoBtn">
+        <span class="action-symbol">♫</span><span class="tile-copy"><strong>Probar un ritmo</strong><small>Base original para empezar</small></span><span class="tile-arrow">↗</span>
+      </button>
+    </section>
+    <section class="workbench">
+      <div class="track-area">
+        <div class="section-heading">
+          <div><div class="section-overline">01 / CAPAS DE SONIDO</div><h2>Tu mezcla <span id="trackCount" class="count">00</span></h2></div>
+          <div class="section-tools"><button class="mini-action" id="tracksInfo" aria-label="Información sobre las capas">i</button><button class="mini-action mini-add" id="addTrackBtn">+ AGREGAR</button></div>
+        </div>
+        <div class="timeline-ruler"><span>INICIO</span><div class="ruler-line" id="ruler"><span class="playhead" id="playhead"></span></div><span id="endTimeLabel">00:00</span></div>
+        <div id="tracks" class="track-list" aria-live="polite"></div>
+        <div id="emptyState" class="empty-state">
+          <div class="empty-vinyl"><div class="empty-center"></div></div>
+          <h3>Tu próxima canción comienza aquí.</h3>
+          <p>Importa una pista, graba una idea o prueba el ritmo de ejemplo.</p>
+          <button class="button button-outline" id="emptyImportBtn">＋ AGREGAR PRIMER SONIDO</button>
+        </div>
+        <div class="timeline-footer"><span><span class="green-dot"></span> Cada capa se puede modificar sin afectar las demás</span><button class="mini-action" id="timelineInfo">i</button></div>
+      </div>
+      <aside class="inspector" id="inspector" aria-label="Controles de pista">
+        <div class="section-heading inspector-heading">
+          <div><div class="section-overline">02 / AJUSTES SIMPLES</div><h2>Tu sonido</h2></div>
+          <button class="mini-action" id="inspectorInfo" aria-label="Información de controles">i</button>
+        </div>
+        <div id="inspectorBody"><div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div></div>
+      </aside>
+    </section>
+  </main>
+  <footer class="transport">
+    <div class="transport-left"><span class="transport-label">ESTUDIO / MIX</span><div id="timeDisplay" class="time-code">00:00 <span>/ 00:00</span></div></div>
+    <div class="transport-center">
+      <button type="button" id="backBtn" class="transport-button" title="Volver al comienzo" aria-label="Volver al comienzo">⏮</button>
+      <button type="button" id="playBtn" class="transport-play" aria-label="Reproducir" title="Reproducir / pausar">▶</button>
+      <button type="button" id="stopBtn" class="transport-button" title="Detener" aria-label="Detener">■</button>
+    </div>
+    <div class="transport-right"><span>VOLUMEN FINAL</span><input id="masterVolume" aria-label="Volumen final" type="range" min="0" max="100" value="85"><span id="volumeValue">85%</span><button class="mini-action" id="masterInfo" aria-label="¿Qué es el volumen final?">i</button></div>
+  </footer>
+</div>
+<input id="fileInput" type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.opus" multiple hidden>
+<div id="modalRoot"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="./src/app.js"></script>
+</body></html>

@@ -1,0 +1,17 @@
+{
+  "name": "Very Atractive Synth — Estudio local",
+  "short_name": "V.A. Synth",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07090d",
+  "theme_color": "#07090d",
+  "description": "Graba, edita y mezcla tus sonidos localmente.",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
