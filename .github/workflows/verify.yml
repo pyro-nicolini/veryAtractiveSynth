@@ -1,0 +1,28 @@
+name: Verify DesignPhase
+on:
+  push:
+    branches: [DesignPhase]
+  pull_request:
+    branches: [main, DesignPhase]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ''
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          node --check src/app.js
+          node --check src/engine.js
+          node --check src/dsp.js
+          node --check src/project-store.js
+          node --check src/worklets/voice-processor.js
+      - name: Run DSP unit tests
+        run: npm test
