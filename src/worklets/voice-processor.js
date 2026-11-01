@@ -15,12 +15,20 @@ class VoiceProcessor extends AudioWorkletProcessor {
     super();this.buffers=[new Float32Array(RING_SIZE),new Float32Array(RING_SIZE)];
     this.mono=new Float32Array(RING_SIZE);this.pos=0;this.phase=0;this.grain=1536;
     this.counter=0;this.ratio=1;this.targetRatio=1;this.envelope=0;this.gate=1;
+    this.telemetry=false;this.telemetrySeq=0;
+    if(this.port)this.port.onmessage=event=>{
+      if(event.data?.type==='monitor')this.telemetry=!!event.data.enabled;
+    };
+  }
+  reportPitch(data){
+    if(!this.telemetry)return;
+    this.port?.postMessage({type:'pitch',seq:++this.telemetrySeq,...data});
   }
   detect(key,scale){
     const r=this.mono,p=this.pos,limit=2048,hop=4;
     let energy=0;
     for(let j=0;j<limit;j+=hop){const v=r[(p-j-1+RING_SIZE)%RING_SIZE];energy+=v*v;}
-    if(energy<.012){this.targetRatio=1;return;}
+    if(energy<.012){this.targetRatio=1;this.reportPitch({voiced:false});return;}
     const low=Math.floor(sampleRate/800),high=Math.min(590,Math.floor(sampleRate/85));
     let bestLag=0,bestScore=.57;
     for(let lag=low;lag<=high;lag+=2){
@@ -32,7 +40,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
       const score=dot/Math.sqrt(e1*e2+1e-9);
       if(score>bestScore){bestScore=score;bestLag=lag;}
     }
-    if(!bestLag){this.targetRatio=1;return;}
+    if(!bestLag){this.targetRatio=1;this.reportPitch({voiced:false});return;}
     const pitch=sampleRate/bestLag,midi=69+12*Math.log2(pitch/440);
     const notes=scale===1?MINOR:scale===2?null:MAJOR;
     let target=Math.round(midi);
@@ -44,6 +52,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
       }
     }
     this.targetRatio=Math.max(.7,Math.min(1.45,Math.pow(2,(target-midi)/12)));
+    this.reportPitch({voiced:true,midi,target,frequency:pitch,confidence:bestScore,cents:(midi-target)*100});
   }
   read(buf,index){
     const i=Math.floor(index),f=index-i;
@@ -58,7 +67,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
       const l=input?.[0]?.[i]||0,r=input?.[1]?.[i]??l;
       const mono=(l+r)*.5;this.mono[this.pos]=mono;
       this.buffers[0][this.pos]=l;this.buffers[1][this.pos]=r;
-      if(++this.counter>=4096){this.counter=0;if(strength>.008)this.detect(key,scale);else this.targetRatio=1;}
+      if(++this.counter>=4096){this.counter=0;if(strength>.008||this.telemetry)this.detect(key,scale);else this.targetRatio=1;}
       this.ratio+=(this.targetRatio-this.ratio)*(.00016+retune*retune*.014);
       this.envelope+=(Math.abs(mono)-this.envelope)*(Math.abs(mono)>this.envelope?.08:.006);
       const threshold=clean*clean*.019;

@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.5 implementado
+## 3. Estado 0.6 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,17 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 0.6 — Medición de tono y grabación asistida
+
+- [x] Telemetría opt-in del tono estimado desde AudioWorklet cuando Tune Lab está abierto.
+- [x] Visor de Hz, nota estimada y objetivo de la escala, desviación en cents y señal insuficiente.
+- [x] Cuenta de entrada opcional de cuatro pulsos con clics al BPM del proyecto.
+- [x] Estado visual y cancelación de cuenta previa a grabar.
+- [x] Tests de pitch telemetry, silencio, activación/desactivación, teclado y cuenta de entrada.
+- [ ] QA manual de grabación y lectura de notas en PC/iPhone/Android.
+- [ ] Calibración automática de latencia y evaluación de error real de F0.
+- [ ] Sustituir pitch shifting granular experimental y mejorar limpieza de voz.
 
 ### Fase 0.5 — Tune Lab (nueva entrega)
 

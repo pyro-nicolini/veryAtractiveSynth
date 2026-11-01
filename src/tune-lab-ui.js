@@ -51,6 +51,12 @@ export function tuneLabMarkup(track,userPresets=[]){
     '</div><div class="lab-bottom-axis"><span>← NATURAL</span><span>ROBOT →</span></div>'+
     '<div class="lab-coordinates" role="status" aria-live="off"><span id="labXCoord">X '+p.x.toFixed(2)+'</span>'+
     '<span id="labYCoord">Y '+p.y.toFixed(2)+'</span><span id="labTuningReadout">AFINACIÓN</span></div>'+
+    '<div class="lab-pitch-monitor" id="labPitchMonitor" aria-label="Analizador de nota estimada durante la reproducción">'+
+    '<div class="lab-pitch-labels"><span>NOTA DETECTADA <button class="mini-action info-button" data-info="pitchReading" type="button" title="Cómo leer el indicador">i</button></span><span id="labPitchStatus">PULSA ESCUCHAR CAMBIOS</span></div>'+
+    '<div class="lab-pitch-main"><strong id="labPitchNote">—</strong><small id="labPitchHz">—</small><span>NOTA MÁS CERCANA</span><strong id="labPitchTarget">—</strong></div>'+
+    '<div class="lab-pitch-scale"><span>♭</span><div class="lab-pitch-scale-line"><i id="labPitchNeedle" style="left:50%"></i></div><span>♯</span></div>'+
+    '<div class="lab-pitch-cents" id="labPitchCents">—</div>'+
+    '</div>'+
     '<div class="lab-mood"><span class="lab-mood-spark">✦</span><div><strong id="labMoodTitle"></strong><p id="labMoodDetail"></p></div></div>'+
     '<div class="lab-axes-controls"><label for="labXInput">Natural <span>↔</span> Robótico</label>'+
     '<input id="labXInput" type="range" min="-100" max="100" step="1" value="'+Math.round(p.x*100)+'" data-tune-axis="x" aria-label="Natural o robótico">'+

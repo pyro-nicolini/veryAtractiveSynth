@@ -119,7 +119,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -181,6 +181,21 @@ export class AudioEngine {
     osc.start(time);osc.stop(time+.065);
     osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch{}};
   }
+  /** Optional four-beat preparation before starting playback and microphone.
+      Scheduling uses AudioContext for audible clicks; UI timers are advisory
+      and can drift in a throttled mobile browser. */
+  async countIn(bpm=104,beats=4,onBeat=()=>{},isCancelled=()=>false){
+    await this.ready();
+    const total=Math.max(1,Math.min(8,Math.round(beats)));
+    const delay=60000/Math.max(40,Math.min(240,bpm));
+    for(let i=0;i<total;i++){
+      if(isCancelled())return false;
+      onBeat(total-i);
+      this.scheduleClick(this.ctx.currentTime+.012,i===0);
+      await new Promise(resolve=>setTimeout(resolve,delay));
+    }
+    return !isCancelled();
+  }
   startMetronome(position=this.from,contextStart=this.ctx?.currentTime||0){
     if(!this.metronomeEnabled||!this.ctx)return;
     this.stopMetronome();
@@ -215,6 +230,7 @@ export class AudioEngine {
       if(src)this.sources.push(src);
     }
     this.playing=this.sources.length>0;
+    this.syncPitchTelemetry();
     if(this.playing&&this.metronomeEnabled)this.startMetronome(this.from,this.startCtxTime);
   }
   position(){
@@ -231,6 +247,22 @@ export class AudioEngine {
   updateTrack(track){
     const graph=this.graphs.get(track.id);
     if(graph)setParams(graph,track,this.ctx);
+  }
+  /** Opt-in pitch telemetry from the existing worklet. Never exported or stored. */
+  watchPitch(trackId,callback){
+    this.pitchTrackId=typeof trackId==='string'?trackId:null;
+    this.pitchListener=typeof callback==='function'?callback:null;
+    this.syncPitchTelemetry();
+  }
+  syncPitchTelemetry(){
+    for(const [id,graph] of this.graphs){
+      const active=!!this.pitchListener&&id===this.pitchTrackId;
+      graph.voice.port.onmessage=active?event=>{
+        if(event.data?.type==='pitch'&&this.pitchListener&&this.pitchTrackId===id)
+          this.pitchListener(event.data);
+      }:null;
+      graph.voice.port.postMessage({type:'monitor',enabled:active});
+    }
   }
 
   /** Connect microphone to a silent meter, with optional explicit monitoring.

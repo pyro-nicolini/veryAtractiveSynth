@@ -25,6 +25,7 @@ jobs:
           node --check src/recording-utils.js
           node --check src/tune-lab.js
           node --check src/tune-lab-ui.js
+          node --check src/pitch-display.js
           node --check src/audio-import.js
           node --check src/timeline.js
           node --check src/portable-project.js

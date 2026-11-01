@@ -5,13 +5,14 @@ import {MAX_RECORDING_SECONDS,meterLevel,audioFileHint} from './recording-utils.
 import {exportProject,importProject} from './portable-project.js';
 import {zipStore} from './zip-store.js';
 import {TUNE_POINTS,normalizeTune,tunePointFromManual,applyTunePoint,findTunePreset} from './tune-lab.js';
+import {pitchReadout} from './pitch-display.js';
 import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMarkup} from './tune-lab-ui.js';
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,master:85,busy:false};
+const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,master:85,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
@@ -45,6 +46,8 @@ const HELP={
   snap:['Ajustar al ritmo','Cuando está activado, mover una capa con ↔ la coloca en el pulso musical más cercano según los BPM. Desactívalo para moverla libremente.'],
   clip:['Mover una capa','Arrastra el símbolo ↔ sobre la forma de onda para cambiar su posición en el tiempo. El sonido original se conserva.'],
   loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.'],
+  countIn:['Cuenta de entrada','Antes de comenzar una nueva grabación, escucharás cuatro pulsos a los BPM elegidos. Canta después del último pulso. La base empieza junto con la grabación; los clics de preparación no quedan dentro del archivo digital. Usa auriculares para evitar que el micrófono recoja los clics.'],
+  pitchReading:['Analizador de voz','Cuando reproduces una capa con Tune Lab abierto, el motor estima la frecuencia fundamental y la nota musical más cercana. El indicador de cents señala la desviación antes de la corrección. Si ves SIN NOTA CLARA, no es necesariamente un error: el sonido puede ser silencio, ruido, música con varias notas o una voz difícil de analizar. La medición es orientativa y todavía experimental.'],
   tuneLab:['TUNE LAB — experimento musical','Mueve el nodo en el plano: izquierda = transiciones naturales, derecha = cambios robóticos rápidos; abajo = poca afinación, arriba = mucha afinación. También modifica ligeramente brillo y saturación para descubrir colores. El sonido cambia mientras reproduces. Usa los botones de destinos y guarda los que te gusten. No es todavía un autotune profesional.'],
   alignment:['Ajustar la sincronía','Si al escuchar tu grabación queda después del ritmo, mueve el control hacia Adelantar (valores negativos). Si quedó demasiado temprano, muévelo hacia Retrasar (positivos). El ajuste queda guardado en este dispositivo. No sustituye una calibración automática del hardware.'],
   original:['Comparar sonido original','Alterna entre el audio sin efectos y el audio procesado. El volumen y la dirección se mantienen. Es una comparación A/B no destructiva: los efectos siguen guardados aunque escuches el original.']
@@ -133,13 +136,15 @@ function modal(title,content,actions=[]){
   $('.focus-panel')?.focus();
 }
 function closeModal(){
+  if(state.countingIn){state.countingIn.cancelled=true;state.countingIn=null;}
   finishTuneGesture();
-  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();if($('#tuneLab'))$('.focus-panel')?.classList.add('tune-focus');return;}
+  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();if($('#tuneLab'))$('.focus-panel')?.classList.add('tune-focus');else engine.watchPitch(null,null);return;}
   if(state.recording){toast('Detén la grabación antes de cerrar');return;}
   cancelAnimationFrame(state.meterFrame);
   state.preview=null;
   engine.stopMic();
   $('#modalRoot').innerHTML='';
+  engine.watchPitch(null,null);
 }
 function dial(label,key,value,color='var(--green)',min=0,max=100){
   const pct=((value-min)/(max-min))*100;
@@ -308,6 +313,16 @@ function tuneFromPad(event){
   return normalizeTune(((event.clientX-rect.left)/rect.width)*2-1,
     (1-(event.clientY-rect.top)/rect.height)*2-1);
 }
+function onTunePitch(message){
+  const root=$('#labPitchMonitor');if(!root)return;
+  const info=pitchReadout(message);
+  root.classList.toggle('is-quiet',!info.voiced);
+  const put=(id,value)=>{const node=root.querySelector(id);if(node)node.textContent=value;};
+  put('#labPitchNote',info.note);put('#labPitchTarget',info.target);
+  put('#labPitchHz',info.hertz);put('#labPitchCents',info.cents);
+  put('#labPitchStatus',info.status);
+  const needle=root.querySelector('#labPitchNeedle');if(needle)needle.style.left=info.position+'%';
+}
 function openTuneLab(){
   const track=current();if(!track)return toast('Selecciona un sonido antes de explorar');
   if(!Number.isFinite(track.tuneX)||!Number.isFinite(track.tuneY)){
@@ -319,6 +334,7 @@ function openTuneLab(){
     [{label:'LISTO / VOLVER A MI MEZCLA',type:'tune-done',primary:true}]);
   $('.focus-panel')?.classList.add('tune-focus');
   updateTuneLabView($('#tuneLab'),track);
+  engine.watchPitch(track.id,onTunePitch);
 }
 function finishTuneGesture(){
   if(!tuneGesture)return;
@@ -545,6 +561,7 @@ async function openRecording(){
     '<div class="control-row"><label for="recordTune">Afinación al escucharme</label><input type="range" min="0" max="100" value="80" id="recordTune">'+buttonInfo('autotune')+'</div>'+
     '<div class="control-row"><label for="recordClean">Limpieza al escucharme</label><input type="range" min="0" max="100" value="35" id="recordClean">'+buttonInfo('clean')+'</div>'+
     '<div class="control-row"><label for="recordBacking">Reproducir base al grabar</label><input type="checkbox" class="toggle-switch" id="recordBacking" '+(state.tracks.length?'checked':'')+'></div>'+
+    '<div class="control-row"><label for="recordCountIn">Cuenta de 4 pulsos antes de grabar</label><input type="checkbox" id="recordCountIn" class="toggle-switch" checked>'+buttonInfo('countIn')+'</div>'+
     '<div class="control-row"><label for="recordShift">Ajuste de sincronía de tu voz</label><input id="recordShift" type="range" min="-300" max="300" step="25" value="'+state.recordShiftMs+'"><output id="recordShiftValue">'+(state.recordShiftMs===0?'Sin ajuste':state.recordShiftMs+' ms')+'</output>'+buttonInfo('alignment')+'</div>'+
     '<div class="note">Grabación PCM sin compresión intermedia. Si tu voz queda desfasada al escucharla, puedes adelantarla o retrasarla con el ajuste de sincronía. Duración máxima: 5 minutos.</div>',
     [{label:'PROBAR ENTRADA',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
@@ -552,12 +569,36 @@ async function openRecording(){
   await updateMicrophoneChoices();
 }
 async function startRecording(){
-  if(state.recording||!state.preview)return toast('Primero presiona PROBAR ENTRADA');
+  if(state.recording||state.countingIn||!state.preview)return toast('Primero presiona PROBAR ENTRADA');
   const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
   state.recordShiftMs=Math.round(Number($('#recordShift')?.value||0));
   state.preview.monitorTrack.autotune=tune;state.preview.monitorTrack.clean=clean;
   engine.updateMic(state.preview.monitorTrack);
-  if($('#recordBacking')?.checked && state.tracks.length && !engine.playing){
+  const backing=!!$('#recordBacking')?.checked && state.tracks.length>0;
+  if($('#recordCountIn')?.checked && !engine.playing){
+    const count={cancelled:false};state.countingIn=count;
+    const actions=$('.focus-footer');
+    if(actions)actions.innerHTML='<button class="button button-muted" data-action="cancel-countin">× CANCELAR CUENTA</button>';
+    try{
+      const completed=await engine.countIn(state.bpm,4,beat=>{
+        const label=$('#recordTimer');if(label)label.textContent='♩ ENTRAS EN '+beat;
+        const status=$('#micStatus');if(status)status.textContent='ESCUCHA LOS PULSOS Y PREPÁRATE';
+      },()=>count.cancelled || !state.preview || !$('#recordTimer'));
+      if(!completed||count.cancelled||state.countingIn!==count)return;
+    }catch(error){count.cancelled=true;toast('No se pudo preparar la entrada: '+error.message);return;}
+    finally{
+      if(state.countingIn===count)state.countingIn=null;
+      if(count.cancelled && $('#recordTimer')){
+        $('#recordTimer').textContent='LISTO PARA GRABAR';
+        const footer=$('.focus-footer');
+        if(footer)footer.innerHTML='<button class="button button-muted" data-action="test-mic">↻ PROBAR ENTRADA</button><button class="button button-primary" data-action="start-record">● GRABAR</button>';
+      }else if($('#recordTimer')){
+        $('#recordTimer').textContent='COMENZANDO TOMA...';
+      }
+    }
+  }
+  if(!state.preview||!$('#recordTimer'))return;
+  if(backing && !engine.playing){
     try{await engine.play(state.tracks,state.position);runTicker();render();}
     catch(error){toast('No se pudo reproducir la base: '+error.message);}
   }
@@ -782,6 +823,15 @@ function handleModalAction(action){
   if(action==='confirm-save-named'){confirmSaveNamed();return;}
   if(action==='load-local'){modalStack.length=0;$('#modalRoot').innerHTML='';load();return;}
   if(action==='browse-project'){$('#projectInput').click();return;}
+  if(action==='cancel-countin'){
+    if(state.countingIn)state.countingIn.cancelled=true;
+    state.countingIn=null;
+    const actions=$('.focus-footer');
+    if(actions)actions.innerHTML='<button class="button button-muted" data-action="test-mic">↻ PROBAR ENTRADA</button><button class="button button-primary" data-action="start-record">● GRABAR</button>';
+    if($('#recordTimer'))$('#recordTimer').textContent='LISTO PARA GRABAR';
+    if($('#micStatus'))$('#micStatus').textContent='CUENTA CANCELADA · PUEDES VOLVER A GRABAR';
+    return;
+  }
   if(action==='test-mic'){prepareSelectedMic();return;}
   if(action==='start-record'){startRecording();return;}
   if(action==='stop-record'){stopRecording();return;}

@@ -2,10 +2,18 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.5.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.6.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 
+
+## DesignPhase 0.6 — Nota detectada y cuenta regresiva
+
+**Tune Lab: visor experimental de nota.** Al reproducir una capa con Tune Lab abierto, el AudioWorklet estima su frecuencia fundamental, nota musical (Do4, La4), nota más cercana y desviación en cents **antes de corregirla**. Si el sonido es silencio, ruido o música con varias notas, puede indicar SIN NOTA CLARA. Esta lectura es orientativa: el detector todavía no está validado profesionalmente y no mide con certeza la nota final corregida. Se envían solo datos numéricos entre hilos locales del navegador; no hay subida ni almacenamiento de audio.
+
+**Grabar con cuatro pulsos.** Dentro de GRABAR MI VOZ, después de seleccionar y probar la entrada, puedes mantener activada «Cuenta de 4 pulsos antes de grabar». Tras pulsar GRABAR aparecen 4, 3, 2 y 1, con clics en el BPM del proyecto. Después comienza la base y la captura PCM; puedes cancelar la cuenta antes del inicio. Utiliza auriculares: los clics son locales y no se incluyen digitalmente en la toma, pero los altavoces sí podrían ser captados por el micrófono.
+
+**Pendiente:** validar en Chrome, Edge, iPhone y Android; el temporizador de cuenta regresiva puede sufrir retrasos si el sistema suspende la página. El corrector sigue siendo experimental; falta calibración automática de latencia y restauración de ruido avanzada.
 
 ## DesignPhase 0.5 — TUNE LAB / exploración XY
 
