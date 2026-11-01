@@ -6,6 +6,7 @@ import {clipsOf,clipDuration,validLoop} from './track-clips.js';
 import {assembleSessionStereo} from './session-recording.js';
 import {loopBoundaryFades} from './loop-guard.js';
 import {clipSpeed} from './clip-edit.js';
+import {wireAudioGraphs} from './flow-routing.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -315,15 +316,18 @@ export class AudioEngine {
     const solo=tracks.some(t=>t.solo);
     const ir=impulse(ctx);
     for(const id of BUS_IDS)this.buses.set(id,makeBus(ctx,this.output.gain,this.busSettings[id]));
+    // Allocate every processor before linking nodes: a track may feed another
+    // track's input, so destinations need to exist before sources are scheduled.
     for(const track of tracks){
-      // Keep muted sources scheduled at zero channel gain so a disconnected
-      // flow node can reconnect smoothly without resetting the timeline.
-      if(solo&&!track.solo)continue;
-      const segments=clipsOf(track).filter(clip=>clipDuration(clip)>=.002);
-      if(!segments.length)continue;
       const graph=createGraph(ctx,track,this.buses.get(busForTrack(track)).gain,ir);
       this.graphs.set(track.id,graph);
-      for(const clip of segments){
+    }
+    try{wireAudioGraphs(tracks,this.graphs,this.buses,this.output.gain);}
+    catch(error){this.stop();throw error;}
+    for(const track of tracks){
+      if(solo&&!track.solo)continue;
+      const graph=this.graphs.get(track.id);
+      for(const clip of clipsOf(track).filter(c=>clipDuration(c)>=.002)){
         const source=scheduleClip(ctx,clip,graph,this.from,this.startCtxTime);
         if(source)this.sources.push(source);
       }
@@ -565,9 +569,14 @@ export class AudioEngine {
     const output=makeMaster(offline,offline.destination,this.masterVolume);
     const ir=impulse(offline);
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
+    const graphs=new Map();
     for(const track of active){
       const target=exportBuses.get(busForTrack(track)).gain;
-      const graph=dry?createDryGraph(offline,track,target):createGraph(offline,track,target,ir);
+      graphs.set(track.id,dry?createDryGraph(offline,track,target):createGraph(offline,track,target,ir));
+    }
+    if(!dry)wireAudioGraphs(active,graphs,exportBuses,output.gain);
+    for(const track of active){
+      const graph=graphs.get(track.id);
       for(const clip of clipsOf(track))
         scheduleClip(offline,dry?{...clip,pitchRegions:[],pitchShift:0}:clip,graph,0,0);
     }
