@@ -2,6 +2,7 @@
  * A legacy track is one virtual clip; we migrate only when edited.
  * Each clip references an AudioBuffer; effects and routing belong to the track.
  */
+import {clipSpeed} from './clip-edit.js';
 const seconds=value=>Math.max(0,Number.isFinite(Number(value))?Number(value):0);
 export const MAX_LOOP_REPEATS=64;
 export function clipSourceBounds(clip){
@@ -18,8 +19,8 @@ export function validLoop(clip){
 }
 export function clipDuration(clip){
   const loop=validLoop(clip);
-  return loop?(loop.to-loop.from)*loop.repeats:
-    Math.max(0,(clip.buffer?.duration||0)-seconds(clip.trimStart)-seconds(clip.trimEnd));
+  return (loop?(loop.to-loop.from)*loop.repeats:
+    Math.max(0,(clip.buffer?.duration||0)-seconds(clip.trimStart)-seconds(clip.trimEnd)))/clipSpeed(clip);
 }
 export function setClipLoop(clip,from,to,repeats){
   const bounds=clipSourceBounds(clip);
@@ -73,11 +74,11 @@ export function getEditableClip(track,clipId){
 export function splitTrackClip(track,clipId,playhead,newId){
   const clips=ensureClips(track),index=clips.findIndex(clip=>clip.id===clipId);
   if(index<0)throw Error('Clip no encontrado');
-  const clip=clips[index],duration=clipDuration(clip),at=playhead-seconds(clip.offset);
+  const clip=clips[index],duration=clipDuration(clip),at=playhead-seconds(clip.offset),sourceAt=at*clipSpeed(clip);
   if(at<=.05||at>=duration-.05)throw Error('Coloca el cabezal dentro del clip para dividir');
-  const left={...clip,trimEnd:seconds(clip.trimEnd)+(duration-at),fadeOut:0};
+  const left={...clip,trimEnd:seconds(clip.trimEnd)+(duration-at)*clipSpeed(clip),fadeOut:0};
   const right={...clip,id:newId,name:clip.name+' · 2',offset:playhead,
-    trimStart:seconds(clip.trimStart)+at,fadeIn:0};
+    trimStart:seconds(clip.trimStart)+sourceAt,fadeIn:0};
   clips.splice(index,1,left,right);return [left,right];
 }
 export function cloneTrackMetadata(track){

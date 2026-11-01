@@ -20,7 +20,8 @@ export function flowMarkup(tracks,positions={},selectedId=null){
     '<div class="flow-palette-items">'+FX_CHAIN.map(f=>
       '<button type="button" draggable="true" data-flow-palette="'+f.id+'" title="'+escape(f.hint)+'" aria-label="Elegir efecto '+escape(f.label)+'" class="flow-effect-tile"><span class="flow-effect-symbol">'+({tune:'✧',clean:'◌',eq:'≋',drive:'♨',compressor:'◈',delay:'↺',reverb:'✦'}[f.id])+'</span><strong>'+names[f.id]+'</strong><small>Arrastrar ＋</small></button>'
     ).join('')+'</div><div class="flow-remove-zone" id="flowRemoveZone" aria-label="Soltar efecto aquí para desactivarlo">↩ Soltar aquí para quitar un efecto de una pista</div></div>';
-  const nodes=tracks.map((track,index)=>{
+  const visible=tracks.filter(t=>!t.flowHidden);
+  const nodes=visible.map((track,index)=>{
     const p=flowPosition(track,index,positions),off=track.muted;
     const effects=FX_CHAIN.filter(f=>!isFxBypassed(track,f.id)&&(
       f.id==='tune'?track.autotune>1:f.id==='clean'?track.clean>1:
@@ -35,14 +36,14 @@ export function flowMarkup(tracks,positions={},selectedId=null){
       (effects.length?effects.map(f=>'<button class="flow-fx-pill" draggable="true" data-flow-effect="'+f.id+'" data-flow-owner="'+escape(track.id)+'" title="Retirar '+names[f.id]+' (sin borrar ajustes)">'+names[f.id]+' <span>×</span></button>').join(''):'<span class="flow-fx-placeholder">＋ Suelta aquí un efecto</span>')+
       '</div>'+
       '<div class="flow-node-bottom"><button type="button" data-flow-focus="'+escape(track.id)+'" aria-label="Editar '+escape(track.name)+'">Ajustar</button>'+
-      '<button type="button" data-flow-link="'+escape(track.id)+'" aria-pressed="'+(!off)+'">'+(off?'◎ Reconectar':'● Conectada')+'</button></div>'+
+      '<button type="button" data-flow-link="'+escape(track.id)+'" aria-pressed="'+(!off)+'">'+(off?'◎ Reconectar':'● Conectada')+'</button><button type="button" data-flow-delete="'+escape(track.id)+'" title="Desconectar y luego retirar" aria-label="Desconectar o retirar nodo">×</button></div>'+
       '<span class="flow-port" aria-hidden="true"></span></article>';
   }).join('');
   const master='<aside class="flow-master" id="flowMaster"><div class="flow-master-orb">◉</div><strong>Tu canción</strong><small>MEZCLA FINAL</small><span>Todas las pistas conectadas llegan aquí</span></aside>';
-  return palette+'<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="height:'+flowHeight(tracks.length)+'px">'+
+  return palette+'<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="height:'+flowHeight(visible.length)+'px">'+
     '<svg id="flowWires" class="flow-wires" aria-hidden="true"></svg>'+nodes+master+
-    (tracks.length?'':'<div class="flow-welcome">Tus pistas aparecerán como planetas de sonido. Agrega una voz o un ritmo para empezar.</div>')+
-    '</div></div><p class="flow-footnote">Conexión = pista audible · Desconectar la silencia sin borrar nada. Los cables vibran según el nivel real de audio.</p>';
+    (visible.length?'':'<div class="flow-welcome">Tus pistas aparecerán como planetas de sonido. Agrega una voz o un ritmo para empezar.</div>')+
+    '</div></div><p class="flow-footnote">Supr sobre el nodo: primera vez desconecta, segunda lo retira del mapa. La pista queda guardada en Tu mezcla.</p>';
 }
 export function wireCurve(ax,ay,bx,by,energy=0,time=0){
   const midX=(ax+bx)/2,midY=(ay+by)/2;

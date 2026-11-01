@@ -5,6 +5,7 @@ import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
 import {clipsOf,clipDuration,validLoop} from './track-clips.js';
 import {assembleSessionStereo} from './session-recording.js';
 import {loopBoundaryFades} from './loop-guard.js';
+import {clipSpeed} from './clip-edit.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -126,8 +127,8 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   const contextStart=timeOrigin+Math.max(0,start-from);
   const remaining=total-offsetInClip;
   if(remaining<=0)return null;
-  const src=ctx.createBufferSource(),fade=ctx.createGain(),splice=ctx.createGain();
-  src.buffer=track.buffer;src.connect(splice);splice.connect(fade);fade.connect(graph.input);
+  const src=ctx.createBufferSource(),fade=ctx.createGain(),splice=ctx.createGain(),speed=clipSpeed(track);
+  src.buffer=track.buffer;src.playbackRate.setValueAtTime(speed,contextStart);src.connect(splice);splice.connect(fade);fade.connect(graph.input);
   splice.gain.setValueAtTime(1,contextStart);
   const v=fade.gain;v.setValueAtTime(fadeValue(track,offsetInClip,total),contextStart);
   const initial=offsetInClip;
@@ -144,19 +145,19 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
     const segment=loop.to-loop.from;
     // Tiny anti-click ramps at every interior repeat, independent of clip fades.
     // These are NOT overlapping crossfades or formant correction.
-    for(const event of loopBoundaryFades(loop,offsetInClip)){
-      splice.gain.setValueAtTime(1,contextStart+event.before);
-      splice.gain.linearRampToValueAtTime(0,contextStart+event.center);
-      splice.gain.linearRampToValueAtTime(1,contextStart+event.after);
+    for(const event of loopBoundaryFades(loop,offsetInClip*speed)){
+      splice.gain.setValueAtTime(1,contextStart+event.before/speed);
+      splice.gain.linearRampToValueAtTime(0,contextStart+event.center/speed);
+      splice.gain.linearRampToValueAtTime(1,contextStart+event.after/speed);
     }
     src.loop=true;
     src.loopStart=loop.from;
     src.loopEnd=loop.to;
-    const sourcePosition=loop.from+(offsetInClip%segment);
+    const sourcePosition=loop.from+((offsetInClip*speed)%segment);
     src.start(contextStart,sourcePosition);
     src.stop(contextStart+remaining);
   }else{
-    src.start(contextStart,(track.trimStart||0)+offsetInClip,remaining);
+    src.start(contextStart,(track.trimStart||0)+offsetInClip*speed,remaining*speed);
   }
   return src;
 }

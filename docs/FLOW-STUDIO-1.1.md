@@ -60,3 +60,13 @@ Los cables NO representan aún patches arbitrarios entre procesadores. El flujo 
 
 ## Criterios de publicación
 Implementar por commits pequeños en DesignPhase, tests de sintaxis/unidad, QA de navegador y sonido. No modificar main sin autorización. CI verde no equivale a DSP profesional validado.
+
+## V1.2 — Primera corrección de edición y borrado seguro
+- [x] Supr/Backspace con foco en un nodo: primero desconecta (mute real), luego lo retira del Flow, sin eliminar el audio.
+- [x] Botón × en nodo con la misma lógica y ↗ en la pista para restaurar su nodo.
+- [x] Supr/× en pista: solicita confirmación, borra solo esa pista y permite Ctrl+Z.
+- [x] Editor visual de clips con agarres para mover y recortar inicio/final, sin alterar el PCM.
+- [x] Velocidad por clip entre 0,5× y 2×; cambia duración y tono por resampling (NO time stretching con preservación de tono).
+- [x] Zoom horizontal hasta 8× y unidades de segundos en regla, con scroll sincronizado.
+- [x] Cabezal dibujado delante de la onda, no detrás de las tarjetas.
+- [ ] QA real de manipulación táctil, zoom sincronizado, undo y reproducción con clips complejos.
