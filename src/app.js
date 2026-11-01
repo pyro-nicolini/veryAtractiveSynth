@@ -85,7 +85,7 @@ function applyProjectOptions(options={}){
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
   state.flowOpen=options.flowOpen!==false;state.zoom=clamp(Number(options.zoom)||1,1,8);
-  state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,540),y:clamp(p.y,12,3000)}]));
+  state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,5000),y:clamp(p.y,12,3000)}]));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
   $('#snapBtn')?.setAttribute('aria-pressed',String(state.snap));
@@ -206,7 +206,7 @@ function render(){
         '<button type="button" class="clip-edge clip-left" data-clip-control="start" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Recortar inicio · arrastrar">❮</button>'+
         '<button type="button" class="clip-grip" data-clip-control="move" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Mover clip completo en el tiempo">⠿ <span>'+Math.round(clipDuration(clip)*10)/10+' s · '+clipSpeed(clip).toFixed(2)+'×</span></button>'+
         '<button type="button" class="clip-edge clip-right" data-clip-control="end" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Recortar final · arrastrar">❯</button></div>').join('')+'</div></div>'+
-      '<div class="track-tail"><button type="button" class="mini-action" data-track-action="move-track" data-id="'+html(t.id)+'" title="Mover pista completa en el tiempo" aria-label="Mover toda la pista">↠</button><button type="button" class="mini-action track-trash" data-track-action="delete" data-id="'+html(t.id)+'" aria-label="Eliminar pista '+html(t.name)+'" title="Eliminar pista">×</button>'+(t.flowHidden?'<button type="button" class="mini-action" data-track-action="restore-flow" data-id="'+html(t.id)+'" title="Restaurar en Flow Studio">↗</button>':'')+'<button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
+      '<div class="track-tail"><button type="button" class="mini-action track-bounce" data-track-action="export-track" data-id="'+html(t.id)+'" title="Guardar o exportar esta pista · original o con FX" aria-label="Exportar pista '+html(t.name)+'">↓ WAV</button><button type="button" class="mini-action" data-track-action="move-track" data-id="'+html(t.id)+'" title="Mover pista completa en el tiempo" aria-label="Mover toda la pista">↠</button><button type="button" class="mini-action track-trash" data-track-action="delete" data-id="'+html(t.id)+'" aria-label="Eliminar pista '+html(t.name)+'" title="Eliminar pista">×</button>'+(t.flowHidden?'<button type="button" class="mini-action" data-track-action="restore-flow" data-id="'+html(t.id)+'" title="Restaurar en Flow Studio">↗</button>':'')+'<button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
   renderInspector();renderMixer();renderFlow();requestAnimationFrame(()=>{drawWaves();alignWaveRuler();updateTransport();});updateTransport();queueAutosave();
 }
@@ -393,6 +393,10 @@ function setupFlow(){
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
   $('#flowHelp').onclick=()=>help('flowStudio');
+  $('#flowArrange').onclick=()=>{
+    checkpoint();state.flowPositions={};renderFlow();queueAutosave();
+    toast('Rutas ordenadas en líneas de voz, instrumentos y efectos.');
+  };
   $('#libraryHelp').onclick=()=>help('library');
   library.addEventListener('click',event=>{
     const tab=event.target.closest('[data-library-tab]');
@@ -401,6 +405,7 @@ function setupFlow(){
     if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
   });
   body.addEventListener('click',event=>{
+    if(event.target.closest('[data-flow-route-select]'))return;
     const tile=event.target.closest('[data-flow-palette]');
     if(tile){
       state.flowArmedEffect=state.flowArmedEffect===tile.dataset.flowPalette?null:tile.dataset.flowPalette;
@@ -418,6 +423,16 @@ function setupFlow(){
     if(focus){selectFlowTrack(focus.dataset.flowFocus);return;}
     const node=event.target.closest('[data-flow-track]');
     if(node){selectFlowTrack(node.dataset.flowTrack);}
+  });
+  body.addEventListener('change',event=>{
+    const select=event.target.closest('[data-flow-route-select]');
+    if(!select)return;
+    const track=state.tracks.find(t=>t.id===select.dataset.flowRouteSelect);
+    if(!track||!BUS_IDS.includes(select.value)||track.bus===select.value)return;
+    if(state.recording||state.sessionRecording)return toast('Termina la grabación para cambiar las rutas.');
+    checkpoint();track.bus=select.value;
+    renderFlow();renderMixer();restartPlayback();queueAutosave();
+    toast('Ruta conectada: '+track.name+' → '+BUS_LABELS[select.value]);
   });
   let dragged=null;
   function startDrag(event){
@@ -462,7 +477,7 @@ function setupFlow(){
     if(!board||!node)return;
     event.preventDefault();
     const index=state.tracks.findIndex(t=>t.id===id);
-    const point=flowPosition({id},index,state.flowPositions),step=event.shiftKey?40:12;
+    const point={x:node.offsetLeft,y:node.offsetTop},step=event.shiftKey?40:12;
     const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,Math.max(12,board.clientWidth-440));
     const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
     if(x!==point.x||y!==point.y){
@@ -476,7 +491,7 @@ function setupFlow(){
     const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');
     if(!node||!board)return;
     event.preventDefault();handle.setPointerCapture(event.pointerId);
-    const position=flowPosition({id:node.dataset.flowTrack},state.tracks.findIndex(t=>t.id===node.dataset.flowTrack),state.flowPositions);
+    const position={x:node.offsetLeft,y:node.offsetTop};
     state.flowDrag={id:node.dataset.flowTrack,startX:event.clientX,startY:event.clientY,x:position.x,y:position.y,node,board};
     node.classList.add('is-dragging');
   });
@@ -1595,6 +1610,42 @@ async function stopRecording(){
   }
 }
 
+/** Per-channel bounce: editable project remains untouched; rendered takes form of a separate new track. */
+function openTrackExport(id){
+  const track=state.tracks.find(t=>t.id===id);if(!track)return;
+  state.exportTrackId=id;
+  modal('Exportar o guardar · '+track.name,
+    '<p>Conservamos todos tus clips originales. Puedes descargar esta capa con efectos o sin ellos, o crear una nueva pista renderizada dentro del proyecto.</p>'+
+    '<div class="field"><label for="trackExportMode">Sonido</label><select class="modal-select" id="trackExportMode"><option value="wet">Con efectos y automatizaciones actuales</option><option value="dry">Sin efectos (mantiene cortes, tiempo, volumen y panorama)</option></select></div>'+
+    '<div class="field"><label for="trackExportDepth">Formato WAV</label><select class="modal-select" id="trackExportDepth"><option value="24">24-bit · producción</option><option value="16">16-bit · compatible</option><option value="32">32-bit float</option></select></div>'+
+    '<p class="hint">Se incluye el espacio previo a la pista para conservar la sincronía con la canción. Crear una nueva pista no borra ni silencia la original.</p>',
+    [{label:'↓ DESCARGAR WAV',type:'do-track-export',primary:true},{label:'▣ GUARDAR COMO PISTA',type:'do-track-bounce'}]);
+}
+async function performTrackExport(asTrack=false){
+  if(state.busy||state.recording||state.sessionRecording)return toast('Finaliza la grabación o exportación en curso.');
+  const track=state.tracks.find(t=>t.id===state.exportTrackId);
+  if(!track)return toast('La pista ya no está disponible.');
+  const dry=$('#trackExportMode')?.value==='dry';
+  const depth=Number($('#trackExportDepth')?.value||24);
+  state.busy=true;
+  try{
+    const source={...track,muted:false,solo:false};
+    const blob=await engine.exportMix([source],{depth,rate:48000,dry});
+    if(asTrack){
+      const buffer=await engine.decode(new File([blob],safeFilename(track.name)+'.wav',{type:'audio/wav'}));
+      const added=addTrack(buffer,track.name+(dry?' · original':' · con FX'),track.type,0);
+      added.bypassEffects=true;added.bus=track.bus;added.volume=100;
+      modalStack.length=0;$('#modalRoot').innerHTML='';
+      render();toast('Nueva pista renderizada sin modificar la fuente.');
+    }else{
+      downloadBlob(blob,safeFilename(track.name)+(dry?'-original':'-con-fx')+'-'+depth+'bit.wav');
+      modalStack.length=0;$('#modalRoot').innerHTML='';
+      toast('WAV individual descargado.');
+    }
+  }catch(error){toast('Pista: '+error.message);}
+  finally{state.busy=false;}
+}
+
 function openExport(){
   if(!state.tracks.length)return toast('Agrega un sonido antes de exportar');
   modal('Exportar mi canción',
@@ -1758,6 +1809,7 @@ async function setTiming(key,value){
 function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(action==='delete'){deleteTrack(id);return;}
+  if(action==='export-track'){openTrackExport(id);return;}
   if(action==='restore-flow'){checkpoint();t.flowHidden=false;render();return;}
   if(action==='move-track'){openTrackMove(id);return;}
   if(action==='edit'){openTrackActions(id);return;}
@@ -1804,6 +1856,8 @@ function handleModalAction(action){
   if(action==='start-record'){startRecording();return;}
   if(action==='stop-record'){stopRecording();return;}
   if(action==='do-export'){performExport();return;}
+  if(action==='do-track-export'){performTrackExport(false);return;}
+  if(action==='do-track-bounce'){performTrackExport(true);return;}
   const t=current();if(!t)return;
   if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');checkpoint();t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
   if(action==='split-track'){
@@ -1942,7 +1996,12 @@ function setupSamples(){
    return {name:clip.name||track.name,buffer:clip.buffer,
     from:loop?.from??bounds.start,to:loop?.to??bounds.end};
   },
-  onAdd:(buffer,name)=>addTrack(buffer,name,'audio',state.position)
+  onAdd:(buffer,name,settings)=>{
+    const track=addTrack(buffer,name,'audio',state.position);
+    if(settings)Object.assign(track,settings);
+    engine.updateTrack(track);render();
+    return track;
+  }
  });
  state.sampleDeck=deck;
  const area=$('#sampleDeck'),toggle=$('#sampleToggle');
