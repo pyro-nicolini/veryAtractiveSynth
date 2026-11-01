@@ -92,19 +92,24 @@ function createGraph(ctx,track,destination,ir){
   const delayFeedback=ctx.createGain();delayFeedback.gain.value=.27;delay.delayTime.value=.28;
   const convolver=ctx.createConvolver();convolver.buffer=ir;
   const reverbWet=ctx.createGain(),sum=ctx.createGain();
+  const delaySum=ctx.createGain(),reverbSum=ctx.createGain();
   const processedBus=ctx.createGain(),bypassBus=ctx.createGain();
   const pan=ctx.createStereoPanner(),volume=ctx.createGain();
   input.connect(voice);voice.connect(hp);hp.connect(lp);lp.connect(low);
   low.connect(high);high.connect(drive);drive.connect(compressor);
-  compressor.connect(dry);dry.connect(processedBus);
-  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(processedBus);
+  // Actual signal order: COMP → DELAY (dry/wet) → REVERB (dry/wet).
+  // Both FX stages remain non-destructive and zero-wet transparently bypasses.
+  compressor.connect(dry);dry.connect(delaySum);
+  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(delaySum);
   delay.connect(delayFeedback);delayFeedback.connect(delay);
-  compressor.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(processedBus);
+  delaySum.connect(reverbSum);delaySum.connect(convolver);
+  convolver.connect(reverbWet);reverbWet.connect(reverbSum);
+  reverbSum.connect(processedBus);
   input.connect(bypassBus);bypassBus.connect(sum);processedBus.connect(sum);
   const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.4;
   sum.connect(pan);pan.connect(volume);volume.connect(meter);meter.connect(destination);
   const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet,processedBus,bypassBus,meter,meterData:new Float32Array(1024),
-    nodes:[input,voice,hp,lp,low,high,drive,compressor,dry,delay,delayWet,delayFeedback,convolver,reverbWet,sum,processedBus,bypassBus,pan,volume,meter]};
+    nodes:[input,voice,hp,lp,low,high,drive,compressor,dry,delay,delayWet,delayFeedback,delaySum,convolver,reverbWet,reverbSum,sum,processedBus,bypassBus,pan,volume,meter]};
   setParams(graph,track,ctx);
   return graph;
 }
