@@ -1,7 +1,7 @@
 name: Verify DesignPhase
 on:
   push:
-    branches: [DesignPhase]
+    branches: [main, DesignPhase]
   pull_request:
     branches: [main, DesignPhase]
 permissions:
