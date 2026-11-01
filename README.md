@@ -7,6 +7,16 @@
 
 
 
+## DesignPhase 1.4 — Zoom de revisión vocal y afinación por tramos
+
+La vista EDITAR NOTAS POR FRAGMENTOS ahora tiene una onda del audio fuente con zoom de 1× a 8×, desplazamiento horizontal y selección de regiones arrastrando. Las máscaras aparecen como tramos coloreados sobre el audio. Se ajustan DESDE/HASTA en segundos y el desplazamiento entre −12 y +12 semitonos; la operación conserva las correcciones de las partes que quedan fuera de la nueva selección. La afinación automática ofrece Natural, Estudio y Electrónico, con detector monofónico aproximado, y conserva las regiones en archivos de proyecto y en el render WAV.
+
+Se añadieron cuatro variantes estilizadas más al laboratorio vocal (12 en total), incluyendo personajes agudos y graves caricaturescos, un niño de caricatura y un duende. No son conversiones auténticas de edad, sexo ni identidad y no preservan formantes. Debe usarse con auriculares por posible latencia/feedback.
+
+También se puede desplazar una pista completa en segundos manteniendo los offsets relativos de sus clips. En Flow Studio, Supr/Backspace sobre el nodo primero corta su conexión y en la segunda pulsación retira el nodo de la vista; también Ctrl+X corta la conexión. Se conserva la pista y puede restaurarse. En la lista, × o Supr pide confirmación para borrar la pista; Ctrl+Z la recupera si aún está en el historial. Se mantiene main sin cambios.
+
+**Aún pendiente:** pruebas físicas de audio/latencia, afinación de estudio con formantes, grabación por canales y overdub, crossfade por loop, duración larga/streaming, rutas FX reordenables y E2E en dispositivos.
+
 ## DesignPhase 1.3 — Singing Coach / clips con notas / personajes de voz
 
 **Grabación — DO RE MI:** el modal GRABAR MI VOZ muestra la nota aproximada detectada del micrófono (DO, RE, MI, FA, SOL, LA, SI con octava) en tiempo real, la desviación en cents y una fila visual iluminada. Funciona con el audio de entrada, aunque no actives el monitoreo. Es útil para calentar o entrenar una melodía monofónica; no detecta polifonía ni confirma afinación de estudio. La entrada no sale del equipo.

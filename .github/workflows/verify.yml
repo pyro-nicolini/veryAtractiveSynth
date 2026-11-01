@@ -39,6 +39,7 @@ jobs:
           node --check src/clip-edit.js
           node --check src/pitch-coach.js
           node --check src/voice-characters.js
+          node --check src/pitch-review-ui.js
           node --check src/audio-import.js
           node --check src/timeline.js
           node --check src/portable-project.js

@@ -100,7 +100,7 @@ export async function importProject(file,ctx){
       scale:clamp(t.scale,0,2),trimStart:clamp(t.trimStart,0,buffer.duration),
       trimEnd:clamp(t.trimEnd,0,buffer.duration),offset:clamp(t.offset,0,3600),
       fadeIn:clamp(t.fadeIn,0,30),fadeOut:clamp(t.fadeOut,0,30),
-      muted:!!t.muted,solo:!!t.solo,bypassEffects:!!t.bypassEffects,
+      muted:!!t.muted,solo:!!t.solo,flowHidden:!!t.flowHidden,bypassEffects:!!t.bypassEffects,
       fxBypass:Object.fromEntries(['tune','clean','eq','drive','compressor','delay','reverb'].map(id=>[id,t.fxBypass?.[id]===true])),
       bus:['music','vocals','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
       tuneX:clamp(t.tuneX??((clamp(t.retune??60,5,100)-5)/95*2-1),-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),

@@ -9,6 +9,10 @@ export const VOICE_CHARACTERS=Object.freeze([
  {id:'giant',name:'Gigante',icon:'◉',shift:-5,drive:28,brightness:27,warmth:79,autotune:16,retune:30},
  {id:'helium',name:'Helio agudo',icon:'✧',shift:8,drive:4,brightness:83,warmth:9,autotune:15,retune:48},
  {id:'tiny',name:'Personaje pequeño',icon:'♡',shift:6,drive:8,brightness:76,warmth:16,autotune:55,retune:82},
+ {id:'storybook-f',name:'Voz aguda fantástica',icon:'✿',shift:5,drive:1,brightness:73,warmth:14,autotune:28,retune:60},
+ {id:'storybook-m',name:'Voz grave fantástica',icon:'♟',shift:-5,drive:9,brightness:33,warmth:75,autotune:15,retune:38},
+ {id:'storybook-child',name:'Niño de caricatura',icon:'☆',shift:7,drive:0,brightness:81,warmth:8,autotune:30,retune:60},
+ {id:'goblin',name:'Duende travieso',icon:'☘',shift:4,drive:62,brightness:90,warmth:12,autotune:80,retune:92},
  {id:'digital',name:'Digital extremo',icon:'⚡',shift:-12,drive:80,brightness:89,warmth:10,autotune:98,retune:100}
 ]);
 export function applyVoiceCharacter(track,id){

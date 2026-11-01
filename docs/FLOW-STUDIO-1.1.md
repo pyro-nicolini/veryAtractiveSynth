@@ -81,3 +81,12 @@ Implementar por commits pequeños en DesignPhase, tests de sintaxis/unidad, QA d
 - [ ] Editor visual de máscaras en la onda y un análisis automático con calidad de estudio.
 - [ ] Preservación de formantes y detección de notas robusta en grabaciones ruidosas y polifónicas.
 - [ ] QA E2E con micrófono físico, revisión de latencia y exportación browser por browser.
+
+## V1.4 — Pulido de revisión y persistencia
+- [x] Zoom sobre la forma de onda de la grabación 1–8×, selección visual por arrastre.
+- [x] Máscaras de corrección visibles; conservar regiones exteriores al sobrescribir una máscara.
+- [x] Desplazar la pista completa en el tiempo, manteniendo distancias internas entre clips.
+- [x] Ctrl+X desconecta el nodo Flow seleccionado; Supr en dos fases con foco conservado.
+- [x] 12 personajes de voz estilizados, incluyendo graves y agudos caricaturescos.
+- [x] Guardar velocidad, máscaras, estado de nodo oculto y carácter en el proyecto portable.
+- [ ] Calidad visual/sonora de estas interacciones comprobada manualmente en PC y móvil.

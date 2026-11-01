@@ -18,6 +18,7 @@ import {flowMarkup,flowHeight,flowPosition,updateFlowWires} from './flow-studio.
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
+import {pitchReviewMarkup,drawPitchWave,selectionPercent,sourceTimeFromPointer} from './pitch-review-ui.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
@@ -202,7 +203,7 @@ function render(){
         '<button type="button" class="clip-edge clip-left" data-clip-control="start" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Recortar inicio · arrastrar">❮</button>'+
         '<button type="button" class="clip-grip" data-clip-control="move" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Mover clip completo en el tiempo">⠿ <span>'+Math.round(clipDuration(clip)*10)/10+' s · '+clipSpeed(clip).toFixed(2)+'×</span></button>'+
         '<button type="button" class="clip-edge clip-right" data-clip-control="end" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Recortar final · arrastrar">❯</button></div>').join('')+'</div></div>'+
-      '<div class="track-tail"><button type="button" class="mini-action track-trash" data-track-action="delete" data-id="'+html(t.id)+'" aria-label="Eliminar pista '+html(t.name)+'" title="Eliminar pista">×</button>'+(t.flowHidden?'<button type="button" class="mini-action" data-track-action="restore-flow" data-id="'+html(t.id)+'" title="Restaurar en Flow Studio">↗</button>':'')+'<button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
+      '<div class="track-tail"><button type="button" class="mini-action" data-track-action="move-track" data-id="'+html(t.id)+'" title="Mover pista completa en el tiempo" aria-label="Mover toda la pista">↠</button><button type="button" class="mini-action track-trash" data-track-action="delete" data-id="'+html(t.id)+'" aria-label="Eliminar pista '+html(t.name)+'" title="Eliminar pista">×</button>'+(t.flowHidden?'<button type="button" class="mini-action" data-track-action="restore-flow" data-id="'+html(t.id)+'" title="Restaurar en Flow Studio">↗</button>':'')+'<button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
   renderInspector();renderMixer();renderFlow();requestAnimationFrame(()=>{drawWaves();alignWaveRuler();updateTransport();});updateTransport();queueAutosave();
 }
@@ -316,6 +317,12 @@ function deleteFlowNode(id){
   if(!t.muted){t.muted=true;engine.updateTrack(t);toast('Conexión cortada. Supr de nuevo retira el nodo.');}
   else{t.flowHidden=true;toast('Nodo retirado. La pista se conserva en Tu mezcla, puedes restaurarla con ↗.');}
   render();
+  if(!t.flowHidden){
+    requestAnimationFrame(()=>{
+      const next=$('[data-flow-track]').find(el=>el.dataset.flowTrack===id);
+      next?.querySelector('[data-flow-drag]')?.focus({preventScroll:true});
+    });
+  }else requestAnimationFrame(()=>$('#flowToggle')?.focus({preventScroll:true}));
 }
 function deleteTrack(id){
   if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de borrar');
@@ -1071,6 +1078,7 @@ function openPitchReview(){
   const seconds=clip.buffer.duration,to=seconds.toFixed(2),regions=clip.pitchRegions||[];
   modal('♩ Afinación por fragmentos · '+track.name,
     '<p>Escucha y corrige partes pequeñas de la voz sin alterar el archivo original. El detector es monofónico y aproximado.</p>'+
+    pitchReviewMarkup(clip)+
     '<div class="pitch-review-controls"><label>DESDE · SEGUNDOS<input id="pitchFrom" type="number" min="0" max="'+to+'" step=".05" value="0"></label>'+
     '<label>HASTA · SEGUNDOS<input id="pitchTo" type="number" min="0" max="'+to+'" step=".05" value="'+Math.min(2,seconds).toFixed(2)+'"></label>'+
     '<label>CAMBIAR ALTURA<input id="pitchSemitones" type="range" min="-12" max="12" step=".5" value="0"><output id="pitchShiftValue">0 semitonos</output></label></div>'+
@@ -1079,6 +1087,21 @@ function openPitchReview(){
     '<div class="pitch-auto-buttons"><button class="lab-action" data-action="pitch-scan">♬ DETECTAR NOTAS</button>'+
       AUTO_TUNE_MODES.map(m=>'<button class="lab-action" data-action="pitch-auto-'+m.id+'">✧ AUTO AFINADO · '+m.label+'</button>').join('')+'</div>',
     [{label:'QUITAR CORRECCIONES',type:'pitch-clear'},{label:'APLICAR CAMBIO AL SEGMENTO',type:'pitch-mask',primary:true}]);
+  requestAnimationFrame(drawActivePitchReview);
+}
+function drawActivePitchReview(){
+  const t=state.tracks.find(t=>t.id===state.pitchReview?.trackId),clip=t&&getEditableClip(t,state.pitchReview.clipId);
+  if(!clip||!$('#pitchWave'))return;
+  const from=Number($('#pitchFrom')?.value||0),to=Number($('#pitchTo')?.value||0),duration=clip.buffer.duration;
+  drawPitchWave($('#pitchWave'),clip.buffer,clip.pitchRegions);
+  const selected=selectionPercent(from,to,duration),selection=$('#pitchWaveSelection');
+  if(selection){selection.style.left=selected.left+'%';selection.style.width=selected.width+'%';}
+  const masks=$('#pitchWaveMasks');if(masks){
+    masks.innerHTML=(clip.pitchRegions||[]).map(r=>{
+      const p=selectionPercent(r.from,r.to,duration);
+      return '<div class="pitch-mask" style="left:'+p.left+'%;width:'+p.width+'%" title="Corrección '+Number(r.semitones||0).toFixed(1)+' semitonos"></div>';
+    }).join('');
+  }
 }
 function pitchReviewAction(action){
   const track=state.tracks.find(t=>t.id===state.pitchReview?.trackId);
@@ -1103,14 +1126,14 @@ function pitchReviewAction(action){
       track.bypassEffects=false;track.fxBypass={...track.fxBypass,tune:false};
       state.selected=track.id;state.selectedClip=clip.id;engine.updateTrack(track);
       $('#pitchReviewSummary').textContent=clip.pitchRegions.length+' regiones con corrección automática '+preset.label;
-      queueAutosave();restartPlayback();
+      queueAutosave();restartPlayback();drawActivePitchReview();
       toast('Auto afinado '+preset.label+' listo, editable por fragmentos');
       return;
     }
     if(action==='pitch-clear'){
       checkpoint();clip.pitchRegions=[];clip.autoTuneMode=null;
       $('#pitchReviewSummary').textContent='0 regiones · audio original intacto';
-      queueAutosave();restartPlayback();toast('Correcciones del clip retiradas');return;
+      queueAutosave();restartPlayback();drawActivePitchReview();toast('Correcciones del clip retiradas');return;
     }
     if(action==='pitch-mask'){
       const from=Number($('#pitchFrom').value),to=Number($('#pitchTo').value),semitones=Number($('#pitchSemitones').value);
@@ -1118,7 +1141,7 @@ function pitchReviewAction(action){
       setNoteMask(draft,from,to,semitones);
       checkpoint();setNoteMask(clip,from,to,semitones);
       $('#pitchReviewSummary').textContent=clip.pitchRegions.length+' fragmentos con notas ajustadas';
-      queueAutosave();restartPlayback();toast('Fragmento corregido; el audio fuente sigue intacto');
+      queueAutosave();restartPlayback();drawActivePitchReview();toast('Fragmento corregido; el audio fuente sigue intacto');
     }
   }catch(error){toast(error.message);}
 }
@@ -1209,6 +1232,32 @@ function editLoop(action){
     render();restartPlayback();
     toast(removing?'Loop desactivado':duplicating?'Loops duplicados a la derecha':'Loop aplicado; las demás pistas conservan su ritmo');
   }catch(error){toast(error.message);}
+}
+
+
+function openTrackMove(id){
+  const track=state.tracks.find(t=>t.id===id);if(!track)return;
+  state.moveTrackId=id;
+  const earliest=Math.min(...clipsOf(track).map(c=>c.offset||0));
+  modal('↠ Mover toda la pista · '+track.name,
+    '<p>Mueve todos los segmentos de esta pista juntos. Las demás pistas mantienen su posición.</p>'+
+    '<label class="field">Comenzar en el segundo<input id="trackMoveOffset" type="number" min="0" max="3600" step=".05" value="'+earliest.toFixed(2)+'"></label>'+
+    '<p class="hint">Cada clip conserva su corte, velocidad y distancia respecto a los demás.</p>',
+    [{label:'MOVER PISTA',type:'apply-track-move',primary:true}]);
+}
+function applyTrackMove(){
+  if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de mover pistas');
+  const track=state.tracks.find(t=>t.id===state.moveTrackId);
+  if(!track)return;
+  const target=Number($('#trackMoveOffset')?.value);
+  const clips=clipsOf(track),earliest=Math.min(...clips.map(c=>c.offset||0)),delta=target-earliest;
+  if(!Number.isFinite(target)||target<0||target>3600||clips.some(c=>c.offset+delta<0||c.offset+delta>3600))
+    return toast('Elige un inicio entre 0 y 3600 segundos');
+  checkpoint();
+  if(Array.isArray(track.clips))for(const clip of track.clips)clip.offset+=delta;
+  else track.offset=(track.offset||0)+delta;
+  closeModal();render();restartPlayback();
+  toast('Pista desplazada a '+target.toFixed(2)+' s');
 }
 
 function openTrackActions(id){
@@ -1590,6 +1639,7 @@ function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(action==='delete'){deleteTrack(id);return;}
   if(action==='restore-flow'){checkpoint();t.flowHidden=false;render();return;}
+  if(action==='move-track'){openTrackMove(id);return;}
   if(action==='edit'){openTrackActions(id);return;}
   if(action==='clip-loop'){openClipLoop(id);return;}
   if(action==='add-clip'){state.clipImportTrack=id;$('#clipFileInput').click();return;}
@@ -1603,6 +1653,7 @@ function handleModalAction(action){
   if(action==='session-record'){toggleSessionRecording();return;}
   if(action==='tune-open'){openTuneLab('track');return;}
   if(action.startsWith('tune-')){tuneAction(action);return;}
+  if(action==='apply-track-move'){applyTrackMove();return;}
   if(action==='effects'){openEffects();return;}
   if(action==='pitch-review'){openPitchReview();return;}
   if(action==='pitch-mask'||action==='pitch-clear'||action==='pitch-scan'||action.startsWith('pitch-auto-')){pitchReviewAction(action);return;}
@@ -1913,6 +1964,13 @@ function wire(){
     }
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
+    if(e.target.id==='pitchZoom'){
+      const zoom=clamp(Number(e.target.value),1,8);
+      $('#pitchWaveInner').style.width=(zoom*100)+'%';
+      $('#pitchZoomLabel').textContent=zoom.toFixed(1)+'×';
+      requestAnimationFrame(drawActivePitchReview);
+    }
+    if(e.target.id==='pitchFrom'||e.target.id==='pitchTo')drawActivePitchReview();
     if(e.target.id==='pitchSemitones'){
       const out=$('#pitchShiftValue');if(out)out.textContent=Number(e.target.value).toFixed(1)+' semitonos';
     }
@@ -1945,7 +2003,32 @@ function wire(){
     if(e.target.id==='micSelect' && state.preview)prepareSelectedMic();
     if(e.target.id==='monitorToggle' && state.preview)prepareSelectedMic();
   });
+  let pitchPointer=null;
+  document.addEventListener('pointerdown',event=>{
+    if(event.target.id!=='pitchWave'||event.button!==0)return;
+    const t=state.tracks.find(t=>t.id===state.pitchReview?.trackId),clip=t&&getEditableClip(t,state.pitchReview.clipId);
+    if(!clip)return;
+    event.preventDefault();event.target.setPointerCapture(event.pointerId);
+    const from=sourceTimeFromPointer(event.clientX,event.target.getBoundingClientRect(),clip.buffer.duration);
+    pitchPointer={id:event.pointerId,start:from};
+    $('#pitchFrom').value=from.toFixed(2);$('#pitchTo').value=Math.min(clip.buffer.duration,from+.1).toFixed(2);
+    drawActivePitchReview();
+  });
+  document.addEventListener('pointermove',event=>{
+    if(!pitchPointer||pitchPointer.id!==event.pointerId)return;
+    const canvas=$('#pitchWave');if(!canvas)return;
+    const t=state.tracks.find(t=>t.id===state.pitchReview?.trackId),clip=t&&getEditableClip(t,state.pitchReview.clipId);if(!clip)return;
+    const to=sourceTimeFromPointer(event.clientX,canvas.getBoundingClientRect(),clip.buffer.duration);
+    $('#pitchFrom').value=Math.min(pitchPointer.start,to).toFixed(2);
+    $('#pitchTo').value=Math.max(pitchPointer.start,to).toFixed(2);
+    drawActivePitchReview();
+  });
+  document.addEventListener('pointerup',event=>{if(pitchPointer?.id===event.pointerId)pitchPointer=null;});
+  document.addEventListener('pointercancel',event=>{if(pitchPointer?.id===event.pointerId)pitchPointer=null;});
   document.addEventListener('keydown',e=>{
+    if(((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='x')&&e.target.closest('[data-flow-track]')&&!$('#modalBackdrop')){
+      e.preventDefault();deleteFlowNode(e.target.closest('[data-flow-track]').dataset.flowTrack);return;
+    }
     if(['Delete','Backspace'].includes(e.key)&&!e.repeat&&!$('#modalBackdrop')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('input,textarea,select,[contenteditable=true]')){
       const node=e.target.closest('[data-flow-track]');if(node){e.preventDefault();deleteFlowNode(node.dataset.flowTrack);return;}
       const card=e.target.closest('[data-track]');if(card){e.preventDefault();deleteTrack(card.dataset.track);return;}

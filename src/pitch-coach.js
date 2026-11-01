@@ -76,7 +76,13 @@ export function setNoteMask(clip,from,to,semitones){
   const a=Number(from),b=Number(to),shift=Number(semitones),dur=clip.buffer?.duration||0;
   if(!Number.isFinite(a)||!Number.isFinite(b)||!Number.isFinite(shift)||a<0||b>dur||
      b-a<.025||shift< -12||shift>12)throw Error('Selecciona un fragmento válido y desplazamiento entre −12 y +12 semitonos');
-  clip.pitchRegions=[...(clip.pitchRegions||[]).filter(r=>r.to<=a||r.from>=b),
-    {from:a,to:b,semitones:shift}].sort((x,y)=>x.from-y.from).slice(0,550);
+  const retained=[];
+  for(const region of clip.pitchRegions||[]){
+    if(region.to<=a||region.from>=b){retained.push({...region});continue;}
+    if(region.from<a)retained.push({...region,to:a});
+    if(region.to>b)retained.push({...region,from:b});
+  }
+  clip.pitchRegions=[...retained,{from:a,to:b,semitones:shift}]
+    .sort((x,y)=>x.from-y.from).slice(0,550);
   return clip.pitchRegions;
 }

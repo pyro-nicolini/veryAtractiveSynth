@@ -13,6 +13,9 @@ test('note masks store source-time ranges without touching PCM',()=>{
  const buffer={duration:6},clip={buffer};
  setNoteMask(clip,1,2,5);assert.deepEqual(clip.pitchRegions.map(r=>r.semitones),[5]);
  setNoteMask(clip,1,2,-3);assert.equal(clip.pitchRegions.length,1);
+ setNoteMask(clip,1.25,1.5,6);
+ assert.equal(clip.pitchRegions.length,3);
+ assert.deepEqual(clip.pitchRegions.map(r=>r.semitones),[-3,6,-3]);
  assert.throws(()=>setNoteMask(clip,1,10,1),/fragmento/);
 });
 test('offline scan returns bounded intervals, preset target range and mode',()=>{
