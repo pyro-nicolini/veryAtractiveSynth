@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#1b0a18">
+  <meta name="theme-color" content="#161c24">
   <meta name="description" content="Very Atractive Synth — estudio de voz y pistas por capas, privado y local.">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
@@ -11,11 +11,11 @@
   <link rel="stylesheet" href="./src/tune-lab.css">
   <link rel="stylesheet" href="./src/studio-mixer.css">
   <link rel="stylesheet" href="./src/studio-light.css">
-  <link rel="stylesheet" href="./src/red-velvet.css">
+  <link rel="stylesheet" href="./src/studio-console.css">
   <title>Very Atractive Synth | Laboratorio de sonido</title>
 </head>
 <body>
-<div class="splash-scene" id="introSplash" role="status" aria-label="Bienvenue · Bienvenido al estudio"><div class="splash-content"><div class="splash-gem" aria-hidden="true">V</div><p>VERY ATRACTIVE SYNTH · RED VELVET</p><h2>Bienvenue.</h2><p>VOTRE STUDIO. VOTRE SON.</p><div class="splash-progress" aria-hidden="true"></div></div><button class="splash-skip" id="splashSkip" type="button">Entrar ahora ↗</button></div>
+<div class="splash-scene" id="introSplash" role="status" aria-label="Bienvenue · Bienvenido al estudio"><div class="splash-content"><div class="splash-gem" aria-hidden="true">V</div><p>VERY ATRACTIVE SYNTH · SIGNAL CONSOLE</p><h2>Bienvenue.</h2><p>VOTRE STUDIO. VOTRE SON.</p><div class="splash-progress" aria-hidden="true"></div></div><button class="splash-skip" id="splashSkip" type="button">Entrar ahora ↗</button></div>
 <div class="app-shell">
   <header class="topbar">
     <a class="brand" href="#" aria-label="Very Atractive Synth, inicio">
@@ -36,7 +36,7 @@
   </header>
   <main>
     <section class="intro">
-      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · RED VELVET · STUDIO 1.6</div>
+      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · SIGNAL CONSOLE 2.0</div>
         <h1>Tu música, <em>a tu manera.</em></h1>
         <p>Elige un ritmo, conecta tus voces y arrastra efectos. Puedes cambiar todo sin perder el original.</p>
       </div>
@@ -53,14 +53,14 @@
         <span class="action-symbol">♫</span><span class="tile-copy"><strong>Explorar ritmos</strong><small>10 bases originales para probar</small></span><span class="tile-arrow">↗</span>
       </button>
     </section>
+    <section class="flow-studio" id="flowArea" aria-label="Laboratorio de conexiones musicales">
+      <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Signal Flow</h2><p>Dos flujos en paralelo — voz y pistas. Conecta la salida de un nodo a la entrada del siguiente, inserta efectos y combina tus samples.</p></div><div class="flow-heading-actions"><button type="button" class="mini-action" id="flowChain" title="Encadenar automáticamente pistas de voz y música hasta sus buses">⇢ ENCADENAR</button><button type="button" class="mini-action" id="flowArrange" title="Reorganizar los nodos sin alterar el audio">⊞ ORDENAR</button><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div></div>
+      <div id="flowBody"></div>
+    </section>
     <section class="sample-deck" id="sampleDeck" hidden aria-label="Banco de 12 samples personalizados"><div id="sampleDeckBody"></div></section>
     <section class="sound-library" id="soundLibrary" aria-label="Biblioteca de sonidos">
       <div class="soft-section-heading"><div><div class="section-overline">INSPIRACIÓN · 100% LOCAL</div><h2>Elige tu sonido</h2><p>Todo empieza con una idea. Toca para probar o arrastra hasta una pista.</p></div><button type="button" class="mini-action" id="libraryHelp" aria-label="Cómo utilizar la biblioteca">?</button></div>
       <div id="libraryBody"></div>
-    </section>
-    <section class="flow-studio" id="flowArea" aria-label="Laboratorio de conexiones musicales">
-      <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Conecta tu canción</h2><p>Arrastra tus pistas por tres líneas y dirige cada canal a un bus real antes del master. El sonido circula por los cables iluminados.</p></div><div class="flow-heading-actions"><button type="button" class="mini-action" id="flowArrange" title="Restablecer disposición por buses">↔ AUTOORDENAR</button><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div></div>
-      <div id="flowBody"></div>
     </section>
     <section class="workbench">
       <div class="track-area">
