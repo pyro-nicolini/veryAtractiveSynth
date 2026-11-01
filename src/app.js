@@ -1281,12 +1281,12 @@ function wire(){
     const tunePreset=e.target.closest('[data-tune-preset]');
     if(tunePreset){
       const point=findTunePreset(tunePreset.dataset.tunePreset);
-      if(point){checkpoint();tuneChange(point.x,point.y,point.id,true);}return;
+      if(point){if(state.tuneMode==='track')checkpoint();tuneChange(point.x,point.y,point.id,true);}return;
     }
     const userPoint=e.target.closest('[data-user-tune]');
     if(userPoint){
       const point=loadUserTunes()[Number(userPoint.dataset.userTune)];
-      if(point){checkpoint();tuneChange(point.x,point.y,'user:'+point.name,true);}return;
+      if(point){if(state.tuneMode==='track')checkpoint();tuneChange(point.x,point.y,'user:'+point.name,true);}return;
     }
     const preset=e.target.closest('[data-preset]');if(preset){
       const t=current(),p=PRESETS[preset.dataset.preset];if(!t||!p)return;
