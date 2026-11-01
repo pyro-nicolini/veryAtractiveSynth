@@ -1,4 +1,4 @@
-import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
+import {clamp,effectiveDuration,projectDuration,encodeWav,defaults} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
@@ -523,7 +523,20 @@ export class AudioEngine {
     }
   }
 
-  async exportMix(tracks,{depth=24,rate=48000,onlyId=null}={}){
+  /** Audition sample through the same processors used in WAV bounce. */
+  async previewSample(buffer,from,to,settings={}){
+    const ctx=await this.ready();
+    const track={...defaults(),...settings,volume:85,muted:false};
+    const graph=createGraph(ctx,track,this.output.gain,impulse(ctx));
+    const source=ctx.createBufferSource();
+    source.buffer=buffer;source.connect(graph.input);
+    source.onended=()=>{try{source.disconnect();}catch{}disposeGraph(graph);};
+    try{source.start(ctx.currentTime,from,to-from);}
+    catch(error){source.disconnect();disposeGraph(graph);throw error;}
+    return source;
+  }
+
+  async exportMix(tracks,{depth=24,rate=48000,onlyId=null,dry=false}={}){
     if(!tracks.length)throw Error('Primero agrega sonidos');
     const included=onlyId?tracks.filter(t=>t.id===onlyId):tracks;
     const active=included.filter(t=>!t.muted&&(!included.some(x=>x.solo)||t.solo));
@@ -531,8 +544,8 @@ export class AudioEngine {
     const duration=projectDuration(active);
     if(!duration)throw Error('No hay audio que exportar');
     if(duration>60*20)throw Error('El render local admite hasta 20 minutos por exportación');
-    const hasReverb=active.some(track=>Number(track.space)>0);
-    const hasDelay=active.some(track=>Number(track.echo)>0);
+    const hasReverb=!dry&&active.some(track=>Number(track.space)>0);
+    const hasDelay=!dry&&active.some(track=>Number(track.echo)>0);
     const tail=hasReverb?1.9:hasDelay?1.1:.08;
     // Account for the effects tail so the end is not truncated.
     const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
@@ -543,7 +556,7 @@ export class AudioEngine {
     const ir=impulse(offline);
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
     for(const track of active){
-      const graph=createGraph(offline,track,exportBuses.get(busForTrack(track)).gain,ir);
+      const graph=createGraph(offline,dry?{...track,bypassEffects:true}:track,exportBuses.get(busForTrack(track)).gain,ir);
       for(const clip of clipsOf(track))scheduleClip(offline,clip,graph,0,0);
     }
     const rendered=await offline.startRendering();
