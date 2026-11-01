@@ -2,9 +2,20 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.3.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.4.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
+
+## DesignPhase 0.4 — Proyectos múltiples y ajustes de voz
+
+- **Tus proyectos:** entra a ABRIR. Puedes guardar una canción con nombre, verla en tu biblioteca local, volver a abrirla o eliminar esa copia. La sesión actual continúa teniendo autoguardado independiente; guarda un proyecto con nombre cuando quieras conservar una versión particular.
+- **Almacenamiento incremental de audio:** IndexedDB v2 separa el PCM original de los parámetros. Modificar una perilla actualiza metadatos sin volver a almacenar las muestras de cada pista. La apertura de sesiones v1 mantiene compatibilidad con proyectos anteriores; se borran buffers huérfanos al eliminar proyectos.
+- **Ajustar sincronía de voz:** dentro de GRABAR MI VOZ, un control de -300 a +300 ms permite compensar un desplazamiento perceptible al grabar sobre una base. La captura usa el reloj de AudioContext como referencia inicial. Este ajuste manual **no sustituye la medición automática de latencia de hardware**.
+- **Escuchar original / comparar:** en cada capa puedes oír la fuente directa sin los efectos y volver a activarlos. Conserva volumen y panorámica; no modifica el original.
+- **CAF PCM:** si el navegador no logra abrir un archivo CAF de Apple, el decodificador local intenta leer CAF sin compresión (LPCM mono/estéreo). **CAF comprimido (AAC/ALAC) y formatos AMR/3GP no quedan solucionados**.
+- **Pruebas:** se añadieron pruebas del formato CAF y del almacenamiento incremental con un simulador de IndexedDB. Aún se necesitan pruebas E2E con navegador y micrófonos reales.
+
+**Advertencia sobre privacidad y recuperación:** todos los archivos permanecen en este equipo. La biblioteca local está sujeta a cuotas y borrado del navegador. Para respaldar canciones valiosas usa EXPORTAR → Proyecto editable y guarda el archivo fuera del sitio.
 
 ## Compatibilidad WAV mejorada (0.3.1)
 
@@ -129,13 +140,14 @@ src/engine.js                 AudioContext, cadena DSP por capa, render offline
 src/dsp.js                    cuantización de notas, demo, export WAV y tests
 src/worklets/voice-processor.js
                               afinación/gate en el hilo de audio
-src/project-store.js          persistencia local de sesión IndexedDB
+src/project-store.js          biblioteca local + audio separado y reutilizado en IndexedDB
 src/recording-utils.js         utilidad de captura PCM y diagnóstico de archivos
 src/worklets/capture-processor.js
                               captura mono PCM en hilo de audio
 src/portable-project.js        respaldo portable con pistas originales
 src/zip-store.js               creador/lector local ZIP sin compresión
 src/timeline.js                edición de clips, beat snapping y división
+src/audio-import.js            decodificadores WAV y CAF PCM locales
 server.js                     servidor sin dependencias, solo localhost
 sw.js                         cache de aplicación estática, no audio
 tests/dsp.test.js             test automatizados PCM y WAV

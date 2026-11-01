@@ -67,7 +67,7 @@ export async function importProject(file,ctx){
       scale:clamp(t.scale,0,2),trimStart:clamp(t.trimStart,0,buffer.duration),
       trimEnd:clamp(t.trimEnd,0,buffer.duration),offset:clamp(t.offset,0,3600),
       fadeIn:clamp(t.fadeIn,0,30),fadeOut:clamp(t.fadeOut,0,30),
-      muted:!!t.muted,solo:!!t.solo,
+      muted:!!t.muted,solo:!!t.solo,bypassEffects:!!t.bypassEffects,
       preset:typeof t.preset==='string'?t.preset:'natural',buffer
     });
   }

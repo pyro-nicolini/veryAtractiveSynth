@@ -1,6 +1,6 @@
 import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
-import {decodeWav,isWav} from './audio-import.js';
+import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -39,6 +39,8 @@ function setParams(graph,track,ctx){
   const now=ctx.currentTime||0,settle=.016;
   const set=(param,value)=>param.setTargetAtTime(value,now,settle);
   set(graph.volume.gain,track.muted?0:clamp(track.volume,0,100)/100);
+  set(graph.processedBus.gain,track.bypassEffects?0:1);
+  set(graph.bypassBus.gain,track.bypassEffects?1:0);
   set(graph.pan.pan,clamp(track.pan,-100,100)/100);
   set(graph.hp.frequency,65+clamp(track.clean,0,100)*.55);
   set(graph.lp.frequency,19000-clamp(track.clean,0,100)*23);
@@ -68,15 +70,17 @@ function createGraph(ctx,track,destination,ir){
   const delayFeedback=ctx.createGain();delayFeedback.gain.value=.27;delay.delayTime.value=.28;
   const convolver=ctx.createConvolver();convolver.buffer=ir;
   const reverbWet=ctx.createGain(),sum=ctx.createGain();
+  const processedBus=ctx.createGain(),bypassBus=ctx.createGain();
   const pan=ctx.createStereoPanner(),volume=ctx.createGain();
   input.connect(voice);voice.connect(hp);hp.connect(lp);lp.connect(low);
   low.connect(high);high.connect(drive);drive.connect(compressor);
-  compressor.connect(dry);dry.connect(sum);
-  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(sum);
+  compressor.connect(dry);dry.connect(processedBus);
+  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(processedBus);
   delay.connect(delayFeedback);delayFeedback.connect(delay);
-  compressor.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(sum);
+  compressor.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(processedBus);
+  input.connect(bypassBus);bypassBus.connect(sum);processedBus.connect(sum);
   sum.connect(pan);pan.connect(volume);volume.connect(destination);
-  const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet};
+  const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet,processedBus,bypassBus};
   setParams(graph,track,ctx);
   return graph;
 }
@@ -131,6 +135,10 @@ export class AudioEngine {
       if(isWav(bytes)){
         try{return decodeWav(bytes,ctx);}
         catch(error){throw Error('WAV no compatible: '+error.message);}
+      }
+      if(isCaf(bytes)){
+        try{return decodeCaf(bytes,ctx);}
+        catch(error){throw Error('CAF no compatible: '+error.message);}
       }
       throw Error('El audio no es compatible con los códecs de este navegador.');
     }

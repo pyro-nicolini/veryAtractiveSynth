@@ -1,6 +1,6 @@
 import {AudioEngine} from './engine.js';
 import {KEYS,SCALES,COLORS,PRESETS,defaults,clock,clamp,projectDuration,effectiveDuration,peaks,synthBeat,downloadBlob,safeFilename} from './dsp.js';
-import {saveSession,loadSession} from './project-store.js';
+import {saveSession,loadSession,listNamedProjects,saveNamedProject,deleteNamedProject} from './project-store.js';
 import {MAX_RECORDING_SECONDS,meterLevel,audioFileHint} from './recording-utils.js';
 import {exportProject,importProject} from './portable-project.js';
 import {zipStore} from './zip-store.js';
@@ -9,7 +9,7 @@ import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,master:85,busy:false};
+const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,master:85,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
@@ -42,17 +42,20 @@ const HELP={
   tempo:['BPM / velocidad','La velocidad de la canción en pulsos por minuto. Activa ♩ para escuchar un metrónomo durante la reproducción. No modifica automáticamente la velocidad de los archivos importados.'],
   snap:['Ajustar al ritmo','Cuando está activado, mover una capa con ↔ la coloca en el pulso musical más cercano según los BPM. Desactívalo para moverla libremente.'],
   clip:['Mover una capa','Arrastra el símbolo ↔ sobre la forma de onda para cambiar su posición en el tiempo. El sonido original se conserva.'],
-  loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.']
+  loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.'],
+  alignment:['Ajustar la sincronía','Si al escuchar tu grabación queda después del ritmo, mueve el control hacia Adelantar (valores negativos). Si quedó demasiado temprano, muévelo hacia Retrasar (positivos). El ajuste queda guardado en este dispositivo. No sustituye una calibración automática del hardware.'],
+  original:['Comparar sonido original','Alterna entre el audio sin efectos y el audio procesado. El volumen y la dirección se mantienen. Es una comparación A/B no destructiva: los efectos siguen guardados aunque escuches el original.']
 };
 let toastTimer,raf=0,autosaveTimer=null,autosaveBusy=false,autosaveQueued=false;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
   state.metronome=!!options.metronome;state.snap=!!options.snap;state.loop=!!options.loop;
+  state.recordShiftMs=Math.round(clamp(options.recordShiftMs??0,-300,300));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
   $('#snapBtn')?.setAttribute('aria-pressed',String(state.snap));
@@ -193,6 +196,7 @@ function renderInspector(){
   $('#inspectorBody').innerHTML='<div class="selected-head" style="--track-color:'+trackColor(t)+'"><strong>'+html(t.name)+'</strong><span class="track-color-pill"></span></div>'+
     '<div class="hint" style="margin:7px 0 14px">Cada cambio afecta solo esta capa.</div>'+
     '<div class="control-heading"><strong>ESTILOS RÁPIDOS</strong>'+buttonInfo('presets')+'</div><div class="preset-list">'+presets+'</div>'+
+    '<button class="wide-button" data-action="toggle-bypass" aria-pressed="'+!!t.bypassEffects+'">'+(t.bypassEffects?'▶ VOLVER A MIS EFECTOS':'◉ ESCUCHAR ORIGINAL / COMPARAR')+'</button>'+
     '<div class="inspector-divider"></div><div class="control-heading"><strong>TUS 3 CONTROLES</strong>'+buttonInfo('inspector')+'</div>'+
     '<div class="control-grid">'+dial('Volumen','volume',t.volume)+dial('Afinación','autotune',t.autotune,'var(--purple)')+dial('Limpieza','clean',t.clean,'var(--blue)')+'</div>'+
     '<div class="control-row"><label for="tuneKey">Tono</label><select data-setting="key" id="tuneKey">'+KEYS.map((x,i)=>'<option value="'+i+'"'+(i===t.key?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('key')+'</div>'+
@@ -416,7 +420,8 @@ async function openRecording(){
     '<div class="control-row"><label for="recordTune">Afinación al escucharme</label><input type="range" min="0" max="100" value="80" id="recordTune">'+buttonInfo('autotune')+'</div>'+
     '<div class="control-row"><label for="recordClean">Limpieza al escucharme</label><input type="range" min="0" max="100" value="35" id="recordClean">'+buttonInfo('clean')+'</div>'+
     '<div class="control-row"><label for="recordBacking">Reproducir base al grabar</label><input type="checkbox" class="toggle-switch" id="recordBacking" '+(state.tracks.length?'checked':'')+'></div>'+
-    '<div class="note">Grabación PCM sin archivos comprimidos intermedios. El medidor se mueve cuando llega tu voz. Duración máxima por toma: 5 minutos.</div>',
+    '<div class="control-row"><label for="recordShift">Ajuste de sincronía de tu voz</label><input id="recordShift" type="range" min="-300" max="300" step="25" value="'+state.recordShiftMs+'"><output id="recordShiftValue">'+(state.recordShiftMs===0?'Sin ajuste':state.recordShiftMs+' ms')+'</output>'+buttonInfo('alignment')+'</div>'+
+    '<div class="note">Grabación PCM sin compresión intermedia. Si tu voz queda desfasada al escucharla, puedes adelantarla o retrasarla con el ajuste de sincronía. Duración máxima: 5 minutos.</div>',
     [{label:'PROBAR ENTRADA',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
   const start=$('[data-action="start-record"]');if(start)start.disabled=true;
   await updateMicrophoneChoices();
@@ -424,6 +429,7 @@ async function openRecording(){
 async function startRecording(){
   if(state.recording||!state.preview)return toast('Primero presiona PROBAR ENTRADA');
   const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
+  state.recordShiftMs=Math.round(Number($('#recordShift')?.value||0));
   state.preview.monitorTrack.autotune=tune;state.preview.monitorTrack.clean=clean;
   engine.updateMic(state.preview.monitorTrack);
   if($('#recordBacking')?.checked && state.tracks.length && !engine.playing){
@@ -438,7 +444,9 @@ async function startRecording(){
       if(state.recording)state.recording.seconds=seconds;
       if(seconds>=MAX_RECORDING_SECONDS&&!state.recording?.stopping)stopRecording();
     });
-    state.recording={...data,capture};
+    // Align against the shared AudioContext clock, not a wall-clock stopwatch.
+    const clockOffset=engine.playing?engine.from+capture.startedAt-engine.startCtxTime:data.offset;
+    state.recording={...data,capture,offset:Math.max(0,clockOffset),recordShiftMs:state.recordShiftMs};
     if($('#recordTimer'))$('#recordTimer').textContent='● 00:00 · GRABANDO';
     if($('#micStatus'))$('#micStatus').textContent='GRABACIÓN ACTIVA · LA ONDA SE ESTÁ DIBUJANDO';
     const select=$('#micSelect');if(select)select.disabled=true;
@@ -455,7 +463,9 @@ async function stopRecording(){
     const buffer=await engine.stopCapture();
     if(!buffer||buffer.duration<.05)throw Error('La toma es demasiado corta o quedó vacía');
     state.recording=null; // capture is finished; allow undo of the newly created take
-    const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',recording.offset);
+    const adjustedStart=recording.offset+(recording.recordShiftMs||0)/1000;
+    const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',Math.max(0,adjustedStart));
+    if(adjustedStart<0)track.trimStart=Math.min(buffer.duration-.02,-adjustedStart);
     Object.assign(track,{autotune:recording.tune,clean:recording.clean,retune:70,space:12,preset:'custom'});
     toast('¡Toma grabada! La capa de voz ya aparece en tu mezcla.');
   }catch(error){toast('No se pudo finalizar la grabación: '+error.message);}
@@ -525,11 +535,63 @@ async function load(){
     state.position=0;render();toast('Sesión recuperada. Todo está en este dispositivo.');
   }catch(e){toast('No se pudo recuperar: '+e.message);}
 }
-function openProjectMenu(){
-  modal('Abrir tu proyecto',
-    '<p>Recupera tu última sesión local o abre un respaldo portátil .vasproject. Todo se procesa en este dispositivo.</p>'+
-    '<div class="note">Para crear un respaldo usa EXPORTAR → Proyecto editable. Guarda todos los audios originales y sus parámetros.</div>',
-    [{label:'ABRIR RESPALDO',type:'browse-project'},{label:'ÚLTIMA SESIÓN LOCAL',type:'load-local',primary:true}]);
+async function openProjectMenu(){
+  modal('Tus proyectos',
+    '<p>Guarda distintas canciones en este dispositivo o abre tu última sesión. Los audios son privados y no se suben a ningún servidor.</p>'+
+    '<div id="namedProjectsList" class="named-projects"><span class="hint">Buscando proyectos guardados...</span></div>'+
+    '<div class="note">Para proteger tus canciones, crea además un archivo de respaldo desde EXPORTAR → Proyecto editable. Los datos del navegador pueden borrarse.</div>',
+    [{label:'ABRIR ARCHIVO',type:'browse-project'},{label:'GUARDAR NUEVO',type:'save-named'},{label:'ÚLTIMA SESIÓN',type:'load-local',primary:true}]);
+  try{
+    const projects=await listNamedProjects();
+    const area=$('#namedProjectsList');if(!area)return;
+    area.innerHTML=projects.length?projects.map(project=>
+      '<div class="named-project"><div><strong>'+html(project.name)+'</strong><small>'+project.tracks+' capas · '+html(project.savedAt.slice(0,16).replace('T',' '))+'</small></div>'+
+      '<button class="mini-action" data-project-open="'+html(project.id)+'" aria-label="Abrir '+html(project.name)+'">ABRIR</button>'+
+      '<button class="mini-action" data-project-delete="'+html(project.id)+'" aria-label="Eliminar '+html(project.name)+'">×</button></div>'
+    ).join(''):'<p class="hint">Todavía no tienes proyectos guardados con nombre. Puedes guardar el primero desde aquí.</p>';
+  }catch(error){
+    const area=$('#namedProjectsList');if(area)area.textContent='No se pudo acceder a los proyectos locales: '+error.message;
+  }
+}
+async function saveNewNamed(){
+  if(!state.tracks.length)return toast('Agrega primero algún sonido');
+  modal('Guardar como proyecto',
+    '<p>Dale un nombre fácil de reconocer. Conservarás esta canción y sus capas para abrirla después.</p>'+
+    '<div class="field"><label for="newProjectName">Nombre del proyecto</label><input id="newProjectName" type="text" maxlength="72" placeholder="Mi primera canción" value="Mi canción" class="project-name-input"></div>',
+    [{label:'GUARDAR PROYECTO',type:'confirm-save-named',primary:true}]);
+  $('#newProjectName')?.focus();
+}
+async function confirmSaveNamed(){
+  const name=$('#newProjectName')?.value.trim();
+  if(!name)return toast('Escribe un nombre para tu proyecto');
+  if(state.busy)return;
+  state.busy=true;
+  try{
+    await saveNamedProject(state.tracks,state.master,getProjectOptions(),name);
+    toast('Proyecto "'+name+'" guardado en este dispositivo');
+    modalStack.length=0;$('#modalRoot').innerHTML='';
+  }catch(error){toast('No se pudo guardar: '+error.message);}
+  finally{state.busy=false;}
+}
+async function openNamed(id){
+  if(state.recording)return toast('Termina la grabación primero');
+  if(state.tracks.length&&!confirm('¿Abrir el proyecto y reemplazar la mezcla actual? Guarda un respaldo si lo necesitas.'))return;
+  try{
+    const ctx=await engine.ready();
+    const data=await loadSession(ctx,id);
+    if(!data)throw Error('Proyecto no encontrado');
+    checkpoint();clearTimeout(autosaveTimer);
+    engine.stop();state.tracks=data.tracks;state.selected=data.tracks[0]?.id||null;
+    state.position=0;state.master=data.master??85;
+    engine.setMaster(state.master);applyProjectOptions(data.options);
+    $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
+    modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Proyecto cargado correctamente');
+  }catch(error){toast('No se pudo cargar: '+error.message);}
+}
+async function removeNamed(id){
+  if(!confirm('¿Eliminar este proyecto guardado? La sesión actual y tus archivos exportados no se eliminan.'))return;
+  try{await deleteNamedProject(id);await openProjectMenu();toast('Proyecto eliminado');}
+  catch(error){toast('No se pudo eliminar: '+error.message);}
 }
 async function loadPortable(file){
   if(!file)return;
@@ -577,7 +639,15 @@ function handleTrackAction(action,id){
 function handleModalAction(action){
   if(action==='close-modal'||action==='close'){closeModal();return;}
   if(action==='effects'){openEffects();return;}
+  if(action==='toggle-bypass'){
+    const t=current();if(!t)return;
+    checkpoint();t.bypassEffects=!t.bypassEffects;
+    engine.updateTrack(t);renderInspector();queueAutosave();
+    toast(t.bypassEffects?'Escuchando audio original':'Escuchando efectos de esta capa');return;
+  }
   if(action==='timing'){openTiming();return;}
+  if(action==='save-named'){saveNewNamed();return;}
+  if(action==='confirm-save-named'){confirmSaveNamed();return;}
   if(action==='load-local'){modalStack.length=0;$('#modalRoot').innerHTML='';load();return;}
   if(action==='browse-project'){$('#projectInput').click();return;}
   if(action==='test-mic'){prepareSelectedMic();return;}
@@ -748,6 +818,8 @@ function wire(){
   });
   $('#tracks').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.track-card')){e.preventDefault();state.selected=e.target.dataset.track;render();}});
   document.addEventListener('click',e=>{
+    const opening=e.target.closest('[data-project-open]');if(opening){openNamed(opening.dataset.projectOpen);return;}
+    const deletion=e.target.closest('[data-project-delete]');if(deletion){removeNamed(deletion.dataset.projectDelete);return;}
     const info=e.target.closest('[data-info]');if(info){help(info.dataset.info);return;}
     const action=e.target.closest('[data-action]');if(action){handleModalAction(action.dataset.action);return;}
     const preset=e.target.closest('[data-preset]');if(preset){
@@ -759,6 +831,10 @@ function wire(){
   document.addEventListener('input',e=>{
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
+    if(e.target.id==='recordShift'){
+      const output=$('#recordShiftValue'),value=Number(e.target.value);
+      if(output)output.textContent=value===0?'Sin ajuste':(value<0?'Adelantar ':'Retrasar ')+Math.abs(value)+' ms';
+    }
     if(e.target.id==='recordTune'||e.target.id==='recordClean'){
       if(state.preview){
         state.preview.monitorTrack[e.target.id==='recordTune'?'autotune':'clean']=Number(e.target.value);

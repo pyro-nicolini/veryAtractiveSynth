@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.3 implementado
+## 3. Estado 0.4 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -39,6 +39,22 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 **Privacidad:** nunca subir audio, micrófono ni metadatos a un servicio; cualquier futura IA en nube requiere autorización separada.
 
 ## 5. Fases propuestas
+
+### Fase 0.4 — Proyectos múltiples y comparación vocal
+
+- [x] Biblioteca de proyectos con nombre en el mismo dispositivo.
+- [x] Guardado incremental de metadatos y reutilización de PCM en IndexedDB v2.
+- [x] Migración de lectura de sesiones v1.
+- [x] Limpieza de audio huérfano al eliminar proyectos.
+- [x] Ajuste manual de sincronización -300/+300 ms conservado con el proyecto.
+- [x] Comparación A/B de cada capa: audio sin efectos vs procesado.
+- [x] Decodificación local de CAF LPCM no comprimido.
+- [x] Pruebas unitarias con IndexedDB simulado.
+- [ ] QA integral en navegador: cuotas, migración real, permisos de micrófono, sincronía y exportaciones.
+- [ ] Latencia medida y calibrada automáticamente con hardware.
+- [ ] Códecs móviles comprimidos AMR/3GP/CAF/Opus sin decodificador nativo.
+- [ ] DSP autotune comercial y restauración de ruido avanzada.
+- [ ] Guardado con múltiples proyectos de gran tamaño sin bloqueos, exportación en streaming.
 
 ### Mejora 0.3.1 — Importación WAV
 
@@ -104,7 +120,8 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 - [ ] Clips múltiples dentro de una misma pista, zoom de timeline y crossfade interactivo.
 - [x] Undo/redo básico en memoria (25 cambios).
 - [x] Guardado automático debounced de la sesión local completa.
-- [ ] Autosave **incremental** de buffers/metadata en worker para proyectos grandes.
+- [x] Autoguardado de metadatos con PCM independiente, sin recopia de buffers.
+- [ ] Guardado de PCM pesado en worker y límites de memoria para proyectos grandes.
 - [ ] Proyecto portable (audio + parámetros) y exportación de stems.
 - [ ] Packs de presets y ajuste A/B; control de panorámica estéreo avanzada.
 - [ ] Pruebas visuales, QA automatizado y benchmark de exportaciones largas.

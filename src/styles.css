@@ -45,3 +45,11 @@
 .save-status.saved{color:var(--green)}
 @media(max-width:1150px){.tempo-control{font-size:9px}.tempo-control input{width:49px}.section-tools{gap:5px}}
 @media(max-width:490px){.tempo-control{letter-spacing:0}.tempo-control input{width:43px;height:28px}.section-tools .mini-action{padding:0 5px;min-width:25px;height:28px}.clip-move{width:29px}.save-status{font-size:8px}.track-area .section-heading{align-items:start}.section-tools{flex-wrap:wrap;justify-content:flex-end;max-width:235px}}
+
+.named-projects{display:grid;gap:7px;margin:15px 0;max-height:270px;overflow-y:auto}
+.named-project{display:flex;align-items:center;gap:8px;border:1px solid #313c42;border-radius:8px;background:#141a20;padding:12px}
+.named-project>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.named-project strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.named-project small{font-family:monospace;font-size:10px;color:#9da9af}
+.project-name-input{width:100%;border:1px solid #536153;border-radius:8px;padding:12px;background:#0c1114;color:#e5ffd7;font-size:14px}
+#recordShiftValue{font:700 10px monospace;color:var(--green);min-width:86px;text-align:right}
