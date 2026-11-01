@@ -12,6 +12,16 @@
 - 🪐 **Flow Studio:** conecta/desconecta pistas y arrastra efectos.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
 
+## ❤️ Red Velvet · edición en rama de revisión
+
+- **WAV por pista:** botón «↓ WAV» en cada canal. Descarga la pista con o sin sus efectos, o crea una nueva pista renderizada dentro del proyecto sin borrar la fuente. Se preservan los cortes y la posición temporal.
+- **WAV por pad:** el editor de Sample Deck permite guardar localmente el color elegido y exportar WAV original o procesado. La biblioteca conserva sus 12 pads en IndexedDB, como antes.
+- **Rutas reales de audio:** Flow Studio representa tres buses existentes (VOCES, MÚSICA y EFECTOS); cada pista se conecta al bus elegido y cada bus al master. Usa «A BUS» para cambiar el destino y «AUTOORDENAR» para restaurar líneas organizadas. Por seguridad no se simula conexión arbitraria pista → pista sin DSP real.
+- **Voice Playground:** más personajes creativos y variaciones femeninas, masculinas, rap y caricatura mediante afinación, desplazamiento de tono, saturación y EQ. Son transformaciones **estilizadas**, no síntesis vocal con preservación de formantes ni imitaciones de identidades reales.
+- **Interfaz Red Velvet:** tema burdeos con vidrio, relieve y acentos rosados; animación «Bienvenue» de ~2,7 s, saltable y adaptada a movimiento reducido. Los dos assets nuevos están incluidos en el empaquetado offline.
+
+Estas mejoras no alteran el contenido guardado en tus proyectos y mantienen los originales. Para publicar, revisar el pull request y validar la prueba manual de sonido/exportación en Chrome/Edge con una sesión de prueba.
+
 ## 🚀 Instalar y ejecutar
 
 Necesitas **Node.js 20 o superior**, **Git** y un navegador moderno. No necesitas base de datos ni instalar paquetes adicionales.
