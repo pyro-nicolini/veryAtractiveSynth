@@ -4,6 +4,8 @@ import {saveSession,loadSession,listNamedProjects,saveNamedProject,deleteNamedPr
 import {MAX_RECORDING_SECONDS,meterLevel,audioFileHint} from './recording-utils.js';
 import {exportProject,importProject} from './portable-project.js';
 import {zipStore} from './zip-store.js';
+import {TUNE_POINTS,normalizeTune,tunePointFromManual,applyTunePoint,findTunePreset} from './tune-lab.js';
+import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMarkup} from './tune-lab-ui.js';
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
@@ -43,10 +45,12 @@ const HELP={
   snap:['Ajustar al ritmo','Cuando está activado, mover una capa con ↔ la coloca en el pulso musical más cercano según los BPM. Desactívalo para moverla libremente.'],
   clip:['Mover una capa','Arrastra el símbolo ↔ sobre la forma de onda para cambiar su posición en el tiempo. El sonido original se conserva.'],
   loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.'],
+  tuneLab:['TUNE LAB — experimento musical','Mueve el nodo en el plano: izquierda = transiciones naturales, derecha = cambios robóticos rápidos; abajo = poca afinación, arriba = mucha afinación. También modifica ligeramente brillo y saturación para descubrir colores. El sonido cambia mientras reproduces. Usa los botones de destinos y guarda los que te gusten. No es todavía un autotune profesional.'],
   alignment:['Ajustar la sincronía','Si al escuchar tu grabación queda después del ritmo, mueve el control hacia Adelantar (valores negativos). Si quedó demasiado temprano, muévelo hacia Retrasar (positivos). El ajuste queda guardado en este dispositivo. No sustituye una calibración automática del hardware.'],
   original:['Comparar sonido original','Alterna entre el audio sin efectos y el audio procesado. El volumen y la dirección se mantienen. Es una comparación A/B no destructiva: los efectos siguen guardados aunque escuches el original.']
 };
 let toastTimer,raf=0,autosaveTimer=null,autosaveBusy=false,autosaveQueued=false;
+let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
@@ -129,7 +133,8 @@ function modal(title,content,actions=[]){
   $('.focus-panel')?.focus();
 }
 function closeModal(){
-  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();return;}
+  finishTuneGesture();
+  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();if($('#tuneLab'))$('.focus-panel')?.classList.add('tune-focus');return;}
   if(state.recording){toast('Detén la grabación antes de cerrar');return;}
   cancelAnimationFrame(state.meterFrame);
   state.preview=null;
@@ -201,6 +206,9 @@ function renderInspector(){
     '<div class="control-grid">'+dial('Volumen','volume',t.volume)+dial('Afinación','autotune',t.autotune,'var(--purple)')+dial('Limpieza','clean',t.clean,'var(--blue)')+'</div>'+
     '<div class="control-row"><label for="tuneKey">Tono</label><select data-setting="key" id="tuneKey">'+KEYS.map((x,i)=>'<option value="'+i+'"'+(i===t.key?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('key')+'</div>'+
     '<div class="control-row"><label for="tuneScale">Escala</label><select data-setting="scale" id="tuneScale">'+SCALES.map((x,i)=>'<option value="'+i+'"'+(i===t.scale?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('scale')+'</div>'+
+    '<div class="tune-mini"><div class="tune-mini-chart"><span class="tune-mini-node" style="left:'+(((Number.isFinite(t.tuneX)?t.tuneX:tunePointFromManual(t.autotune,t.retune).x)+1)*50)+'%;top:'+((1-(Number.isFinite(t.tuneY)?t.tuneY:tunePointFromManual(t.autotune,t.retune).y))*50)+'%"></span></div>'+
+      '<div class="tune-mini-body"><strong>✦ TUNE LAB</strong><small>Descubre nuevos estilos moviendo un nodo</small></div></div>'+
+    '<button class="wide-button tune-launch" data-action="tune-open">✧ EXPLORAR TUNE LAB →</button>'+
     '<button class="wide-button" data-action="effects">✦ MÁS EFECTOS →</button><button class="wide-button" data-action="timing">◷ AJUSTAR TIEMPOS →</button>';
 }
 function updateTransport(){
@@ -276,6 +284,118 @@ async function demo(){
     render();toast('Base original agregada. ¡Ahora graba tu voz!');
   }catch(e){toast(e.message);}
 }
+
+/* TUNE LAB — XY controls actual AudioWorklet and WebAudio parameters. */
+function tuneRefresh(track){
+  if(tuneFrame)return;
+  tuneFrame=requestAnimationFrame(()=>{
+    tuneFrame=0;
+    engine.updateTrack(track);
+    updateTuneLabView($('#tuneLab'),track);
+  });
+}
+function tuneChange(x,y,preset='custom',store=false){
+  const track=current();if(!track)return;
+  const p=normalizeTune(x,y);
+  applyTunePoint(track,p.x,p.y,preset);
+  tuneRefresh(track);
+  if(store){renderInspector();queueAutosave();}
+}
+function tuneFromPad(event){
+  const pad=$('#tunePad');if(!pad)return null;
+  const rect=pad.getBoundingClientRect();
+  if(!rect.width||!rect.height)return null;
+  return normalizeTune(((event.clientX-rect.left)/rect.width)*2-1,
+    (1-(event.clientY-rect.top)/rect.height)*2-1);
+}
+function openTuneLab(){
+  const track=current();if(!track)return toast('Selecciona un sonido antes de explorar');
+  if(!Number.isFinite(track.tuneX)||!Number.isFinite(track.tuneY)){
+    const point=tunePointFromManual(track.autotune,track.retune);
+    track.tuneX=point.x;track.tuneY=point.y;
+    track.tunePreset='custom';
+  }
+  modal('Tune Lab · Explora tu voz',tuneLabMarkup(track,loadUserTunes()),
+    [{label:'LISTO / VOLVER A MI MEZCLA',type:'tune-done',primary:true}]);
+  $('.focus-panel')?.classList.add('tune-focus');
+  updateTuneLabView($('#tuneLab'),track);
+}
+function finishTuneGesture(){
+  if(!tuneGesture)return;
+  const track=current();
+  tuneGesture=null;
+  if(track){tuneRefresh(track);renderInspector();queueAutosave();}
+}
+function installTuneGestures(){
+  document.addEventListener('pointerdown',event=>{
+    const pad=event.target.closest('#tunePad');
+    if(!pad||event.target.closest('[data-tune-preset]')||event.button!==0)return;
+    const track=current();if(!track)return;
+    event.preventDefault();
+    checkpoint();
+    tuneGesture={pointerId:event.pointerId};
+    pad.setPointerCapture(event.pointerId);
+    const p=tuneFromPad(event);if(p)tuneChange(p.x,p.y);
+  });
+  document.addEventListener('pointermove',event=>{
+    if(!tuneGesture||event.pointerId!==tuneGesture.pointerId)return;
+    const p=tuneFromPad(event);if(p)tuneChange(p.x,p.y);
+  });
+  document.addEventListener('pointerup',event=>{
+    if(tuneGesture&&event.pointerId===tuneGesture.pointerId)finishTuneGesture();
+  });
+  document.addEventListener('pointercancel',event=>{
+    if(tuneGesture&&event.pointerId===tuneGesture.pointerId)finishTuneGesture();
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.target.id!=='tunePad'||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(event.key))return;
+    const track=current();if(!track)return;
+    event.preventDefault();checkpoint();
+    const p=normalizeTune(track.tuneX,track.tuneY),step=event.shiftKey?.15:.04;
+    const x=event.key==='Home'?0:p.x+(event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0);
+    const y=event.key==='Home'?0:p.y+(event.key==='ArrowUp'?step:event.key==='ArrowDown'?-step:0);
+    tuneChange(x,y,'custom',true);
+  });
+  document.addEventListener('pointerdown',event=>{
+    if(event.target.matches('[data-tune-axis]'))checkpoint();
+  });
+  document.addEventListener('change',event=>{
+    if(event.target.matches('[data-tune-axis]')){renderInspector();queueAutosave();}
+  });
+}
+function tuneAction(action){
+  const track=current();if(!track)return;
+  if(action==='tune-done'){finishTuneGesture();closeModal();renderInspector();return;}
+  if(action==='tune-preview'){
+    if(!state.tracks.length)return toast('Agrega audio para escuchar');
+    if(engine.playing){toast('La mezcla ya está sonando. Mueve el nodo.');return;}
+    if(state.position>=projectDuration(state.tracks)-.02)state.position=0;
+    playPause();return;
+  }
+  if(action==='tune-ab'){
+    checkpoint();track.bypassEffects=!track.bypassEffects;
+    tuneRefresh(track);renderInspector();queueAutosave();return;
+  }
+  if(action==='tune-surprise'){
+    checkpoint();
+    tuneChange(Math.random()*2-1,Math.random()*2-1,'custom',true);return;
+  }
+  if(action==='tune-reset'){
+    checkpoint();tuneChange(-.75,-1,'natural',true);return;
+  }
+  if(action==='tune-save'){
+    try{
+      const name=$('#labPresetName')?.value||'';
+      const saved=saveUserTune(name,track.tuneX,track.tuneY);
+      const list=$('#labUserPresets');
+      if(list)list.innerHTML=customTuneMarkup(loadUserTunes());
+      track.tunePreset='user:'+saved.name;queueAutosave();renderInspector();
+      const input=$('#labPresetName');if(input)input.value='';
+      toast('Estilo '+saved.name+' guardado solo en este navegador.');
+    }catch(error){toast(error.message);}
+  }
+}
+
 function openEffects(){
   const t=current();if(!t)return;
   modal('Efectos de '+t.name,
@@ -608,7 +728,12 @@ async function loadPortable(file){
 async function setSetting(key,value,element){
   const t=current();if(!t||!(key in defaults()))return;
   t[key]=clamp(value,key==='pan'?-100:0,key==='pan'?100:key==='key'?11:key==='scale'?2:100);
-  t.preset='custom';engine.updateTrack(t);queueAutosave();
+  t.preset='custom';
+  if(key==='retune'||key==='autotune'){
+    const point=tunePointFromManual(t.autotune,t.retune);
+    t.tuneX=point.x;t.tuneY=point.y;t.tunePreset='custom';
+  }
+  engine.updateTrack(t);queueAutosave();
   if(element&&element.type==='range'){
     const dialNode=element.closest('.dial-wrap')?.querySelector('.dial');
     const inner=element.closest('.dial-wrap')?.querySelector('.dial-inner span');
@@ -638,6 +763,8 @@ function handleTrackAction(action,id){
 }
 function handleModalAction(action){
   if(action==='close-modal'||action==='close'){closeModal();return;}
+  if(action==='tune-open'){openTuneLab();return;}
+  if(action.startsWith('tune-')){tuneAction(action);return;}
   if(action==='effects'){openEffects();return;}
   if(action==='toggle-bypass'){
     const t=current();if(!t)return;
@@ -773,6 +900,7 @@ function setupClipDragging(){
 }
 
 function wire(){
+  installTuneGestures();
   setupScrubber();
   setupClipDragging();
   const bpm=$('#bpmInput'),metro=$('#metronomeBtn'),snapBtn=$('#snapBtn');
@@ -822,13 +950,33 @@ function wire(){
     const deletion=e.target.closest('[data-project-delete]');if(deletion){removeNamed(deletion.dataset.projectDelete);return;}
     const info=e.target.closest('[data-info]');if(info){help(info.dataset.info);return;}
     const action=e.target.closest('[data-action]');if(action){handleModalAction(action.dataset.action);return;}
+    const tunePreset=e.target.closest('[data-tune-preset]');
+    if(tunePreset){
+      const point=findTunePreset(tunePreset.dataset.tunePreset);
+      if(point){checkpoint();tuneChange(point.x,point.y,point.id,true);}return;
+    }
+    const userPoint=e.target.closest('[data-user-tune]');
+    if(userPoint){
+      const point=loadUserTunes()[Number(userPoint.dataset.userTune)];
+      if(point){checkpoint();tuneChange(point.x,point.y,'user:'+point.name,true);}return;
+    }
     const preset=e.target.closest('[data-preset]');if(preset){
       const t=current(),p=PRESETS[preset.dataset.preset];if(!t||!p)return;
-      checkpoint();Object.assign(t,p,{preset:preset.dataset.preset});engine.updateTrack(t);renderInspector();toast('Estilo aplicado: '+p.label);return;
+      checkpoint();Object.assign(t,p,{preset:preset.dataset.preset});
+      const tuneXY=tunePointFromManual(t.autotune,t.retune);
+      Object.assign(t,{tuneX:tuneXY.x,tuneY:tuneXY.y,tunePreset:'custom'});
+      engine.updateTrack(t);renderInspector();queueAutosave();toast('Estilo aplicado: '+p.label);return;
     }
     if(e.target.id==='modalBackdrop')closeModal();
   });
   document.addEventListener('input',e=>{
+    if(e.target.matches('[data-tune-axis]')){
+      const t=current();if(t){
+        const x=e.target.dataset.tuneAxis==='x'?Number(e.target.value)/100:t.tuneX;
+        const y=e.target.dataset.tuneAxis==='y'?Number(e.target.value)/100:t.tuneY;
+        tuneChange(x,y);
+      }
+    }
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
     if(e.target.id==='recordShift'){

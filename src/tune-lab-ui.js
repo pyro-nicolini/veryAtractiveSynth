@@ -1,0 +1,94 @@
+import {TUNE_POINTS,normalizeTune,describeTune,tunePointFromManual,validSavedTune} from './tune-lab.js';
+const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const percent=value=>((value+1)*50).toFixed(2)+'%';
+const vertical=value=>((1-value)*50).toFixed(2)+'%';
+export const USER_TUNE_KEY='vas-tune-presets-v1';
+export function loadUserTunes(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(USER_TUNE_KEY)||'[]');
+    if(!Array.isArray(raw))return [];
+    return raw.map(validSavedTune).filter(Boolean).slice(0,12);
+  }catch{return [];}
+}
+export function saveUserTune(name,x,y){
+  const entry=validSavedTune({name,x,y});
+  if(!entry)throw Error('Escribe un nombre corto para el estilo (hasta 40 letras)');
+  const current=loadUserTunes();
+  const without=current.filter(p=>p.name.toLowerCase()!==entry.name.toLowerCase());
+  without.push(entry);
+  if(without.length>12)without.shift();
+  try{localStorage.setItem(USER_TUNE_KEY,JSON.stringify(without));}
+  catch{throw Error('No se pudo guardar este estilo en el navegador');}
+  return entry;
+}
+export function customTuneMarkup(presets){
+  if(!presets.length)return '<span class="lab-empty-presets">Aquí aparecerán tus estilos guardados.</span>';
+  return presets.map((p,i)=>'<button type="button" class="lab-preset lab-user-preset" data-user-tune="'+i+'" title="Cargar '+escapeHTML(p.name)+'">✧ '+escapeHTML(p.name)+'</button>').join('');
+}
+export function tuneLabMarkup(track,userPresets=[]){
+  const p=Number.isFinite(track.tuneX)&&Number.isFinite(track.tuneY)?
+    normalizeTune(track.tuneX,track.tuneY):
+    tunePointFromManual(track.autotune,track.retune);
+  const presets=TUNE_POINTS.map(point=>'<button type="button" class="lab-anchor" data-tune-preset="'+point.id+'"'+
+    ' style="left:'+percent(point.x)+';top:'+vertical(point.y)+'" title="'+escapeHTML(point.name)+'" aria-label="Probar '+escapeHTML(point.name)+'">'+
+    '<span class="lab-anchor-dot">'+point.emoji+'</span><span class="lab-anchor-label">'+escapeHTML(point.name)+'</span></button>').join('');
+  const chips=TUNE_POINTS.map(point=>'<button type="button" class="lab-preset" data-tune-preset="'+point.id+'">'+point.emoji+' '+escapeHTML(point.name)+'</button>').join('');
+  return '<section class="tune-lab" id="tuneLab">'+
+    '<div class="lab-intro"><div><div class="section-overline">EXPERIMENTAL / LOCAL AUDIO</div>'+
+    '<p>Arrastra el punto. No necesitas saber música para explorar. Si tu pista está sonando, escucharás el cambio en vivo.</p></div>'+
+    '<button type="button" class="mini-action" data-info="tuneLab" aria-label="Información sobre Tune Lab">i</button></div>'+
+    '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview">▶ ESCUCHAR CAMBIOS</button>'+
+    '<button type="button" class="lab-action" data-action="tune-ab">'+(track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL')+'</button>'+
+    '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button></div>'+
+    '<div class="lab-top-axis"><span>↑ MÁS INTENSO</span><span>Y / FUERZA DE AFINACIÓN</span></div>'+
+    '<div class="lab-pad" id="tunePad" role="group" tabindex="0" aria-label="Explorar autotune por coordenadas. Flechas izquierda y derecha cambian lo natural o robótico; arriba y abajo cambian intensidad." aria-describedby="labHint">'+
+    '<div class="lab-grid"></div><div class="lab-axis-h"></div><div class="lab-axis-v"></div>'+
+    '<span class="lab-quadrant q-nw">R&B / EMOTIVO</span><span class="lab-quadrant q-ne">TRAP / ROBOT</span>'+
+    '<span class="lab-quadrant q-sw">SUAVE / HUMANO</span><span class="lab-quadrant q-se">GLITCH / DIGITAL</span>'+
+    presets+
+    '<div class="lab-crosshair lab-crosshair-x" id="labCrossX"></div><div class="lab-crosshair lab-crosshair-y" id="labCrossY"></div>'+
+    '<div class="lab-node" id="labNode" style="left:'+percent(p.x)+';top:'+vertical(p.y)+'" aria-hidden="true"><span class="lab-node-core"></span></div>'+
+    '</div><div class="lab-bottom-axis"><span>← NATURAL</span><span>ROBOT →</span></div>'+
+    '<div class="lab-coordinates" role="status" aria-live="off"><span id="labXCoord">X '+p.x.toFixed(2)+'</span>'+
+    '<span id="labYCoord">Y '+p.y.toFixed(2)+'</span><span id="labTuningReadout">AFINACIÓN</span></div>'+
+    '<div class="lab-mood"><span class="lab-mood-spark">✦</span><div><strong id="labMoodTitle"></strong><p id="labMoodDetail"></p></div></div>'+
+    '<div class="lab-axes-controls"><label for="labXInput">Natural <span>↔</span> Robótico</label>'+
+    '<input id="labXInput" type="range" min="-100" max="100" step="1" value="'+Math.round(p.x*100)+'" data-tune-axis="x" aria-label="Natural o robótico">'+
+    '<label for="labYInput">Sutil <span>↔</span> Intenso</label>'+
+    '<input id="labYInput" type="range" min="-100" max="100" step="1" value="'+Math.round(p.y*100)+'" data-tune-axis="y" aria-label="Intensidad de afinación"></div>'+
+    '<div class="lab-divider"></div><div class="lab-presets-head"><strong>DESTINOS PARA EXPLORAR</strong><small>Un clic para saltar</small></div>'+
+    '<div class="lab-presets">'+chips+'</div>'+
+    '<div class="lab-presets-head"><strong>TUS DESCUBRIMIENTOS</strong><small>Hasta 12 estilos locales</small></div>'+
+    '<div id="labUserPresets" class="lab-presets">'+customTuneMarkup(userPresets)+'</div>'+
+    '<div class="lab-save-style"><label for="labPresetName" class="sr-lab">Nombre del estilo</label>'+
+    '<input id="labPresetName" maxlength="40" placeholder="Ej: Mi voz galáctica" autocomplete="off">'+
+    '<button type="button" class="lab-action lab-save" data-action="tune-save">＋ GUARDAR ESTILO</button></div>'+
+    '<button type="button" class="lab-reset" data-action="tune-reset">↺ Reiniciar el nodo</button>'+
+    '<p id="labHint" class="lab-caution">El corrector de tono todavía es experimental. Este plano controla afinación, velocidad y un leve color del sonido; no recupera grabaciones dañadas ni reemplaza un autotune de estudio. Si no hay audio reproduciéndose, presiona ESCUCHAR CAMBIOS.</p>'+
+  '</section>';
+}
+export function updateTuneLabView(root,track){
+  if(!root)return;
+  const p=Number.isFinite(track.tuneX)&&Number.isFinite(track.tuneY)?
+    normalizeTune(track.tuneX,track.tuneY):
+    tunePointFromManual(track.autotune,track.retune);
+  const node=root.querySelector('#labNode'),cx=root.querySelector('#labCrossX'),cy=root.querySelector('#labCrossY');
+  if(node){node.style.left=percent(p.x);node.style.top=vertical(p.y);}
+  if(cx)cx.style.top=vertical(p.y);
+  if(cy)cy.style.left=percent(p.x);
+  const mood=describeTune(p.x,p.y);
+  const put=(id,value)=>{const el=root.querySelector(id);if(el)el.textContent=value;};
+  put('#labXCoord','X '+p.x.toFixed(2));
+  put('#labYCoord','Y '+p.y.toFixed(2));
+  put('#labTuningReadout',Math.round(track.autotune)+'% AFINACIÓN · '+Math.round(track.retune)+'% VELOCIDAD');
+  put('#labMoodTitle',mood.title);put('#labMoodDetail',mood.detail);
+  const x=root.querySelector('#labXInput'),y=root.querySelector('#labYInput');
+  if(x&&document.activeElement!==x)x.value=String(Math.round(p.x*100));
+  if(y&&document.activeElement!==y)y.value=String(Math.round(p.y*100));
+  root.querySelectorAll('[data-tune-preset]').forEach(button=>{
+    button.classList.toggle('is-active',track.tunePreset===button.dataset.tunePreset);
+    button.setAttribute('aria-pressed',String(track.tunePreset===button.dataset.tunePreset));
+  });
+  const ab=root.querySelector('[data-action="tune-ab"]');
+  if(ab){ab.textContent=track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL';ab.setAttribute('aria-pressed',String(!!track.bypassEffects));}
+}

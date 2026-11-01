@@ -46,7 +46,11 @@ function setParams(graph,track,ctx){
   set(graph.lp.frequency,19000-clamp(track.clean,0,100)*23);
   set(graph.low.gain,(clamp(track.warmth,0,100)-20)*.09);
   set(graph.high.gain,(clamp(track.brightness,0,100)-50)*.14);
-  graph.drive.curve=saturationCurve(clamp(track.drive,0,100));
+  const driveAmount=clamp(track.drive,0,100);
+  if(graph.lastDriveAmount!==driveAmount){
+    graph.drive.curve=saturationCurve(driveAmount);
+    graph.lastDriveAmount=driveAmount;
+  }
   set(graph.delayWet.gain,clamp(track.echo,0,100)/100*.43);
   set(graph.reverbWet.gain,clamp(track.space,0,100)/100*.65);
   graph.voice.parameters.get('strength').setValueAtTime(clamp(track.autotune,0,100)/100,now);

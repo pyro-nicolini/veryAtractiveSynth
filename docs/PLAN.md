@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.4 implementado
+## 3. Estado 0.5 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -39,6 +39,19 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 **Privacidad:** nunca subir audio, micrófono ni metadatos a un servicio; cualquier futura IA en nube requiere autorización separada.
 
 ## 5. Fases propuestas
+
+
+### Fase 0.5 — Tune Lab (nueva entrega)
+
+- [x] Plano XY, nodo arrastrable, touch/mouse/teclado, sliders y lectura de coordenadas.
+- [x] Mapeo deterministicamente probado a retune, autotune y leve color (brillo, calidez y drive).
+- [x] Actualización AudioWorklet y Web Audio durante reproducción, sin procesado destructivo.
+- [x] Seis puntos predefinidos, sorpresa aleatoria, reset y comparación A/B.
+- [x] Biblioteca privada de hasta 12 presets personalizados en el dispositivo.
+- [x] Persistencia de coordenadas en IndexedDB v2 y respaldo .vasproject.
+- [x] Ayuda contextual, aviso experimental y pruebas unitarias.
+- [ ] QA manual en dispositivos reales y comparación auditiva por navegador.
+- [ ] Motor de corrección de tono profesional y supresión de ruido avanzada.
 
 ### Fase 0.4 — Proyectos múltiples y comparación vocal
 

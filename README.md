@@ -2,9 +2,22 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.4.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.5.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
+
+
+## DesignPhase 0.5 — TUNE LAB / exploración XY
+
+La versión incluye un gráfico neón de coordenadas con nodo arrastrable, que cambia parámetros **reales** del motor mientras suena una pista.
+
+1. Importa o graba una voz, selecciónala y pulsa **EXPLORAR TUNE LAB**.
+2. Pulsa **ESCUCHAR CAMBIOS** si no hay reproducción activa. Usa mouse, pantalla táctil o las flechas del teclado (Mayús = pasos más grandes); también hay sliders accesibles.
+3. El eje X va de transiciones naturales (izquierda) a afinación de respuesta rápida, más robótica (derecha). El eje Y va de poca afinación (abajo) a intensa (arriba). El nodo modifica además un poco de brillo, calidez y saturación.
+4. Puedes elegir seis destinos: Natural, Pop Clean, R&B suave, Trap Hard, Alien y Experimental; también usar SORPRÉNDEME, reiniciar o comparar audio original con efectos A/B.
+5. Escribe un nombre y pulsa GUARDAR ESTILO para conservar uno de hasta 12 presets locales. Se quedan en este navegador, no se suben a servidores.
+6. Las coordenadas X/Y y el preset activo viajan con cada pista al autoguardado, biblioteca local y copia portátil .vasproject. Los nombres de presets personalizados se guardan solo en el navegador actual; en otro dispositivo la pista conserva la configuración del sonido.
+7. Este es un corrector granular **experimental**, no un autotune profesional probado. El panel no reconstruye información faltante de una grabación pobre.
 
 ## DesignPhase 0.4 — Proyectos múltiples y ajustes de voz
 
@@ -147,6 +160,9 @@ src/worklets/capture-processor.js
 src/portable-project.js        respaldo portable con pistas originales
 src/zip-store.js               creador/lector local ZIP sin compresión
 src/timeline.js                edición de clips, beat snapping y división
+src/tune-lab.js                mapeo de coordenadas y destinos
+src/tune-lab-ui.js             panel gráfico, control de nodo, estilos
+src/tune-lab.css               interfaz neon XY
 src/audio-import.js            decodificadores WAV y CAF PCM locales
 server.js                     servidor sin dependencias, solo localhost
 sw.js                         cache de aplicación estática, no audio

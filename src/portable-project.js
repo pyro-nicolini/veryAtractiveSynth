@@ -68,6 +68,8 @@ export async function importProject(file,ctx){
       trimEnd:clamp(t.trimEnd,0,buffer.duration),offset:clamp(t.offset,0,3600),
       fadeIn:clamp(t.fadeIn,0,30),fadeOut:clamp(t.fadeOut,0,30),
       muted:!!t.muted,solo:!!t.solo,bypassEffects:!!t.bypassEffects,
+      tuneX:clamp(t.tuneX??-1,-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),
+      tunePreset:typeof t.tunePreset==='string'&&t.tunePreset.length<42?t.tunePreset:'custom',
       preset:typeof t.preset==='string'?t.preset:'natural',buffer
     });
   }
