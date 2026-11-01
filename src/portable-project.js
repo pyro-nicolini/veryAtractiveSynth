@@ -2,6 +2,7 @@ import {encodeWav,defaults,clamp,COLORS} from './dsp.js';
 import {zipStore,unzipStore} from './zip-store.js';
 import {setClipLoop} from './track-clips.js';
 import {clipSpeed} from './clip-edit.js';
+import {canConnect} from './flow-routing.js';
 
 const textEncoder=new TextEncoder(),textDecoder=new TextDecoder();
 
@@ -103,6 +104,7 @@ export async function importProject(file,ctx){
       muted:!!t.muted,solo:!!t.solo,flowHidden:!!t.flowHidden,bypassEffects:!!t.bypassEffects,
       fxBypass:Object.fromEntries(['tune','clean','eq','drive','compressor','delay','reverb'].map(id=>[id,t.fxBypass?.[id]===true])),
       bus:['music','vocals','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
+      flowTo:typeof t.flowTo==='string'&&/^(master|bus:(music|vocals|fx)|track:[\w-]{1,128})$/.test(t.flowTo)?t.flowTo:undefined,
       tuneX:clamp(t.tuneX??((clamp(t.retune??60,5,100)-5)/95*2-1),-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),
       tunePreset:typeof t.tunePreset==='string'&&t.tunePreset.length<42?t.tunePreset:'custom',
       pitchShift:clamp(t.pitchShift??0,-12,12),voiceCharacter:typeof t.voiceCharacter==='string'&&t.voiceCharacter.length<60?t.voiceCharacter:null,
@@ -110,5 +112,7 @@ export async function importProject(file,ctx){
       ...(restoredClips?{clips:restoredClips}:{})
     });
   }
+  // Reject untrusted project edges that refer to missing tracks, cross lanes or form feedback loops.
+  for(const track of tracks)if(track.flowTo&&!canConnect(tracks,track.id,track.flowTo))delete track.flowTo;
   return {master:clamp(manifest.master??85,0,100),options:manifest.options||{},tracks};
 }
