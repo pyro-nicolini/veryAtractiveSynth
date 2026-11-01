@@ -15,12 +15,14 @@ test('real vocal and music bus lanes render with routing controls and bus to mas
   const markup=flowMarkup([voices,music]);
   for(const id of ['vocals','music','fx'])
     assert.ok(markup.includes('data-flow-bus="'+id+'"'),id);
-  assert.match(markup,/data-flow-route-select="lead"/);
-  assert.match(markup,/data-flow-route="vocals"/);
-  assert.match(markup,/data-flow-route="music"/);
-  assert.match(markup,/flow-bus-wire|SUMA REAL/);
-  assert.equal(flowPosition(voices,0).y,100);
-  assert.equal(flowPosition(music,0).y,340);
+  assert.match(markup,/data-flow-destination="lead"/);
+  assert.match(markup,/data-flow-route="bus:vocals"/);
+  assert.match(markup,/data-flow-route="bus:music"/);
+  assert.match(markup,/SUMADOR|PATCHBAY/);
+  assert.match(markup,/data-flow-out="lead"/);
+  assert.match(markup,/data-flow-in="lead"/);
+  assert.equal(flowPosition(voices,0).y,128);
+  assert.equal(flowPosition(music,0).y,429);
 });
 
 test('sample FX presets are non-destructive data and stored pads retain selection',()=>{
@@ -57,19 +59,19 @@ test('additional stylized vocal presets use parameters of the existing audio eng
 
 test('Red Velvet startup, per-track export and samples are connected and included offline',()=>{
   const html=file('index.html'),app=file('src/app.js'),deck=file('src/sample-deck.js'),
-    theme=file('src/red-velvet.css'),sw=file('sw.js'),engine=file('src/engine.js');
+    theme=file('src/studio-console.css'),sw=file('sw.js'),engine=file('src/engine.js');
   assert.match(html,/Bienvenue\./);
   assert.match(html,/id="splashSkip"/);
   assert.match(html,/id="flowArrange"/);
-  assert.match(html,/src\/red-velvet\.css/);
+  assert.match(html,/src\/studio-console\.css/);
   assert.match(app,/data-track-action="export-track"/);
   assert.match(app,/async function performTrackExport/);
-  assert.match(app,/data-flow-route-select/);
+  assert.match(app,/data-flow-destination/);
   assert.match(deck,/data-pad-export="dry"/);
   assert.match(deck,/data-pad-export="wet"/);
   assert.match(deck,/this\.engine\.previewSample/);
   assert.match(engine,/createDryGraph/);
   assert.match(theme,/prefers-reduced-motion/);
-  for(const path of ['src/splash.js','src/red-velvet.css'])
+  for(const path of ['src/splash.js','src/studio-console.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js'])
     assert.ok(sw.includes(path),'offline asset absent: '+path);
 });
