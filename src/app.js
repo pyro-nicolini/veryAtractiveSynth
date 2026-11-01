@@ -15,6 +15,9 @@ import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx
 import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry} from './flow-studio.js';
+import {canConnect,chainLane} from './flow-routing.js';
+import {listLibrarySamples,loadLibrarySample,deleteLibrarySample} from './sample-library.js';
+import {copySample,sampleEffect} from './sample-bank.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
@@ -25,7 +28,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null,zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedOutput:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -180,7 +183,11 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
 function addTrack(buffer,name,type='audio',offset=0){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
   const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:type==='voice'?'vocals':'music'};
-  checkpoint();state.tracks.push(t);state.selected=id;state.selectedClip=null;render();if(engine.playing)restartPlayback();
+  checkpoint();
+  const previous=state.tracks.filter(x=>!x.flowHidden&&busForTrack(x)===t.bus).at(-1);
+  t.flowTo='bus:'+t.bus;
+  if(previous&&(!previous.flowTo||previous.flowTo==='bus:'+t.bus))previous.flowTo='track:'+id;
+  state.tracks.push(t);state.selected=id;state.selectedClip=null;render();if(engine.playing)restartPlayback();
   return t;
 }
 function render(){
@@ -220,7 +227,7 @@ function renderFlow(){
   area.hidden=!state.flowOpen;
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
-  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected);
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets);
   if(state.flowArmedEffect){
     const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
     tile?.classList.add('is-armed');
@@ -350,7 +357,7 @@ function deleteFlowNode(id){
   render();
   if(!t.flowHidden){
     requestAnimationFrame(()=>{
-      const next=$('[data-flow-track]').find(el=>el.dataset.flowTrack===id);
+      const next=Array.from(document.querySelectorAll('[data-flow-track]')).find(el=>el.dataset.flowTrack===id);
       next?.querySelector('[data-flow-drag]')?.focus({preventScroll:true});
     });
   }else requestAnimationFrame(()=>$('#flowToggle')?.focus({preventScroll:true}));
@@ -375,6 +382,38 @@ function toggleFlowTrackLink(id){
   renderInspector();renderMixer();renderFlow();queueAutosave();
   toast(track.muted?'Pista desconectada. Sus clips siguen guardados.':'Pista reconectada a tu canción.');
 }
+
+async function refreshFlowAssets(){
+  try{state.sampleAssets=await listLibrarySamples();renderFlow();}
+  catch(error){toast('Biblioteca no disponible: '+error.message);}
+}
+async function insertFlowSample(ref,targetId=null){
+  if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de añadir audio');
+  try{
+    await state.sampleDeck?.load();
+    const pad=ref.startsWith('pad:')?state.sampleDeck?.pads[Number(ref.slice(4))]:await loadLibrarySample(ref.slice(4));
+    if(!pad)throw Error('No se encontró el sample guardado');
+    const ctx=await engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
+    const dest=state.tracks.find(t=>t.id===targetId);
+    const track=addTrack(buffer,pad.name,dest?.type==='voice'?'voice':'audio',state.position);
+    if(dest){track.bus=busForTrack(dest);track.flowTo='track:'+dest.id;}
+    Object.assign(track,sampleEffect(pad.fx).settings);render();restartPlayback();
+    toast('Sample insertado como nodo: '+pad.name);
+  }catch(error){toast('No se pudo insertar el sample: '+error.message);}
+}
+function connectFlow(id,to){
+  if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de conectar');
+  const track=state.tracks.find(t=>t.id===id);
+  if(!track||!canConnect(state.tracks,id,to)){
+    state.flowArmedOutput=null;$('#flowBody')?.classList.remove('patch-awaiting-connection');
+    return toast('Ruta no válida: conecta pistas de la misma línea y evita ciclos.');
+  }
+  checkpoint();track.flowTo=to;
+  state.flowArmedOutput=null;$('#flowBody')?.classList.remove('patch-awaiting-connection');
+  renderFlow();restartPlayback();queueAutosave();
+  toast('Audio conectado: '+track.name+' → '+(to==='master'?'MASTER':to.startsWith('bus:')?to.slice(4):state.tracks.find(t=>t.id===to.slice(6))?.name));
+}
+
 function setupFlow(){
   renderLibrary();
   const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody');
@@ -393,6 +432,16 @@ function setupFlow(){
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
   $('#flowHelp').onclick=()=>help('flowStudio');
+  $('#flowChain').onclick=()=>{
+    if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de conectar');
+    checkpoint();
+    for(const bus of ['vocals','music']){
+      const links=chainLane(state.tracks,bus);
+      for(const track of state.tracks)if(links.has(track.id))track.flowTo=links.get(track.id);
+    }
+    state.flowArmedOutput=null;state.flowPositions={};
+    renderFlow();restartPlayback();queueAutosave();toast('Voz y pistas encadenadas en dos líneas.');
+  };
   $('#flowArrange').onclick=()=>{
     checkpoint();state.flowPositions={};renderFlow();queueAutosave();
     toast('Rutas ordenadas en líneas de voz, instrumentos y efectos.');
