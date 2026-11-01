@@ -1,6 +1,7 @@
 import {PAD_KEYS,padBounds,copySample,waveformPoints,safePadName,SAMPLE_FX,sampleEffect} from './sample-bank.js';
 import {defaults,encodeWav,downloadBlob,safeFilename} from './dsp.js';
 import {savePad,loadPads} from './sample-pad-store.js';
+import {saveLibrarySample} from './sample-library.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function padWaveSVG(buffer,from=0,to=buffer.duration){
  if(!buffer)return '';
@@ -9,9 +10,9 @@ export function padWaveSVG(buffer,from=0,to=buffer.duration){
  return '<svg viewBox="0 0 120 40" preserveAspectRatio="none" class="sample-wave" role="img" aria-label="Onda del sample"><path d="'+lines+'"/></svg>';
 }
 export class SampleDeck{
- constructor({root,engine,onAdd,onSource,onMessage}){
+ constructor({root,engine,onAdd,onSource,onMessage,onLibraryChanged}){
   this.root=root;this.engine=engine;this.onAdd=onAdd;this.onSource=onSource;
-  this.say=onMessage||(()=>{});this.pads=Array(12).fill(null);
+  this.say=onMessage||(()=>{});this.onLibraryChanged=onLibraryChanged||(()=>{});this.pads=Array(12).fill(null);
   this.selected=null;this.draft=null;this.loaded=false;
   root.addEventListener('click',event=>this.click(event));
   root.addEventListener('input',event=>this.input(event));
@@ -21,7 +22,7 @@ export class SampleDeck{
  async load(){
   if(this.loaded)return;
   try{this.pads=await loadPads();}catch(error){this.say('Sin acceso a biblioteca local: '+error.message);}
-  this.loaded=true;this.render();
+  this.loaded=true;this.render();this.onLibraryChanged();
  }
  render(){
   const count=this.pads.filter(Boolean).length;
@@ -53,6 +54,7 @@ export class SampleDeck{
     '<button type="button" data-pad-from-track>✂ Desde la pista</button>'+
     '<button type="button" data-pad-save '+(!pad?'disabled':'')+'>✓ Guardar pad</button>'+
     (pad?'<button type="button" data-pad-insert>＋ Enviar a pistas</button>'+
+     '<button type="button" data-pad-to-library>▣ Guardar en biblioteca</button>'+ 
      '<button type="button" data-pad-export="dry">↓ WAV original</button>'+
      '<button type="button" data-pad-export="wet">↓ WAV con FX</button>'+
      '<button type="button" data-pad-remove>Eliminar</button>':'')+'</div>';
@@ -68,6 +70,12 @@ export class SampleDeck{
   }
   if(target.hasAttribute('data-pad-close')){this.selected=null;this.draft=null;this.render();return;}
   if(this.selected===null)return;
+  if(target.hasAttribute('data-pad-to-library')){
+    const pad=this.draft||this.pads[this.selected];if(!pad)return;
+    try{const saved=await saveLibrarySample({...pad,name:this.root.querySelector('#sampleName')?.value||pad.name});
+      this.say('Guardado en Mis Samples: '+saved.name);this.onLibraryChanged();}
+    catch(error){this.say('No se pudo guardar en la biblioteca: '+error.message);}return;
+  }
   if(target.hasAttribute('data-pad-export')){
     const pad=this.draft||this.pads[this.selected];if(!pad)return;
     try{
@@ -100,7 +108,7 @@ export class SampleDeck{
       const name=safePadName(this.root.querySelector('#sampleName')?.value,this.selected);
       const next={...this.draft,name};padBounds(next.buffer,next.from,next.to);
       await savePad(this.selected,next);this.pads[this.selected]=next;this.draft={...next};
-      this.render();this.say('Pad guardado en este dispositivo');
+      this.render();this.onLibraryChanged();this.say('Pad guardado en este dispositivo');
     }catch(error){this.say('No se guardó: '+error.message);}return;
   }
   if(target.hasAttribute('data-pad-insert')){
@@ -111,7 +119,7 @@ export class SampleDeck{
   }
   if(target.hasAttribute('data-pad-remove')){
     if(!confirm('¿Vaciar este pad? Los demás seguirán guardados.'))return;
-    try{await savePad(this.selected,null);this.pads[this.selected]=null;this.draft=null;this.render();this.say('Pad vaciado');}
+    try{await savePad(this.selected,null);this.pads[this.selected]=null;this.draft=null;this.render();this.onLibraryChanged();this.say('Pad vaciado');}
     catch(error){this.say(error.message);}
   }
  }
