@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
+test('Windows launchers run from repository root and safely update main',()=>{
+ const run=read('Iniciar.bat'),update=read('Actualizar.bat'),readme=read('README.md'),attrs=read('.gitattributes');
+ assert.match(run,/pushd "%~dp0"/);
+ assert.match(run,/npm\.cmd start/);
+ assert.match(run,/http:\/\/127\.0\.0\.1:4173\//);
+ assert.match(run,/where node\.exe/);
+ assert.match(update,/pushd "%~dp0"/);
+ assert.match(update,/git status --porcelain/);
+ assert.match(update,/git fetch origin main/);
+ assert.match(update,/git switch main/);
+ assert.match(update,/git pull --ff-only origin main/);
+ assert.doesNotMatch(update,/^git reset --hard|^git clean -fd|^git push --force/m);
+ assert.match(readme,/Iniciar\.bat/);
+ assert.match(readme,/Actualizar\.bat/);
+ assert.match(readme,/macOS/);
+ assert.match(attrs,/\*\.bat text eol=crlf/);
+});

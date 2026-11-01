@@ -14,17 +14,28 @@
 
 ## 🚀 Instalar y ejecutar
 
-Necesitas **Node.js 20 o superior** (recomendamos Node 22), Git y un navegador moderno. No necesitas base de datos ni claves.
+Necesitas **Node.js 20 o superior**, **Git** y un navegador moderno. No necesitas base de datos ni instalar paquetes adicionales.
 
-### 🪟 Windows — PowerShell
+### 🪟 Windows — dos archivos, doble clic
+
+Instala [Git](https://git-scm.com/downloads) y [Node.js](https://nodejs.org/) una sola vez. Descarga el proyecto con Git (no con *Download ZIP*):
 
 ```powershell
 git clone https://github.com/pyro-nicolini/veryAtractiveSynth.git
-cd veryAtractiveSynth
-npm start
 ```
 
+Dentro de la carpeta **veryAtractiveSynth**, junto a este README:
+
+- ▶️ **[Iniciar.bat](Iniciar.bat):** abre el servidor local y el estudio en tu navegador. No requiere abrir PowerShell.
+- 🔄 **[Actualizar.bat](Actualizar.bat):** al hacer doble clic descarga y aplica la **última versión de `main`**, siempre que pueda hacerlo sin perder cambios. Luego vuelve a abrir `Iniciar.bat`.
+
+**Para usuarios que ya tienen el proyecto:** después de cada actualización publicada en `main`, cierra el servidor, ejecuta **Actualizar.bat** y luego **Iniciar.bat**. Las actualizaciones se comprueban **cuando ejecutas el BAT**, no automáticamente en segundo plano. Si hay modificaciones locales, el actualizador se detiene y no borra archivos.
+
+El estudio abre en **http://127.0.0.1:4173/**. Para detenerlo, cierra la ventana del servidor o pulsa **Ctrl + C**.
+
 ### 🍎 macOS — Terminal
+
+Los archivos `.bat` son exclusivos de Windows. En Mac:
 
 ```bash
 git clone https://github.com/pyro-nicolini/veryAtractiveSynth.git
@@ -32,18 +43,15 @@ cd veryAtractiveSynth
 npm start
 ```
 
-Abre **http://127.0.0.1:4173/**. Para detener el servidor, pulsa **Ctrl + C**.
-
-### 🔄 Actualizar una instalación existente
+Para actualizar una instalación existente:
 
 ```bash
 git switch main
 git pull --ff-only origin main
-npm test
 npm start
 ```
 
-Si trabajabas en `DesignPhase`, cambia a `main` para recibir la versión integrada. Si tienes cambios locales sin guardar, consérvalos antes de actualizar.
+Si antes trabajabas en `DesignPhase`, utiliza `Actualizar.bat` en Windows para cambiar a `main` y obtener la versión estable. Conserva primero cualquier trabajo local que no hayas guardado.
 
 ## 🎤 Primeros pasos
 
