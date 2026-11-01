@@ -25,18 +25,20 @@ export function flowPosition(track,index,positions={}){
   {x:70+index*315,y:busForTrack(track)==='vocals'?128:429};
 }
 export function flowHeight(){return 710;}
-function paletteMarkup(pads,assets){
+function paletteMarkup(pads,assets,presets){
  const fx='<div class="patch-group"><div class="patch-group-title">PROCESADORES <small>Arrastra sobre una pista</small></div><div class="patch-palette-grid">'+
  FX_CHAIN.map(f=>'<button class="flow-effect-tile" type="button" draggable="true" data-flow-palette="'+f.id+'" title="'+escape(f.hint)+'"><span class="flow-effect-symbol">'+FX_ICON[f.id]+'</span><strong>'+FX_LABEL[f.id]+'</strong><small>+ FX</small></button>').join('')+'</div></div>';
+ const presetCards=(presets||[]).map(p=>'<div class="patch-preset-row"><button type="button" draggable="true" data-flow-preset="'+escape(p.id)+'" title="Aplicar esta cadena de efectos a una pista"><span>◈</span><strong>'+escape(p.name)+'</strong></button><button type="button" data-flow-delete-preset="'+escape(p.id)+'" title="Eliminar preset guardado">×</button></div>').join('');
  const padCards=(pads||[]).map((pad,i)=>pad?'<button class="patch-sample" type="button" draggable="true" data-flow-sample="pad:'+i+'" title="Añadir '+escape(pad.name)+' como pista"><span>▦</span><strong>'+escape(pad.name)+'</strong><small>PAD '+(i+1)+'</small></button>':'').join('');
  const saved=(assets||[]).map(item=>'<button class="patch-sample" type="button" draggable="true" data-flow-sample="lib:'+escape(item.id)+'" title="Añadir a la mezcla"><span>♫</span><strong>'+escape(item.name)+'</strong><small>'+Number(item.duration||0).toFixed(1)+' s</small></button>').join('');
  return '<aside class="patch-sidebar" aria-label="Biblioteca de módulos y samples"><div class="patch-sidebar-title">COMPONENTES <small>LOCAL · PRIVADO</small></div>'+fx+
+  '<div class="patch-group"><div class="patch-group-title">MIS EFECTOS <small>Presets guardados</small></div><div class="patch-preset-list">'+(presetCards||'<p class="patch-empty">Guarda los FX de una pista con ▣ FX.</p>')+'</div></div>'+
   '<div class="patch-group"><div class="patch-group-title">MIS SAMPLES <small>Persistentes en este equipo</small></div><div class="patch-sample-list">'+
   (padCards||'<p class="patch-empty">Abre SAMPLES para cargar tus pads.</p>')+saved+'</div>'+
   '<button type="button" class="patch-open-deck" data-flow-open-deck>＋ Abrir banco / cortar audio</button></div>'+
   '<div class="flow-remove-zone" id="flowRemoveZone">Arrastra un efecto aquí para quitarlo, sin borrar sus ajustes.</div></aside>';
 }
-export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]){
+export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[]){
  const visible=tracks.filter(t=>!t.flowHidden);
  const lanes=['vocals','music'];
  const grouped=Object.fromEntries(lanes.map(l=>[l,visible.filter(t=>busForTrack(t)===l)]));
@@ -70,7 +72,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   '<div class="flow-node-top" data-flow-drag="'+escape(t.id)+'" tabindex="0" aria-label="Mover pista '+escape(t.name)+' con flechas o arrastrar"><span class="flow-source-icon">'+(t.type==='voice'?'◉':'♫')+'</span><div><strong>'+escape(t.name)+'</strong><small>'+(t.type==='voice'?'VOICE TRACK':'AUDIO TRACK')+' · '+formatDb(t.volume)+'</small></div><span class="flow-move-icon">⠿</span></div>'+
   '<div class="patch-node-wave">▂▆▅▇▃▆▂▇▅▃▆▂▇▅▂▆▃▇▅</div>'+
   '<label class="flow-route-label">SALIDA <select data-flow-destination="'+escape(t.id)+'" aria-label="Conectar salida de '+escape(t.name)+'">'+optionsHTML+'</select></label>'+
-  '<div class="flow-node-bottom"><button type="button" data-flow-focus="'+escape(t.id)+'">◫ Editar</button><button type="button" data-flow-link="'+escape(t.id)+'" aria-pressed="'+(!t.muted)+'">'+(t.muted?'◌ OFF':'● ON')+'</button><button type="button" data-flow-delete="'+escape(t.id)+'" title="Silenciar / ocultar">×</button></div>'+
+  '<div class="flow-node-bottom"><button type="button" data-flow-focus="'+escape(t.id)+'">◫ Editar</button><button type="button" data-flow-save-fx="'+escape(t.id)+'" title="Guardar esta configuración de FX">▣ FX</button><button type="button" data-flow-link="'+escape(t.id)+'" aria-pressed="'+(!t.muted)+'">'+(t.muted?'◌ OFF':'● ON')+'</button><button type="button" data-flow-delete="'+escape(t.id)+'" title="Silenciar / ocultar">×</button></div>'+
   '<button class="patch-port patch-port-out" data-flow-out="'+escape(t.id)+'" type="button" title="Iniciar cable desde '+escape(t.name)+'" aria-label="Salida de '+escape(t.name)+'"></button></article>';
  }).join('');
  const effectCards=visible.flatMap(t=>{
@@ -87,7 +89,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  const laneTags='<div class="patch-lane-title" style="top:28px"><span class="patch-lane-dot voices"></span>01 · VOICE SIGNAL <small>Voces y procesadores en serie</small></div>'+
  '<div class="patch-lane-title" style="top:340px"><span class="patch-lane-dot music"></span>02 · TRACK SIGNAL <small>Instrumentos, loops y samples</small></div>';
  const empty=!visible.length?'<div class="flow-welcome">Agrega un sonido, arrastra un efecto o reutiliza un sample desde la biblioteca.</div>':'';
- return '<div class="patch-workspace">'+paletteMarkup(pads,assets)+'<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>PATCHBAY</strong><span>Salida → entrada · misma línea · sin ciclos</span><span class="patch-connection-hint">Clic en puerto derecho, luego puerto izquierdo</span></div>'+
+ return '<div class="patch-workspace">'+paletteMarkup(pads,assets,presets)+'<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>PATCHBAY</strong><span>Salida → entrada · misma línea · sin ciclos</span><span class="patch-connection-hint">Clic en puerto derecho, luego puerto izquierdo</span></div>'+
  '<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
  '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+cards+effectCards+buses+fxBus+master+empty+'</div></div>'+
  '<p class="flow-footnote">Audio real: cada pista procesa su entrada y envía la señal al siguiente nodo o al bus. Los insertos FX siguen el orden real del motor. Para evitar cambios inesperados, los proyectos anteriores conservan sus destinos originales hasta que los conectes.</p></div></div>';
