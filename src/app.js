@@ -14,7 +14,7 @@ import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrack
 import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx-rack.js';
 import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
 import {libraryMarkup} from './library-ui.js';
-import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry} from './flow-studio.js';
+import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
 import {canConnect,chainLane} from './flow-routing.js';
 import {listLibrarySamples,loadLibrarySample,deleteLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
@@ -29,7 +29,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -574,6 +574,18 @@ function setupFlow(){
     }
   });
   body.addEventListener('pointerdown',event=>{
+    const out=event.target.closest('[data-flow-out]');
+    if(out&&event.button===0){
+      const board=$('#flowBoard'),svg=$('#flowWires');
+      if(!board||!svg)return;
+      const a=out.getBoundingClientRect(),r=board.getBoundingClientRect();
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.classList.add('flow-wire','patch-wire-preview');svg.appendChild(path);
+      state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,
+        startX:event.clientX,startY:event.clientY,x:a.right-r.left,y:a.top-r.top+a.height/2,
+        moved:false,board,path};
+      return;
+    }
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;
     const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');
@@ -584,6 +596,13 @@ function setupFlow(){
     node.classList.add('is-dragging');
   });
   body.addEventListener('pointermove',event=>{
+    const cable=state.flowCableDrag;
+    if(cable&&event.pointerId===cable.pointerId){
+      const r=cable.board.getBoundingClientRect();
+      cable.moved=cable.moved||Math.hypot(event.clientX-cable.startX,event.clientY-cable.startY)>6;
+      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));
+      return;
+    }
     if(!state.flowDrag)return;
     const drag=state.flowDrag,board=drag.board;
     const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
@@ -603,6 +622,22 @@ function setupFlow(){
     invalidateFlowWireGeometry(flowArea);paintFlow();
   };
   body.addEventListener('pointerup',finish);body.addEventListener('pointercancel',finish);
+  const finishCable=event=>{
+    const cable=state.flowCableDrag;
+    if(!cable||event.pointerId!==cable.pointerId)return;
+    state.flowCableDrag=null;cable.path.remove();
+    if(event.type==='pointercancel')return;
+    const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-flow-in]');
+    if(target){
+      const raw=target.dataset.flowIn;
+      connectFlow(cable.id,raw==='master'||raw.startsWith('bus:')?raw:'track:'+raw);
+      return;
+    }
+    state.flowArmedOutput=cable.id;
+    if(cable.moved)toast('Cable preparado · pulsa el puerto de entrada deseado.');
+  };
+  document.addEventListener('pointerup',finishCable);
+  document.addEventListener('pointercancel',finishCable);
 }
 
 function alignWaveRuler(){
