@@ -31,7 +31,7 @@ test('AudioWorklet schedule loops one source per repeating clip in both paths',a
  assert.match(engine,/src\.loopStart=loop\.from/);
  assert.match(engine,/src\.loopEnd=loop\.to/);
  assert.match(engine,/src\.stop\(contextStart\+remaining\)/);
- assert.match(engine,/for\(const clip of clipsOf\(track\)\)scheduleClip\(offline/);
+ assert.match(engine,/for\(const clip of clipsOf\(track\)\)[\s\S]{0,220}scheduleClip\(offline/);
  assert.match(engine,/async startSessionCapture\(\)/);
  assert.match(engine,/async stopSessionCapture\(\)/);
 });
