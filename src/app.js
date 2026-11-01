@@ -650,7 +650,7 @@ function updateTransport(){
   $('#playBtn').setAttribute('aria-label',engine.playing?'Pausar':'Reproducir');
   const percent=duration>0?clamp(pos/timelineSpan(state.tracks)*100,0,100):0;
   $('#playhead').style.left=percent+'%';$('#playhead').style.opacity=state.tracks.length?1:0;
-  for(const line of $('.wave-playhead')){line.style.left=percent+'%';line.style.opacity=state.tracks.length?1:0;}
+  for(const line of $$('.wave-playhead')){line.style.left=percent+'%';line.style.opacity=state.tracks.length?1:0;}
 }
 function updateMasterMeter(){
   const {peak,rms}=engine.getMasterMeter();
@@ -1859,7 +1859,7 @@ function wire(){
   $('#tracks').addEventListener('scroll',event=>{
     const view=event.target.closest('[data-wave-viewport]');if(!view)return;
     state.scrollX=view.scrollLeft;
-    for(const el of $('.wave-viewport'))if(el!==view)el.scrollLeft=state.scrollX;
+    for(const el of $$('.wave-viewport'))if(el!==view)el.scrollLeft=state.scrollX;
     const rulerView=$('#rulerViewport');if(rulerView)rulerView.scrollLeft=state.scrollX;
   },true);
   bpm.addEventListener('change',()=>{
@@ -2075,7 +2075,7 @@ function wire(){
       e.preventDefault();if(e.shiftKey)redo();else undo();return;
     }
     if(e.key==='Tab'&&$('#modalBackdrop')){
-      const targets=$('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',$('.focus-panel'));
+      const targets=$$('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',$('.focus-panel'));
       if(targets.length){const first=targets[0],last=targets[targets.length-1];
         if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
         else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
