@@ -18,6 +18,7 @@ import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeo
 import {canConnect,chainLane} from './flow-routing.js';
 import {listLibrarySamples,loadLibrarySample,deleteLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
+import {listPatchPresets,savePatchPreset,deletePatchPreset,applyPatchPreset} from './patch-presets.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
@@ -28,7 +29,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedOutput:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -227,7 +228,7 @@ function renderFlow(){
   area.hidden=!state.flowOpen;
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
-  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets);
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets());
   if(state.flowArmedEffect){
     const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
     tile?.classList.add('is-armed');
@@ -266,6 +267,10 @@ function startFlowMotion(){
   flowMotionFrame=requestAnimationFrame(frame);
 }
 function selectFlowTrack(id){
+  if(state.flowArmedPreset){
+    const idPreset=state.flowArmedPreset;state.flowArmedPreset=null;
+    useFlowPreset(idPreset,id);return;
+  }
   if(state.flowArmedEffect){
     const fx=state.flowArmedEffect;state.flowArmedEffect=null;
     applyFlowFx(id,fx,true);return;
@@ -401,6 +406,14 @@ async function insertFlowSample(ref,targetId=null){
     toast('Sample insertado como nodo: '+pad.name);
   }catch(error){toast('No se pudo insertar el sample: '+error.message);}
 }
+function useFlowPreset(presetId,trackId){
+  if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de modificar FX');
+  const preset=listPatchPresets().find(p=>p.id===presetId),track=state.tracks.find(t=>t.id===trackId);
+  if(!preset||!track)return toast('Selecciona una pista y un preset guardado');
+  checkpoint();applyPatchPreset(track,preset);state.selected=track.id;
+  engine.updateTrack(track);renderInspector();renderFlow();queueAutosave();
+  toast('Preset FX aplicado: '+preset.name);
+}
 function connectFlow(id,to){
   if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de conectar');
   const track=state.tracks.find(t=>t.id===id);
@@ -460,6 +473,24 @@ function setupFlow(){
     if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida lista · toca la entrada de otro nodo, bus o MASTER');return;}
     const input=event.target.closest('[data-flow-in]');
     if(input){if(state.flowArmedOutput)connectFlow(state.flowArmedOutput,input.dataset.flowIn.startsWith('bus:')||input.dataset.flowIn==='master'?input.dataset.flowIn:'track:'+input.dataset.flowIn);return;}
+    const fxSave=event.target.closest('[data-flow-save-fx]');
+    if(fxSave){
+      const track=state.tracks.find(t=>t.id===fxSave.dataset.flowSaveFx);if(!track)return;
+      const name=prompt('Nombre del preset de efectos:',track.name+' · FX');
+      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Cadena FX guardada en Mis efectos');}
+      catch(error){toast(error.message);}return;
+    }
+    const fxDelete=event.target.closest('[data-flow-delete-preset]');
+    if(fxDelete){
+      if(confirm('¿Eliminar este preset FX guardado?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}
+      return;
+    }
+    const fxPreset=event.target.closest('[data-flow-preset]');
+    if(fxPreset){
+      if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);
+      else{state.flowArmedPreset=fxPreset.dataset.flowPreset;toast('Selecciona una pista para aplicar este preset');}
+      return;
+    }
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
     if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado de la biblioteca?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
     const sample=event.target.closest('[data-flow-sample]');
@@ -491,9 +522,10 @@ function setupFlow(){
   function startDrag(event){
     const effect=event.target.closest('[data-flow-palette]');
     const sample=event.target.closest('[data-flow-sample]');
+    const fxPreset=event.target.closest('[data-flow-preset]');
     const libraryItem=event.target.closest('[data-library-item]');
     const chip=event.target.closest('[data-flow-effect]');
-    dragged=sample?{kind:'sample',id:sample.dataset.flowSample}:effect?{kind:'effect',id:effect.dataset.flowPalette}:
+    dragged=fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:sample?{kind:'sample',id:sample.dataset.flowSample}:effect?{kind:'effect',id:effect.dataset.flowPalette}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
       chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
     if(dragged&&event.dataTransfer){
@@ -516,6 +548,7 @@ function setupFlow(){
     const item=dragged;dragged=null;
     if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
     if(item.kind==='sample'){insertFlowSample(item.id,target?.dataset.flowTrack||null);return;}
+    if(item.kind==='preset'){if(target)useFlowPreset(item.id,target.dataset.flowTrack);else toast('Suelta el preset sobre una pista');return;}
     if(!target&&item.kind==='rhythms'){chooseLibraryItem('rhythms',item.id);return;}
     if(!target)return toast('Suelta el efecto sobre una pista');
     const id=target.dataset.flowTrack;
