@@ -36,3 +36,12 @@ test('duplicate repeat clips references original PCM without extra files',()=>{
  assert.equal(track.clips[0].loop.repeats,3,'undo snapshot must deeply copy loop metadata');
  assert.throws(()=>duplicateLoop(track,first.id,17,()=>''),/16/);
 });
+
+test('splitting a repeating source explicitly rejects ambiguous loop ranges',async()=>{
+ const {splitTrackClip}=await import('../src/track-clips.js');
+ const clip={id:'a',buffer:{duration:10},offset:0,trimStart:0,trimEnd:0};
+ clip.loop={from:1,to:3,repeats:5};
+ const track={id:'music',clips:[clip]};
+ assert.throws(()=>splitTrackClip(track,'a',4,'b'),/Desactiva el loop/);
+ assert.equal(track.clips.length,1);
+});

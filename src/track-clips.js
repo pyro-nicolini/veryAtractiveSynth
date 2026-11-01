@@ -74,7 +74,9 @@ export function getEditableClip(track,clipId){
 export function splitTrackClip(track,clipId,playhead,newId){
   const clips=ensureClips(track),index=clips.findIndex(clip=>clip.id===clipId);
   if(index<0)throw Error('Clip no encontrado');
-  const clip=clips[index],duration=clipDuration(clip),at=playhead-seconds(clip.offset),sourceAt=at*clipSpeed(clip);
+  const clip=clips[index];
+  if(validLoop(clip))throw Error('Desactiva el loop antes de dividirlo: así se conserva el archivo original y su patrón');
+  const duration=clipDuration(clip),at=playhead-seconds(clip.offset),sourceAt=at*clipSpeed(clip);
   if(at<=.05||at>=duration-.05)throw Error('Coloca el cabezal dentro del clip para dividir');
   const left={...clip,trimEnd:seconds(clip.trimEnd)+(duration-at)*clipSpeed(clip),fadeOut:0};
   const right={...clip,id:newId,name:clip.name+' · 2',offset:playhead,
