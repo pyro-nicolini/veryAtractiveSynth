@@ -59,28 +59,61 @@ export function wireCurve(ax,ay,bx,by,energy=0,time=0){
   }
   return d;
 }
-export function updateFlowWires(root,tracks,engine,animate=true){
+// Layout cache is keyed by the current board DOM node. Normal playback only
+// updates existing SVG 'd' attributes and glow transforms, NOT boxes or HTML.
+const flowGeometryCache=new WeakMap();
+export function invalidateFlowWireGeometry(root){
+  const board=root?.querySelector('#flowBoard');
+  if(board)flowGeometryCache.delete(board);
+}
+function getFlowGeometry(board,svg,master){
+  const cached=flowGeometryCache.get(board);
+  if(cached)return cached;
+  const parent=board.getBoundingClientRect(),target=master.getBoundingClientRect();
+  const mx=target.left-parent.left+4,my=target.top-parent.top+target.height/2;
+  svg.setAttribute('viewBox','0 0 '+Math.round(parent.width)+' '+Math.round(parent.height));
+  const existing=new Map(Array.from(svg.querySelectorAll('[data-flow-wire]')).map(el=>[el.dataset.flowWire,el]));
+  const entries=[];
+  for(const node of board.querySelectorAll('[data-flow-track]')){
+    const id=node.dataset.flowTrack,r=node.getBoundingClientRect();
+    let path=existing.get(id);
+    if(!path){
+      path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('data-flow-wire',id);
+      path.classList.add('flow-wire');
+      svg.appendChild(path);
+    }
+    entries.push({
+      id,path,node,glow:node.querySelector('.flow-source-icon'),
+      x:r.right-parent.left,y:r.top-parent.top+r.height/2,
+      mx,my,level:0
+    });
+    existing.delete(id);
+  }
+  for(const stale of existing.values())stale.remove();
+  const layout={entries};
+  flowGeometryCache.set(board,layout);
+  return layout;
+}
+export function updateFlowWires(root,tracks,engine,animate=true,time=0){
   const board=root?.querySelector('#flowBoard'),svg=root?.querySelector('#flowWires'),master=root?.querySelector('#flowMaster');
   if(!board||!svg||!master)return;
-  const b=board.getBoundingClientRect(),m=master.getBoundingClientRect();
-  const mx=m.left-b.left+4,my=m.top-b.top+m.height/2;
-  svg.setAttribute('viewBox','0 0 '+Math.round(b.width)+' '+Math.round(b.height));
-  const existing=new Map(Array.from(svg.querySelectorAll('[data-flow-wire]')).map(n=>[n.dataset.flowWire,n]));
-  for(const track of tracks){
-    const node=Array.from(board.querySelectorAll('[data-flow-track]')).find(n=>n.dataset.flowTrack===track.id);
-    if(!node)continue;
-    const r=node.getBoundingClientRect(),aX=r.right-b.left,aY=r.top-b.top+r.height/2;
-    let path=existing.get(track.id);
-    if(!path){path=document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('data-flow-wire',track.id);path.classList.add('flow-wire');svg.appendChild(path);}
-    const meter=!track.muted&&animate?engine.getTrackMeter(track.id):{rms:0};
-    path.setAttribute('d',wireCurve(aX,aY,mx,my,Math.min(1,Math.sqrt(meter.rms)*2.5),animate?performance.now():0));
+  const layout=getFlowGeometry(board,svg,master);
+  const byId=new Map(tracks.map(track=>[track.id,track]));
+  for(const entry of layout.entries){
+    const track=byId.get(entry.id);
+    if(!track)continue;
+    const audible=animate&&!track.muted;
+    // Smooth both transient attacks and decay; no playback UI rendering required.
+    const rms=audible?Math.max(0,Number(engine.getTrackMeter(track.id)?.rms)||0):0;
+    const target=audible?Math.min(1,Math.sqrt(rms)*3.2):0;
+    entry.level=audible?entry.level+(target-entry.level)*(target>entry.level?.43:.19):0;
+    const energy=entry.level;
+    const path=entry.path;
+    path.setAttribute('d',wireCurve(entry.x,entry.y,entry.mx,entry.my,energy,audible?time:0));
     path.classList.toggle('flow-wire-off',!!track.muted);
-    path.style.setProperty('--flow-wire-color',!track.muted&&animate?'#159dfb':(track.color||'#9da9ca'));
-    path.style.strokeWidth=!track.muted&&animate?(3+Math.min(5,Math.sqrt(meter.rms)*12))+'px':'3px';
-    existing.delete(track.id);
-    const glow=node.querySelector('.flow-source-icon');
-    if(glow)glow.style.transform=animate&&meter.rms>0.001?'scale('+(1+Math.min(.19,meter.rms*.45)).toFixed(3)+')':'scale(1)';
+    path.style.setProperty('--flow-wire-color',audible?'#159dfb':(track.color||'#9da9ca'));
+    path.style.strokeWidth=audible?(3+energy*4.4).toFixed(2)+'px':'3px';
+    if(entry.glow)entry.glow.style.transform=audible&&energy>.025?'scale('+(1+energy*.16).toFixed(3)+')':'scale(1)';
   }
-  for(const old of existing.values())old.remove();
 }

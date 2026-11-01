@@ -14,7 +14,7 @@ import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrack
 import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx-rack.js';
 import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
 import {libraryMarkup} from './library-ui.js';
-import {flowMarkup,flowHeight,flowPosition,updateFlowWires} from './flow-studio.js';
+import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry} from './flow-studio.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
@@ -103,7 +103,7 @@ function checkpoint(){
   history.future=[];historyUI();
 }
 function restoreState(snapshot){
-  const wasPlaying=engine.playing;engine.stop();cancelAnimationFrame(raf);
+  const wasPlaying=engine.playing;engine.stop();stopFlowMotion();cancelAnimationFrame(raf);
   state.tracks=snapshot.tracks.map(cloneTrackMetadata);state.selected=snapshot.selected;state.selectedClip=snapshot.selectedClip??null;state.position=snapshot.position;
   state.master=snapshot.master;engine.setMaster(state.master);applyProjectOptions(snapshot.options);
   $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
@@ -222,10 +222,38 @@ function renderFlow(){
     const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
     tile?.classList.add('is-armed');
   }
-  requestAnimationFrame(paintFlow);
+  // Keep the audio-reactive cable loop independent from timeline/transport UI.
+  if(engine.playing)startFlowMotion();
+  else paintFlow(false);
 }
-function paintFlow(){
-  if(state.flowOpen)updateFlowWires($('#flowArea'),state.tracks,engine,engine.playing&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+let flowMotionFrame=0;
+let flowMotionLast=0;
+let flowInViewport=true;
+const FLOW_FRAME_MS=1000/60;
+function flowMotionAllowed(){
+  return state.flowOpen&&engine.playing&&!document.hidden&&flowInViewport&&
+    !!$('#flowBoard')&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+function paintFlow(animate=flowMotionAllowed(),time=performance.now()){
+  if(state.flowOpen)updateFlowWires($('#flowArea'),state.tracks,engine,animate,time);
+}
+function stopFlowMotion(){
+  if(flowMotionFrame){cancelAnimationFrame(flowMotionFrame);flowMotionFrame=0;}
+  flowMotionLast=0;
+  if(state.flowOpen)paintFlow(false);
+}
+function startFlowMotion(){
+  if(flowMotionFrame||!flowMotionAllowed())return;
+  const frame=time=>{
+    flowMotionFrame=0;
+    if(!flowMotionAllowed()){stopFlowMotion();return;}
+    if(!flowMotionLast||time-flowMotionLast>=FLOW_FRAME_MS-1){
+      flowMotionLast=time;
+      paintFlow(true,time);
+    }
+    flowMotionFrame=requestAnimationFrame(frame);
+  };
+  flowMotionFrame=requestAnimationFrame(frame);
 }
 function selectFlowTrack(id){
   if(state.flowArmedEffect){
@@ -347,8 +375,18 @@ function toggleFlowTrackLink(id){
 function setupFlow(){
   renderLibrary();
   const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody');
+  if('IntersectionObserver' in window){
+    const observer=new IntersectionObserver(entries=>{
+      flowInViewport=entries[0]?.isIntersecting??true;
+      if(flowMotionAllowed())startFlowMotion();else stopFlowMotion();
+    },{root:null,rootMargin:'120px 0px',threshold:0});
+    observer.observe(flowArea);
+  }
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)stopFlowMotion();else startFlowMotion();
+  });
   $('#flowToggle').onclick=()=>{
-    state.flowOpen=!state.flowOpen;renderFlow();queueAutosave();
+    state.flowOpen=!state.flowOpen;if(!state.flowOpen)stopFlowMotion();renderFlow();queueAutosave();
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
   $('#flowHelp').onclick=()=>help('flowStudio');
@@ -426,7 +464,7 @@ function setupFlow(){
     const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
     if(x!==point.x||y!==point.y){
       checkpoint();state.flowPositions[id]={x,y};
-      node.style.left=x+'px';node.style.top=y+'px';paintFlow();queueAutosave();
+      node.style.left=x+'px';node.style.top=y+'px';invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
     }
   });
   body.addEventListener('pointerdown',event=>{
@@ -445,7 +483,7 @@ function setupFlow(){
     const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
     const y=clamp(drag.y+event.clientY-drag.startY,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
     drag.node.style.left=x+'px';drag.node.style.top=y+'px';
-    drag.next={x,y};paintFlow();
+    drag.next={x,y};invalidateFlowWireGeometry(flowArea);paintFlow();
   });
   const finish=event=>{
     const drag=state.flowDrag;if(!drag)return;
@@ -456,7 +494,7 @@ function setupFlow(){
         checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();
       }
     }else{drag.node.style.left=drag.x+'px';drag.node.style.top=drag.y+'px';}
-    paintFlow();
+    invalidateFlowWireGeometry(flowArea);paintFlow();
   };
   body.addEventListener('pointerup',finish);body.addEventListener('pointercancel',finish);
 }
@@ -693,10 +731,10 @@ function runTicker(){
   cancelAnimationFrame(raf);
   const tick=()=>{
     if(engine.playing){
-      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();paintFlow();
+      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();
       if(p>=projectDuration(state.tracks)-.015){
         if(state.sessionRecording&&!state.loop)stopSessionRecording();
-        engine.stop();state.position=0;
+        engine.stop();stopFlowMotion();state.position=0;
         if(state.loop&&state.tracks.length){
           engine.play(state.tracks,0).then(()=>{render();runTicker();}).catch(error=>toast(error.message));
         }else render();
@@ -709,8 +747,8 @@ function runTicker(){
 }
 async function playPause(){
   if(!state.tracks.length)return toast('Agrega un sonido para comenzar');
-  if(engine.playing){if(state.sessionRecording)await stopSessionRecording();state.position=engine.pause();render();return;}
-  try{await engine.play(state.tracks,state.position);render();runTicker();}
+  if(engine.playing){if(state.sessionRecording)await stopSessionRecording();state.position=engine.pause();stopFlowMotion();render();return;}
+  try{await engine.play(state.tracks,state.position);render();startFlowMotion();runTicker();}
   catch(error){toast('No se pudo reproducir: '+error.message);}
 }
 async function restartPlayback(){
@@ -722,7 +760,7 @@ async function restartPlayback(){
 }
 function stop(){
   if(state.sessionRecording)stopSessionRecording();
-  engine.stop();state.position=0;cancelAnimationFrame(raf);render();updateMasterMeter();
+  engine.stop();stopFlowMotion();state.position=0;cancelAnimationFrame(raf);render();updateMasterMeter();
 }
 async function importFiles(files){
   if(!files?.length)return;
@@ -2046,7 +2084,7 @@ function wire(){
     if(e.key===' '&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement?.tagName||'')&&!$('#modalBackdrop')){e.preventDefault();playPause();}
   });
   navigator.mediaDevices?.addEventListener?.('devicechange',()=>{if($('#micSelect')&&!state.recording)updateMicrophoneChoices();});
-  window.addEventListener('resize',()=>requestAnimationFrame(()=>{drawWaves();alignWaveRuler();paintFlow();}));
+  window.addEventListener('resize',()=>requestAnimationFrame(()=>{drawWaves();alignWaveRuler();invalidateFlowWireGeometry($('#flowArea'));paintFlow();}));
   document.addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files'))e.preventDefault();});
   document.addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();importFiles(e.dataTransfer.files);}});
   window.addEventListener('beforeunload',e=>{if(state.recording){e.preventDefault();e.returnValue='';}});

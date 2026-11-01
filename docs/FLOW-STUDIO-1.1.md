@@ -90,3 +90,13 @@ Implementar por commits pequeños en DesignPhase, tests de sintaxis/unidad, QA d
 - [x] 12 personajes de voz estilizados, incluyendo graves y agudos caricaturescos.
 - [x] Guardar velocidad, máscaras, estado de nodo oculto y carácter en el proyecto portable.
 - [ ] Calidad visual/sonora de estas interacciones comprobada manualmente en PC y móvil.
+
+## 1.4.1 — Cables del Flow que vibran continuamente
+- [x] Corrigió el error de runtime que trataba un único cabezal de pista como colección y detenía el bucle de reproducción.
+- [x] El cable ya no depende del ticker del transporte ni de arrastrar un nodo; usa un requestAnimationFrame dedicado durante Play.
+- [x] Frecuencia objetivo máxima de 60 FPS, con ondas suavizadas por RMS y resplandor azul por pista.
+- [x] SVG y geometría cacheados: sin búsquedas del DOM ni lecturas de layout por cada cuadro.
+- [x] Se invalidan coordenadas solamente al mover los nodos, cambiar tamaño o reconstruir el Flow.
+- [x] Se pausa el ciclo al detener, ocultar el Flow, salir del viewport, minimizar la pestaña o preferir menos movimiento.
+- [x] Pruebas de regresión de actualización continua, cacheo, mute/pausa y ticker desacoplado.
+- [ ] QA visual/fps en Chrome y teléfonos con pistas reales (CI no mide FPS físicos).
