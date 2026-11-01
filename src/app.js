@@ -212,7 +212,7 @@ function renderFlow(){
   requestAnimationFrame(paintFlow);
 }
 function paintFlow(){
-  if(state.flowOpen)updateFlowWires($('#flowArea'),state.tracks,engine,engine.playing);
+  if(state.flowOpen)updateFlowWires($('#flowArea'),state.tracks,engine,engine.playing&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 function selectFlowTrack(id){
   if(state.flowArmedEffect){
@@ -374,6 +374,21 @@ function setupFlow(){
   });
   body.addEventListener('dragend',()=>{dragged=null;});
   library.addEventListener('dragend',()=>{dragged=null;});
+  body.addEventListener('keydown',event=>{
+    const handle=event.target.closest('[data-flow-drag]');
+    if(!handle||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))return;
+    const board=$('#flowBoard'),id=handle.dataset.flowDrag,node=handle.closest('[data-flow-track]');
+    if(!board||!node)return;
+    event.preventDefault();
+    const index=state.tracks.findIndex(t=>t.id===id);
+    const point=flowPosition({id},index,state.flowPositions),step=event.shiftKey?40:12;
+    const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,Math.max(12,board.clientWidth-440));
+    const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
+    if(x!==point.x||y!==point.y){
+      checkpoint();state.flowPositions[id]={x,y};
+      node.style.left=x+'px';node.style.top=y+'px';paintFlow();queueAutosave();
+    }
+  });
   body.addEventListener('pointerdown',event=>{
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;

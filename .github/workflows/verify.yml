@@ -35,6 +35,7 @@ jobs:
           node --check src/studio-library.js
           node --check src/library-ui.js
           node --check src/flow-studio.js
+          node --check src/loop-guard.js
           node --check src/audio-import.js
           node --check src/timeline.js
           node --check src/portable-project.js

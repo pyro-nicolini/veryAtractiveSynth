@@ -17,6 +17,10 @@ La experiencia adopta fondo blanco, tarjetas soft-3D, más jerarquía y lenguaje
 
 **Precisión:** el Flow Studio es una representación del ruteo actual, no un motor de módulos libre. Activar/retirar procesadores usa el bypass del DSP real, y el cable representa gain mute en la pista. Las cadenas de efectos mantienen su orden fijo y no hay buses auxiliares conectables mediante cables. El detector de tono sigue siendo experimental.
 
+**Mejora de reproducción:** los loops finitos incorporan microfundidos de 8 ms (o menos en fragmentos muy cortos) alrededor de cada unión, programados con Web Audio. Mitigan clics sin alterar el PCM fuente. Esto no es todavía un crossfade con solapamiento entre loops.
+
+**Accesibilidad:** puedes mover los nodos del mapa con las flechas del teclado mientras está enfocada su cabecera (Mayús para saltos más grandes). Respeta el ajuste de movimiento reducido del sistema.
+
 **Pendiente:** enrutamiento modular con validación de ciclos, FX rack reordenable con dry/wet, loop infinito cuantizado, overdub, QA móvil y medición de latencia con micrófonos reales. Ver el plan detallado en docs/FLOW-STUDIO-1.1.md. No se modificó main.
 
 ## DesignPhase 1.0 — Loops por clip y grabación de sesión

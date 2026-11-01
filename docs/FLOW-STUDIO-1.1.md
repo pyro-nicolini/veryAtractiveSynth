@@ -37,7 +37,8 @@ Los cables NO representan aún patches arbitrarios entre procesadores. El flujo 
 ### P0 — Calidad y estabilidad
 - [ ] QA real en Chromium/Edge, Firefox y Safari iOS/Android con micrófono, interfaces y auriculares.
 - [ ] Comparar WAV offline contra playback con nuevos estilos y transiciones.
-- [ ] Medir latencia y errores con audio real, reducir clicks y garantizar recuperación tras interrupciones.
+- [x] Microfundidos no destructivos en puntos interiores de loops finitos como mitigación de clics, sujetos a QA auditivo.
+- [ ] Medir latencia y errores con audio real, completar crossfades verdaderos y recuperación tras interrupciones.
 - [ ] Evaluar memoria, capturas largas, sincronización de pestañas y exportación local.
 
 ### P1 — Routing modular verdadero
