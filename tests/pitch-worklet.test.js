@@ -36,7 +36,7 @@ test('worklet sends pitch telemetry only when explicitly enabled, and still proc
   feed(96);
   const detections=voice.events.filter(x=>x.type==='pitch'&&x.voiced);
   assert.ok(detections.length>0,'audible A440 should produce detected pitch');
-  assert.ok(detections.some(x=>Math.abs(x.frequency-440)<30));
+  assert.ok(detections.some(x=>Math.abs(x.frequency-440)<30), 'observed frequencies: '+detections.map(x=>x.frequency.toFixed(1)).join(', '));
   assert.ok(detections.every(x=>Number.isFinite(x.cents)&&x.confidence>.57));
   voice.port.onmessage({data:{type:'monitor',enabled:false}});
   const old=voice.events.length;

@@ -30,7 +30,11 @@ class VoiceProcessor extends AudioWorkletProcessor {
     for(let j=0;j<limit;j+=hop){const v=r[(p-j-1+RING_SIZE)%RING_SIZE];energy+=v*v;}
     if(energy<.012){this.targetRatio=1;this.reportPitch({voiced:false});return;}
     const low=Math.floor(sampleRate/800),high=Math.min(590,Math.floor(sampleRate/85));
+    // A periodic voice can correlate at 2×, 3× and 4× its true period.
+    // Keep plausible candidates and select the shortest nearly-optimal lag;
+    // otherwise strong pure notes can be displayed an octave or more too low.
     let bestLag=0,bestScore=.57;
+    const candidates=[];
     for(let lag=low;lag<=high;lag+=2){
       let dot=0,e1=0,e2=0;
       for(let j=0;j<limit;j+=hop){
@@ -38,7 +42,12 @@ class VoiceProcessor extends AudioWorkletProcessor {
         dot+=x*y;e1+=x*x;e2+=y*y;
       }
       const score=dot/Math.sqrt(e1*e2+1e-9);
+      if(score>.57)candidates.push({lag,score});
       if(score>bestScore){bestScore=score;bestLag=lag;}
+    }
+    if(bestLag){
+      const strongestShortPeriod=candidates.find(c=>c.score>=bestScore-.01);
+      if(strongestShortPeriod)bestLag=strongestShortPeriod.lag;
     }
     if(!bestLag){this.targetRatio=1;this.reportPitch({voiced:false});return;}
     const pitch=sampleRate/bestLag,midi=69+12*Math.log2(pitch/440);
