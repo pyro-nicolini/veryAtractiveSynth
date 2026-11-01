@@ -6,6 +6,12 @@
 
 
 
+## Compatibilidad WAV mejorada (0.3.1)
+
+Se añadió un lector WAV PCM local: si la API de decodificación del navegador rechaza un archivo WAV, la aplicación intenta abrirlo directamente. Admite PCM 8/16/24/32-bit, float 32/64-bit y algunos WAV extensibles, mono o estéreo, según sus parámetros internos. Se comprueba el encabezado RIFF, los tamaños y la consistencia de canales antes de procesar los datos. No se utilizan servicios externos.
+
+**No decodifica AMR, 3GP, CAF ni ciertos Opus/OGG que no admita el navegador.** La ampliación de esos códecs permanece pendiente.
+
 ## DesignPhase 0.3 — edición más directa y escucha controlada
 
 Esta fase incorpora cambios utilizables, conservando la interfaz simple:

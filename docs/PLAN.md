@@ -40,6 +40,12 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+### Mejora 0.3.1 — Importación WAV
+
+- [x] Parser WAV PCM local alternativo cuando falla decodeAudioData.
+- [x] Test de importación 8/16/24/32-bit.
+- [ ] Transcodificación local de formatos AMR/3GP/CAF/Opus no soportados.
+
 ### Fase 0.3 — Herramientas musicales iniciales
 
 - [x] BPM ajustable y guía de metrónomo con AudioContext.

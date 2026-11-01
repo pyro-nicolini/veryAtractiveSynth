@@ -1,5 +1,6 @@
 import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
+import {decodeWav,isWav} from './audio-import.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -127,6 +128,10 @@ export class AudioEngine {
     const bytes=await file.arrayBuffer();
     try{return await ctx.decodeAudioData(bytes.slice(0));}
     catch{
+      if(isWav(bytes)){
+        try{return decodeWav(bytes,ctx);}
+        catch(error){throw Error('WAV no compatible: '+error.message);}
+      }
       throw Error('El audio no es compatible con los códecs de este navegador.');
     }
   }
