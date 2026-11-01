@@ -7,12 +7,13 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 function scene(){
   const paths=[],attrs={};let layoutReads=0,meterReads=0;
   const classBag=()=>({active:new Set(),add(name){this.active.add(name);},toggle(name,on){if(on)this.active.add(name);else this.active.delete(name);}});
-  const node={dataset:{flowTrack:'beat'},getBoundingClientRect(){layoutReads++;return {left:30,top:110,right:245,height:125};},
+  const node={dataset:{flowTrack:'beat',flowRoute:'master'},getBoundingClientRect(){layoutReads++;return {left:30,top:110,right:245,height:125};},
     querySelector:selector=>selector==='.flow-source-icon'?glow:null};
   const glow={style:{transform:''}};
   const board={getBoundingClientRect(){layoutReads++;return {left:0,top:0,width:830,height:420};},
-    querySelectorAll:selector=>selector==='[data-flow-track]'?[node]:[]};
-  const master={getBoundingClientRect(){layoutReads++;return {left:700,top:180,height:100};}};
+    querySelectorAll:selector=>selector==='[data-flow-track]'?[node]:[],
+    querySelector:selector=>selector==='#flowMaster'?master:null};
+  const master={getBoundingClientRect(){layoutReads++;return {left:700,right:860,top:180,height:100};}};
   const svg={setAttribute(name,value){attrs[name]=value;},
     querySelectorAll:selector=>selector==='[data-flow-wire]'?paths:[],
     appendChild(path){paths.push(path);}};
