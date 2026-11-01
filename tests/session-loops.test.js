@@ -24,7 +24,7 @@ test('loop fragments and duplicates persist through .vasproject with source dedu
  assert.strictEqual(result.tracks[0].clips[0].buffer,result.tracks[0].clips[1].buffer);
  assert.equal(clipDuration(result.tracks[0].clips[1]),4);
 });
-test('AudioWorklet schedule loops one source per repeating clip in both paths',()=>{
+test('AudioWorklet schedule loops one source per repeating clip in both paths',async()=>{
  const {readFileSync}=await import('node:fs');
  const engine=readFileSync(new URL('../src/engine.js',import.meta.url),'utf8');
  assert.match(engine,/src\.loop=true/);
