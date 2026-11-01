@@ -33,6 +33,7 @@ test('mic monitor voice uses same DSP graph and transmits pitch only on opt-in',
  assert.match(app,/function stopLiveTuneMic\(\)/);
  assert.match(app,/request!==state\.liveMicToken/);
  assert.match(app,/engine\.updateMic\(track\)/);
- assert.match(app,/engine\.watchMicPitch\(onTunePitch\)/);
+ assert.match(app,/onTunePitch\(note\?/);
+ assert.match(app,/estimateNote\(samples/);
  assert.match(app,/voiceLabBtn/);
 });

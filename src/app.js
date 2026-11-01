@@ -1396,7 +1396,7 @@ function drawMicPreview(){
       const note=same?detected:null;
       if(label)label.textContent=note?note.name+note.octave:'—';
       if(fine)fine.textContent=note?(Math.abs(note.cents)<=15?'✓ Dentro de ±15 cents':(note.cents<0?'↑ Sube un poco':'↓ Baja un poco')+' · '+Math.abs(note.cents)+' cents'):'Escuchando · canta una nota sostenida';
-      for(const step of $('#noteSteps [data-note]'))step.classList.toggle('is-active',!!note&&step.dataset.note===note.name);
+      for(const step of $$('#noteSteps [data-note]'))step.classList.toggle('is-active',!!note&&step.dataset.note===note.name);
     }
     const {rms,peak}=meterLevel(samples);
     if(rms>.008)state.micSignal=true;
