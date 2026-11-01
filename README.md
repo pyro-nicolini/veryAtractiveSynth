@@ -9,18 +9,20 @@
 - 🥁 **Crear música:** ritmos originales, varias pistas, volumen, mezcla y efectos.
 - ◫ **Sample Deck:** 12 pads de vidrio para cargar sonidos, cortarlos, nombrarlos, guardarlos y tocarlos en vivo. Cada pad tiene su minionda real.
 - ✂️ **Editar libremente:** mover, recortar, repetir, duplicar y cambiar la velocidad de clips; zoom en la línea de tiempo.
-- 🪐 **Flow Studio:** conecta/desconecta pistas y arrastra efectos.
+- 🔗 **Signal Flow:** conecta la salida de una pista con la entrada de otra, usa buses reales y arrastra procesadores o samples al editor.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
 
-## ❤️ Red Velvet · edición en rama de revisión
+## 🎛️ Signal Flow 2.0 · edición en rama de revisión
 
-- **WAV por pista:** botón «↓ WAV» en cada canal. Descarga la pista con o sin sus efectos, o crea una nueva pista renderizada dentro del proyecto sin borrar la fuente. Se preservan los cortes y la posición temporal.
-- **WAV por pad:** el editor de Sample Deck permite guardar localmente el color elegido y exportar WAV original o procesado. La biblioteca conserva sus 12 pads en IndexedDB, como antes.
-- **Rutas reales de audio:** Flow Studio representa tres buses existentes (VOCES, MÚSICA y EFECTOS); cada pista se conecta al bus elegido y cada bus al master. Usa «A BUS» para cambiar el destino y «AUTOORDENAR» para restaurar líneas organizadas. Por seguridad no se simula conexión arbitraria pista → pista sin DSP real.
-- **Voice Playground:** más personajes creativos y variaciones femeninas, masculinas, rap y caricatura mediante afinación, desplazamiento de tono, saturación y EQ. Son transformaciones **estilizadas**, no síntesis vocal con preservación de formantes ni imitaciones de identidades reales.
-- **Interfaz Red Velvet:** tema burdeos con vidrio, relieve y acentos rosados; animación «Bienvenue» de ~2,7 s, saltable y adaptada a movimiento reducido. Los dos assets nuevos están incluidos en el empaquetado offline.
+- **Dos cadenas en paralelo:** VOICE SIGNAL para voces, TRACK SIGNAL para música y samples; cada línea desemboca en un bus y luego en MASTER. Pulsa **ENCADENAR** para organizar todos los canales existentes en serie o usa sus puertos circulares con clic/arrastre, así como el menú **SALIDA**.
+- **Audio serial de verdad:** una conexión `Pista A → Pista B` envía la señal de A al **procesador de B**, donde se suma a su propio audio y pasa por los FX, volumen y paneo de B. Si silencias B, también se silencia lo que reciba de A. No se permiten ciclos ni conexiones entre las dos líneas de pistas.
+- **Efectos como etapas visibles:** afinación, limpieza, EQ, drive, compresor, delay y reverb muestran su posición en el procesador real. Delay y reverb se encadenan con sus mezclas seco/húmedo. Puedes activar/desactivar FX, mantener sus parámetros y guardar el conjunto de ajustes con **▣ FX** para aplicarlo a otra pista. Por seguridad, el orden interno de los insertos sigue siendo fijo, no libremente reordenable.
+- **Biblioteca reutilizable:** los 12 pads siguen con hotkeys; **Guardar en biblioteca** conserva nuevos recortes por separado en IndexedDB sin el límite de doce pads. Abre **MIS SAMPLES** en la barra del patchbay y arrastra un pad o recorte al canvas o a otra pista.
+- **Exportación:** cada pista puede descargarse WAV seco/procesado 16/24/32-bit o convertirse en una pista nueva, sin sobrescribir la fuente. Cada pad tiene WAV original/con FX. El render de la mezcla utiliza las mismas rutas seriales del reproductor.
+- **Diseño Synth Console:** grafito, relieve de equipo musical, naranja, cian y magenta; sustituye al burdeo de Red Velvet. Se conserva la entrada «Bienvenue» (salto permitido y compatibilidad con movimiento reducido).
+- **Proyectos heredados:** los archivos anteriores mantienen su ruta de bus original hasta cambiarla. El respaldo `.vasproject` guarda `flowTo` de cada pista. Los presets FX y samples locales son **bibliotecas independientes del respaldo**: exporta WAV y guarda por separado tus presets si cambias de equipo.
 
-Estas mejoras no alteran el contenido guardado en tus proyectos y mantienen los originales. Para publicar, revisar el pull request y validar la prueba manual de sonido/exportación en Chrome/Edge con una sesión de prueba.
+Los presets vocales adicionales son transformaciones estilizadas, no conversión realista de formantes o identidades. Los tests JS automatizados comprueban rutas y persistencia; sigue pendiente validación auditiva y QA de puertos táctiles en Chrome/Edge antes de fusionar con `main`.
 
 ## 🚀 Instalar y ejecutar
 
@@ -72,8 +74,8 @@ Para detener el servidor, pulsa **Ctrl + C** en la ventana de Terminal que abri�
 
 1. Presiona **Grabar mi voz** → **PERMITIR MICRÓFONO** y acepta el permiso del navegador.
 2. Habla y comprueba que la onda y el medidor se muevan. Después pulsa **GRABAR**.
-3. Para usar el sampler, abre **SAMPLES**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**.
-4. Pulsa un pad para tocarlo; usa **Enviar a pistas** para colocarlo en la mezcla.
+3. Para usar el sampler, abre **SAMPLES**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**. Pulsa **Guardar en biblioteca** para conservar recortes adicionales.
+4. En **Signal Flow**, pulsa **ENCADENAR** o conecta puertos de salida y entrada. Arrastra tus samples desde el lateral o usa **Enviar a pistas**.
 5. Ajusta la canción y elige **EXPORTAR**.
 
 ## 🔒 Privacidad y límites
