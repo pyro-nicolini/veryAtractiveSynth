@@ -33,25 +33,30 @@ Dentro de la carpeta **veryAtractiveSynth**, junto a este README:
 
 El estudio abre en **http://127.0.0.1:4173/**. Para detenerlo, cierra la ventana del servidor o pulsa **Ctrl + C**.
 
-### 🍎 macOS — Terminal
+### 🍎 macOS — dos archivos, doble clic
 
-Los archivos `.bat` son exclusivos de Windows. En Mac:
+Instala [Node.js 20+](https://nodejs.org/) y Git (puedes usar las herramientas de desarrollo de Apple). Clona el repositorio **una sola vez** desde Terminal:
 
 ```bash
 git clone https://github.com/pyro-nicolini/veryAtractiveSynth.git
-cd veryAtractiveSynth
-npm start
 ```
 
-Para actualizar una instalación existente:
+Después abre la carpeta `veryAtractiveSynth` desde Finder:
+
+- ▶️ **[Iniciar.command](Iniciar.command):** inicia el servidor de audio local y abre la app automáticamente en tu navegador.
+- 🔄 **[Actualizar.command](Actualizar.command):** busca la última versión publicada en **`main`** y la descarga sin borrar cambios locales. Cierra el servidor antes de actualizar y vuelve a ejecutar `Iniciar.command`.
+
+**Ambos archivos están marcados como ejecutables en Git.** Si macOS impide abrirlos, ejecuta una vez desde Terminal, dentro de la carpeta:
 
 ```bash
-git switch main
-git pull --ff-only origin main
-npm start
+chmod +x Iniciar.command Actualizar.command
 ```
 
-Si antes trabajabas en `DesignPhase`, utiliza `Actualizar.bat` en Windows para cambiar a `main` y obtener la versión estable. Conserva primero cualquier trabajo local que no hayas guardado.
+Si macOS solicita una autorización de seguridad para el archivo, revísala desde Finder (clic derecho → **Abrir**) o **Configuración del Sistema → Privacidad y seguridad**. No necesitas desactivar Gatekeeper.
+
+Para detener el servidor, pulsa **Ctrl + C** en la ventana de Terminal que abrió el lanzador.
+
+**Importante:** las actualizaciones se revisan *cuando haces doble clic* en `Actualizar.command`, no automáticamente en segundo plano. Los `.bat` siguen siendo exclusivos de Windows. Si antes usabas `DesignPhase`, el actualizador cambia a `main` solamente si no hay trabajo local sin guardar.
 
 ## 🎤 Primeros pasos
 
