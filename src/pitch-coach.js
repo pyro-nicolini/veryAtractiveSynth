@@ -13,6 +13,7 @@ export function estimateNote(samples,sampleRate=48000,{low=85,high=800}={}){
   if(rms<.012||peak<.025)return null;
   const lo=Math.max(16,Math.floor(sampleRate/high)),hi=Math.min(Math.floor(sampleRate/low),n-150);
   let best={lag:0,confidence:.63};
+  const candidates=[];
   for(let lag=lo;lag<=hi;lag+=2){
     let numerator=0,energy1=0,energy2=0;
     for(let i=0;i<n-lag;i+=step){
@@ -20,9 +21,13 @@ export function estimateNote(samples,sampleRate=48000,{low=85,high=800}={}){
       numerator+=a*b;energy1+=a*a;energy2+=b*b;
     }
     const confidence=numerator/Math.sqrt(energy1*energy2+1e-9);
+    if(confidence>.63)candidates.push({lag,confidence});
     if(confidence>best.confidence+.0004)best={lag,confidence};
   }
   if(!best.lag)return null;
+  // Shortest near-optimal period avoids confusing harmonics with octaves.
+  // Pure stable notes often correlate marginally better at 2× or 3× periods.
+  best=candidates.find(c=>c.confidence>=best.confidence-.018)||best;
   const frequency=sampleRate/best.lag,midi=69+12*Math.log2(frequency/440);
   if(!Number.isFinite(midi)||midi<25||midi>105)return null;
   const nearest=Math.round(midi),cents=Math.round((midi-nearest)*100);
