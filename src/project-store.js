@@ -34,8 +34,9 @@ function getAudioKey(buffer){
   return keys.get(buffer);
 }
 function metaFor(track){
-  const {buffer,...settings}=track;
-  return {...settings,audioKey:getAudioKey(buffer)};
+  const {buffer,clips,...settings}=track;
+  return {...settings,audioKey:getAudioKey(buffer),
+    ...(Array.isArray(clips)?{clips:clips.map(({buffer,...clip})=>({...clip,audioKey:getAudioKey(buffer)}))}:{})};
 }
 function pcmFor(buffer){
   return {sampleRate:buffer.sampleRate,channels:Array.from({length:buffer.numberOfChannels},(_,c)=>buffer.getChannelData(c).slice())};
@@ -47,15 +48,16 @@ export async function saveSession(tracks,master,options={},key='last-session',na
   const tx=db.transaction(['projects','audio'],'readwrite'),projects=tx.objectStore('projects'),audio=tx.objectStore('audio');
   const done=waitTx(tx,db);
   const savedAt=new Date().toISOString(),seen=new Set();
+  const registerAudio=buffer=>{
+    const audioKey=getAudioKey(buffer);
+    if(seen.has(audioKey))return;
+    seen.add(audioKey);
+    const req=audio.get(audioKey);
+    req.onsuccess=()=>{if(!req.result)audio.put(pcmFor(buffer),audioKey);};
+  };
   const records=tracks.map(track=>{
-    const audioKey=getAudioKey(track.buffer);
-    if(!seen.has(audioKey)){
-      seen.add(audioKey);
-      const req=audio.get(audioKey);
-      req.onsuccess=()=>{
-        if(!req.result)audio.put(pcmFor(track.buffer),audioKey);
-      };
-    }
+    registerAudio(track.buffer);
+    if(Array.isArray(track.clips))for(const clip of track.clips)registerAudio(clip.buffer);
     return metaFor(track);
   });
   projects.put({format:2,savedAt,name:safeName(name||'Sesión actual'),master,options,tracks:records},projectId);
@@ -73,17 +75,22 @@ function buildSession(ctx,record,pcm){
     })};
   }
   const bufferCache=new Map();
+  const getBuffer=audioKey=>{
+    if(bufferCache.has(audioKey))return bufferCache.get(audioKey);
+    const source=pcm.get(audioKey);
+    if(!source)throw Error('El proyecto tiene un clip sin audio. Restaura un respaldo .vasproject');
+    const buffer=ctx.createBuffer(source.channels.length,source.channels[0].length,source.sampleRate);
+    source.channels.forEach((samples,c)=>buffer.copyToChannel(samples,c));
+    keys.set(buffer,audioKey);bufferCache.set(audioKey,buffer);
+    return buffer;
+  };
   const tracks=record.tracks.map(track=>{
-    const {audioKey,...settings}=track;
-    let buffer=bufferCache.get(audioKey);
-    if(!buffer){
-      const source=pcm.get(audioKey);
-      if(!source)throw Error('El proyecto tiene una pista sin audio. Restaura un respaldo .vasproject');
-      buffer=ctx.createBuffer(source.channels.length,source.channels[0].length,source.sampleRate);
-      source.channels.forEach((samples,c)=>buffer.copyToChannel(samples,c));
-      keys.set(buffer,audioKey);bufferCache.set(audioKey,buffer);
-    }
-    return {...settings,buffer};
+    const {audioKey,clips,...settings}=track;
+    return {...settings,buffer:getBuffer(audioKey),
+      ...(Array.isArray(clips)?{clips:clips.map(clip=>{
+        const {audioKey,...meta}=clip;
+        return {...meta,buffer:getBuffer(audioKey)};
+      })}:{})};
   });
   return {master:record.master,options:record.options||{},tracks};
 }
@@ -100,7 +107,8 @@ export async function loadSession(ctx,key='last-session'){
   if(!found){await done;return null;}
   if(found.format!==2){await done;return buildSession(ctx,found,new Map());}
   const sounds=new Map();
-  await Promise.all([...new Set(found.tracks.map(t=>t.audioKey))].map(key=>new Promise((resolve,reject)=>{
+  const needed=found.tracks.flatMap(t=>[t.audioKey,...(Array.isArray(t.clips)?t.clips.map(c=>c.audioKey):[])]);
+  await Promise.all([...new Set(needed)].map(key=>new Promise((resolve,reject)=>{
     const req=audio.get(key);
     req.onsuccess=()=>{sounds.set(key,req.result);resolve();};
     req.onerror=()=>reject(req.error);
@@ -154,7 +162,10 @@ export async function pruneOrphanAudio(){
     const used=new Set();
     for(const record of all.result){
       if(record?.format!==2)continue;
-      for(const track of record.tracks||[])if(track.audioKey)used.add(track.audioKey);
+      for(const track of record.tracks||[]){
+        if(track.audioKey)used.add(track.audioKey);
+        for(const clip of track.clips||[])if(clip.audioKey)used.add(clip.audioKey);
+      }
     }
     const cursor=audio.openCursor();
     cursor.onsuccess=()=>{

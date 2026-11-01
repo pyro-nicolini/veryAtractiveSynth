@@ -1,6 +1,6 @@
 // Cache only application assets; never cache microphone data or imported user audio.
-const CACHE = 'vas-studio-v8';
-const ASSETS = ['./','./index.html','./src/styles.css','./src/app.js','./src/engine.js','./src/dsp.js','./src/project-store.js','./src/recording-utils.js','./src/portable-project.js','./src/zip-store.js','./src/timeline.js','./src/tune-lab.js','./src/pitch-display.js','./src/studio-mixer.js','./src/studio-mixer-ui.js','./src/studio-mixer.css','./src/tune-lab-ui.js','./src/tune-lab.css','./src/audio-import.js','./src/worklets/capture-processor.js','./src/worklets/voice-processor.js','./assets/icon.svg','./manifest.webmanifest'];
+const CACHE = 'vas-studio-v9';
+const ASSETS = ['./','./index.html','./src/styles.css','./src/app.js','./src/engine.js','./src/dsp.js','./src/project-store.js','./src/recording-utils.js','./src/portable-project.js','./src/zip-store.js','./src/timeline.js','./src/tune-lab.js','./src/pitch-display.js','./src/track-clips.js','./src/studio-mixer.js','./src/studio-mixer-ui.js','./src/studio-mixer.css','./src/tune-lab-ui.js','./src/tune-lab.css','./src/audio-import.js','./src/worklets/capture-processor.js','./src/worklets/voice-processor.js','./assets/icon.svg','./manifest.webmanifest'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

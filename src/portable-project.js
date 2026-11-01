@@ -28,14 +28,25 @@ export function decodeProjectWav(bytes,ctx){
 
 export async function exportProject(tracks,master,options={}){
   if(!tracks.length)throw Error('Agrega una pista antes de respaldar');
-  const manifest={format:'veryAtractiveSynth-project',version:1,createdAt:new Date().toISOString(),
+  const manifest={format:'veryAtractiveSynth-project',version:2,createdAt:new Date().toISOString(),
     master,options,tracks:[]};
-  const entries=[];
-  for(let i=0;i<tracks.length;i++){
-    const track=tracks[i],file='audio/'+String(i+1).padStart(3,'0')+'.wav';
-    const {buffer,...settings}=track;
-    manifest.tracks.push({...settings,file});
+  const entries=[],media=new Map();
+  const audioFile=buffer=>{
+    if(media.has(buffer))return media.get(buffer);
+    const file='audio/'+String(media.size+1).padStart(3,'0')+'.wav';
+    media.set(buffer,file);
     entries.push({name:file,data:encodeWav(buffer,32)});
+    return file;
+  };
+  for(const track of tracks){
+    const {buffer,clips,...settings}=track;
+    const file=audioFile(buffer);
+    const exported={...settings,file};
+    if(Array.isArray(clips))exported.clips=clips.map(clip=>{
+      const {buffer:clipBuffer,...props}=clip;
+      return {...props,file:audioFile(clipBuffer)};
+    });
+    manifest.tracks.push(exported);
   }
   entries.unshift({name:'project.json',data:textEncoder.encode(JSON.stringify(manifest))});
   return zipStore(entries);
@@ -46,15 +57,28 @@ export async function importProject(file,ctx){
   if(!raw||raw.byteLength>2e6)throw Error('Falta el manifiesto del proyecto');
   let manifest;try{manifest=JSON.parse(textDecoder.decode(raw));}
   catch{throw Error('Manifiesto del proyecto inválido');}
-  if(manifest.format!=='veryAtractiveSynth-project'||manifest.version!==1||!Array.isArray(manifest.tracks)||manifest.tracks.length>80)
+  if(manifest.format!=='veryAtractiveSynth-project'||![1,2].includes(manifest.version)||!Array.isArray(manifest.tracks)||manifest.tracks.length>80)
     throw Error('Este proyecto no es compatible con esta versión');
-  const tracks=[];
+  const tracks=[],mediaCache=new Map();
+  const loadAudio=file=>{
+    if(!mediaCache.has(file))mediaCache.set(file,decodeProjectWav(entries.get(file),ctx));
+    return mediaCache.get(file);
+  };
   for(const t of manifest.tracks){
     if(typeof t.file!=='string'||!/^audio\/\d{3}\.wav$/.test(t.file)||!entries.has(t.file))
       throw Error('Falta un archivo de sonido del proyecto');
     const bin=entries.get(t.file);
-    const buffer=decodeProjectWav(bin,ctx);
+    const buffer=loadAudio(t.file);
     if(buffer.duration>60*20)throw Error('Pista demasiado larga para este estudio');
+    const restoredClips=Array.isArray(t.clips)?t.clips.map(clip=>{
+      if(typeof clip.file!=='string'||!/^audio\/\d{3}\.wav$/.test(clip.file)||!entries.has(clip.file))
+        throw Error('Falta un clip de audio en el respaldo');
+      const clipBuffer=loadAudio(clip.file);
+      return {id:String(clip.id||'clip-'+tracks.length).slice(0,128),name:String(clip.name||'Toma').slice(0,80),buffer:clipBuffer,
+        offset:clamp(clip.offset,0,3600),trimStart:clamp(clip.trimStart,0,clipBuffer.duration),trimEnd:clamp(clip.trimEnd,0,clipBuffer.duration),
+        fadeIn:clamp(clip.fadeIn,0,30),fadeOut:clamp(clip.fadeOut,0,30)};
+    }):null;
+    if(restoredClips&&restoredClips.length>128)throw Error('Demasiados clips en una pista');
     tracks.push({...defaults(),
       id:typeof t.id==='string'&&t.id.length<128?t.id:globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+tracks.length,
       name:String(t.name||'Pista').slice(0,80),
@@ -71,7 +95,8 @@ export async function importProject(file,ctx){
       bus:['music','vocals','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
       tuneX:clamp(t.tuneX??((clamp(t.retune??60,5,100)-5)/95*2-1),-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),
       tunePreset:typeof t.tunePreset==='string'&&t.tunePreset.length<42?t.tunePreset:'custom',
-      preset:typeof t.preset==='string'?t.preset:'natural',buffer
+      preset:typeof t.preset==='string'?t.preset:'natural',buffer,
+      ...(restoredClips?{clips:restoredClips}:{})
     });
   }
   return {master:clamp(manifest.master??85,0,100),options:manifest.options||{},tracks};

@@ -107,3 +107,23 @@ test('v1 sessions load without deleting legacy channel data',async()=>{
   assert.equal(original.tracks[0].name,'Vieja voz');
   assert.equal(original.tracks[0].buffer.length,2);
 });
+
+test('a channel with multiple source buffers survives incremental saves',async()=>{
+  const db=fakeIndexedDB();globalThis.indexedDB=db;
+  const ctx=makeContext(),lead=ctx.createBuffer(1,80,8000),second=ctx.createBuffer(1,160,8000);
+  lead.getChannelData(0)[2]=.5;second.getChannelData(0)[3]=-.5;
+  const track={id:'m',name:'Multitoma',type:'voice',buffer:lead,volume:85,clips:[
+    {id:'one',name:'Toma 1',buffer:lead,offset:0,trimStart:0,trimEnd:0,fadeIn:0,fadeOut:0},
+    {id:'two',name:'Toma 2',buffer:second,offset:2,trimStart:0,trimEnd:0,fadeIn:0,fadeOut:0}
+  ]};
+  await saveSession([track],85,{bpm:90});
+  assert.equal(db.stats.audioWrites,2,'two unique audio buffers are stored once');
+  track.volume=50;track.clips[1].offset=3;
+  await saveSession([track],85,{bpm:90});
+  assert.equal(db.stats.audioWrites,2,'clip timing does not duplicate samples');
+  const restored=(await loadSession(ctx)).tracks[0];
+  assert.equal(restored.clips.length,2);
+  assert.equal(restored.clips[1].offset,3);
+  assert.equal(restored.volume,50);
+  assert.ok(Math.abs(restored.clips[1].buffer.getChannelData(0)[3]+.5)<.00001);
+});

@@ -2,10 +2,18 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.7.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.8.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 
+
+## DesignPhase 0.8 — Múltiples clips en una pista
+
+**Nuevo modelo:** cada canal del Mixer puede contener varios clips y tomas. Usa el botón **＋** de cada pista para añadir un archivo nuevo al canal seleccionado (en el lugar actual del cabezal). Cada clip tiene su fuente original, ubicación, recorte y fade independientes. Arrastra el **↔** correspondiente para mover un clip. Haz clic dentro de su onda para seleccionarlo; en ⋯ → **DIVIDIR CLIP**, el corte ocurre dentro del mismo canal y no crea una pista nueva.
+
+Los clips comparten los efectos, paneo y fader **de la pista**, de modo que dos tomas de voz conservan una única ruta de mezcla. La línea de tiempo y el motor programan cada clip de manera independiente. La exportación WAV y el proyecto portable .vasproject (formato v2) conservan las posiciones y el material. El lector sigue admitiendo el formato v1 para no perder sesiones. Los archivos originales se conservan sin editar.
+
+**Alcance de esta etapa:** funciona con varias fuentes por pista, pero aún faltan crossfades editables visualmente, reordenamiento de canales, grabación tipo punch-in/comping, zoom, automatización temporal, plantillas de grabación por toma y las pruebas manuales de hardware/navegadores. Guarda un respaldo antes de hacer cambios importantes.
 
 ## DesignPhase 0.7 — Studio Mixer y entradas
 

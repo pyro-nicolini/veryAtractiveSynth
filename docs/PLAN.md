@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.7 implementado
+## 3. Estado 0.8 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,19 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 0.8 — Track & Clip Engine (primera iteración)
+
+- [x] Un canal contiene varios clips con archivos fuente independientes, sin duplicar canales.
+- [x] Programación y exportación de clips múltiples con sus offsets/trims/fades.
+- [x] División de clips dentro del canal, sin alterar el PCM original.
+- [x] Importación de audio adicional directamente a un canal existente.
+- [x] Movimiento por clip con control ↔ y selección desde la onda.
+- [x] Guardado de clips y fuentes en IndexedDB v2 y respaldo .vasproject versión 2 (lectura v1 preservada).
+- [x] Undo/redo de metadatos por clip, conservando las referencias compartidas de AudioBuffer.
+- [ ] QA real de arrastre, selección, división y exportación de múltiples clips.
+- [ ] Crossfades visuales, copy/paste entre pistas, comping, punch in/out, zoom y automatizaciones.
+- [ ] Escalado con archivos largos, guardado y exportación por streaming.
 
 ### Fase 0.7 — Studio Core / mixer no destructivo
 

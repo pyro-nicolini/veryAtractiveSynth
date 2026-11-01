@@ -10,11 +10,12 @@ import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMar
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mixer.js';
 import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
+import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrackClip,cloneTrackMetadata} from './track-clips.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
@@ -75,7 +76,7 @@ function applyProjectOptions(options={}){
   engine.setMetronome(state.metronome,state.bpm);
 }
 function captureState(){
-  return {tracks:state.tracks.map(t=>({...t})),selected:state.selected,position:state.position,master:state.master,options:getProjectOptions()};
+  return {tracks:state.tracks.map(cloneTrackMetadata),selected:state.selected,selectedClip:state.selectedClip,position:state.position,master:state.master,options:getProjectOptions()};
 }
 function historyUI(){
   if($('#undoBtn'))$('#undoBtn').disabled=!history.past.length||!!state.recording;
@@ -88,7 +89,7 @@ function checkpoint(){
 }
 function restoreState(snapshot){
   const wasPlaying=engine.playing;engine.stop();cancelAnimationFrame(raf);
-  state.tracks=snapshot.tracks.map(t=>({...t}));state.selected=snapshot.selected;state.position=snapshot.position;
+  state.tracks=snapshot.tracks.map(cloneTrackMetadata);state.selected=snapshot.selected;state.selectedClip=snapshot.selectedClip??null;state.position=snapshot.position;
   state.master=snapshot.master;engine.setMaster(state.master);applyProjectOptions(snapshot.options);
   $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
   render();if(wasPlaying)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(e=>toast(e.message));
@@ -159,7 +160,7 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
 function addTrack(buffer,name,type='audio',offset=0){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
   const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:type==='voice'?'vocals':'music'};
-  checkpoint();state.tracks.push(t);state.selected=id;render();if(engine.playing)restartPlayback();
+  checkpoint();state.tracks.push(t);state.selected=id;state.selectedClip=null;render();if(engine.playing)restartPlayback();
   return t;
 }
 function render(){
@@ -174,9 +175,9 @@ function render(){
     const active=t.id===state.selected;
     return '<article class="track-card'+(active?' selected':'')+'" style="--track-color:'+trackColor(t)+'" data-track="'+html(t.id)+'" tabindex="0" aria-label="Seleccionar capa '+html(t.name)+'">'+
       '<div class="vinyl'+(engine.playing&&!t.muted?' spinning':'')+'" aria-hidden="true"><div class="vinyl-center"></div></div>'+
-      '<div class="track-info"><strong class="track-name" title="'+html(t.name)+'">'+html(t.name)+'</strong><div class="track-sub">'+(t.type==='voice'?'◉ VOZ':t.type==='demo'?'♫ BEAT':'≋ AUDIO')+' · '+clock(effectiveDuration(t))+'</div><div class="track-buttons"><button class="small-toggle'+(t.muted?' active':'')+'" data-track-action="mute" data-id="'+html(t.id)+'" title="Silenciar" aria-label="Silenciar '+html(t.name)+'">M</button><button class="small-toggle solo'+(t.solo?' active':'')+'" data-track-action="solo" data-id="'+html(t.id)+'" title="Escuchar solo" aria-label="Escuchar solo '+html(t.name)+'">S</button></div></div>'+
-      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div><button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(t.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" title="Arrastrar este sonido" aria-label="Mover capa '+html(t.name)+'">↔</button></div>'+
-      '<div class="track-tail"><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
+      '<div class="track-info"><strong class="track-name" title="'+html(t.name)+'">'+html(t.name)+'</strong><div class="track-sub">'+(t.type==='voice'?'◉ VOZ':t.type==='demo'?'♫ BEAT':'≋ AUDIO')+' · '+(Array.isArray(t.clips)?t.clips.length+' CLIPS · ':'')+clock(effectiveDuration(t))+'</div><div class="track-buttons"><button class="small-toggle'+(t.muted?' active':'')+'" data-track-action="mute" data-id="'+html(t.id)+'" title="Silenciar" aria-label="Silenciar '+html(t.name)+'">M</button><button class="small-toggle solo'+(t.solo?' active':'')+'" data-track-action="solo" data-id="'+html(t.id)+'" title="Escuchar solo" aria-label="Escuchar solo '+html(t.name)+'">S</button></div></div>'+
+      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div>'+clipsOf(t).map((clip)=>'<button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(clip.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" data-drag-clip="'+html(clip.id)+'" title="Mover clip '+html(clip.name||t.name)+'" aria-label="Mover clip '+html(clip.name||t.name)+'">↔</button>').join('')+'</div>'+
+      '<div class="track-tail"><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
   renderInspector();renderMixer();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
 }
@@ -261,20 +262,23 @@ function drawWaves(){
     if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
     const context=canvas.getContext('2d');context.clearRect(0,0,w,h);
     context.strokeStyle='#ffffff14';context.beginPath();context.moveTo(0,h/2);context.lineTo(w,h/2);context.stroke();
-    const left=Math.floor((t.offset/full)*w),width=Math.max(1,Math.round((effectiveDuration(t)/full)*w));
-    context.fillStyle=trackColor(t)+'14';context.fillRect(left,0,width,h);
-    const channel=t.buffer.getChannelData(0),trimStart=Math.floor((t.trimStart||0)*t.buffer.sampleRate);
-    const usable=Math.floor(effectiveDuration(t)*t.buffer.sampleRate),samplesPerX=usable/width;
-    context.fillStyle=trackColor(t);
-    for(let x=0;x<width;x+=2){
-      const from=trimStart+Math.floor(x*samplesPerX),to=Math.min(channel.length,from+Math.max(1,Math.floor(samplesPerX*2)));
-      let peak=0;
-      for(let j=from;j<to;j+=Math.max(1,Math.floor((to-from)/12)))peak=Math.max(peak,Math.abs(channel[j]||0));
-      const amplitude=Math.max(1,Math.min(.98,peak)*h*.44);
-      context.globalAlpha=t.muted?.27:.85;
-      context.fillRect(left+x,h/2-amplitude,Math.max(1,1.6*dpr),amplitude*2);
+    for(const clip of clipsOf(t)){
+      const len=clipDuration(clip);if(len<=0)continue;
+      const left=Math.floor((clip.offset/full)*w),width=Math.max(1,Math.round((len/full)*w));
+      context.fillStyle=trackColor(t)+'14';context.fillRect(left,0,width,h);
+      const channel=clip.buffer.getChannelData(0),trimStart=Math.floor((clip.trimStart||0)*clip.buffer.sampleRate);
+      const usable=Math.floor(len*clip.buffer.sampleRate),samplesPerX=usable/width;
+      context.fillStyle=trackColor(t);
+      for(let x=0;x<width;x+=2){
+        const from=trimStart+Math.floor(x*samplesPerX),to=Math.min(channel.length,from+Math.max(1,Math.floor(samplesPerX*2)));
+        let peak=0;
+        for(let j=from;j<to;j+=Math.max(1,Math.floor((to-from)/12)))peak=Math.max(peak,Math.abs(channel[j]||0));
+        const amplitude=Math.max(1,Math.min(.98,peak)*h*.44);
+        context.globalAlpha=t.muted?.27:.85;
+        context.fillRect(left+x,h/2-amplitude,Math.max(1,1.6*dpr),amplitude*2);
+      }
+      context.globalAlpha=1;
     }
-    context.globalAlpha=1;
   });
 }
 function renderInspector(){
@@ -356,6 +360,20 @@ async function importFiles(files){
       '<p>Prueba a exportar las notas de voz desde tu teléfono como WAV PCM o M4A AAC. No subimos tus archivos a ningún servidor.</p>',
       [{label:'ENTENDIDO',type:'close',primary:true}]);
   }else if(imported)toast('Sonido listo. ¡Ya puedes crear!');
+}
+async function importClipIntoTrack(file,id){
+  if(!file)return;
+  const track=state.tracks.find(t=>t.id===id);
+  if(!track)return toast('No existe el canal elegido');
+  try{
+    const buffer=await engine.decode(file);
+    checkpoint();
+    const clipId=globalThis.crypto?.randomUUID?.()||'clip-'+Date.now();
+    addTrackClip(track,buffer,state.position,clipId,file.name.replace(/\.[^.]+$/,''));
+    state.selected=track.id;state.selectedClip=clipId;
+    render();restartPlayback();
+    toast('Nuevo clip añadido a '+track.name+'. Muévelo con ↔.');
+  }catch(error){toast('No se pudo añadir el clip: '+error.message);}
 }
 async function demo(){
   try{
@@ -504,7 +522,9 @@ function openEffects(){
     [{label:'LISTO',type:'close',primary:true}]);
 }
 function openTiming(){
-  const t=current();if(!t)return;
+  const track=current();if(!track)return;
+  const t=Array.isArray(track.clips)?getEditableClip(track,state.selectedClip):track;
+  if(!t)return;
   checkpoint();
   const avail=t.buffer.duration,controls=[
     ['offset','Mover sonido (segundos)','position',Math.max(180,Math.ceil(projectDuration(state.tracks))),.05],
@@ -513,7 +533,7 @@ function openTiming(){
     ['fadeIn','Entrada suave (segundos)','fades',Math.min(30,avail),.1],
     ['fadeOut','Salida suave (segundos)','fades',Math.min(30,avail),.1]
   ];
-  modal('Ajustar '+t.name,
+  modal('Ajustar '+(t.name||track.name),
     '<p>Mueve tu clip y crea transiciones. Puedes cambiar estos valores cuantas veces quieras.</p>'+
     '<div class="focus-stack">'+controls.map(([id,label,info,max,step])=>'<div class="compact-field"><label for="timing-'+id+'">'+label+'</label><input id="timing-'+id+'" data-timing="'+id+'" type="number" min="0" max="'+max+'" step="'+step+'" value="'+(t[id]||0)+'" style="width:75px;padding:7px"></div>').join('')+'</div>'+
     '<p class="hint" style="margin-top:15px">Duración audible: '+clock(effectiveDuration(t))+' · Original: '+clock(t.buffer.duration)+'</p>',
@@ -524,8 +544,8 @@ function openTrackActions(id){
   const t=current();
   modal('Opciones de la capa',
     '<div class="field"><label>Nombre de la capa</label><input type="text" id="renameInput" maxlength="80" value="'+html(t.name)+'" style="background:#1b222b;border:1px solid #495362;border-radius:7px;padding:11px;color:white"></div>'+
-    '<p style="margin-top:14px">Duplica una capa para crear armonías o combinar efectos distintos sin cambiar el audio original.</p>',
-    [{label:'ELIMINAR',type:'delete-track'},{label:'✂ DIVIDIR',type:'split-track'},{label:'DUPLICAR',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
+    '<p style="margin-top:14px">Un canal puede contener varias tomas. DIVIDIR corta el clip seleccionado, sin crear otro canal.</p>',
+    [{label:'ELIMINAR',type:'delete-track'},{label:'✂ DIVIDIR CLIP',type:'split-track'},{label:'＋ AÑADIR CLIP',type:'add-clip'},{label:'DUPLICAR CANAL',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
 }
 
 async function listMicrophones(){
@@ -871,7 +891,9 @@ async function setSetting(key,value,element){
   }
 }
 async function setTiming(key,value){
-  const t=current();if(!t)return;
+  const track=current();if(!track)return;
+  const t=Array.isArray(track.clips)?getEditableClip(track,state.selectedClip):track;
+  if(!t)return;
   const n=clamp(value,0,key==='offset'?3600:t.buffer.duration);
   t[key]=n;
   const maxTrim=t.buffer.duration-.02;
@@ -884,6 +906,7 @@ async function setTiming(key,value){
 function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(action==='edit'){openTrackActions(id);return;}
+  if(action==='add-clip'){state.clipImportTrack=id;$('#clipFileInput').click();return;}
   if(action==='mute'||action==='solo'){
     checkpoint();t[action==='mute'?'muted':'solo']=!t[action==='mute'?'muted':'solo'];
     render();restartPlayback();
@@ -901,6 +924,7 @@ function handleModalAction(action){
     toast(t.bypassEffects?'Escuchando audio original':'Escuchando efectos de esta capa');return;
   }
   if(action==='timing'){openTiming();return;}
+  if(action==='add-clip'){const t=current();if(t){state.clipImportTrack=t.id;closeModal();$('#clipFileInput').click();}return;}
   if(action==='save-named'){saveNewNamed();return;}
   if(action==='confirm-save-named'){confirmSaveNamed();return;}
   if(action==='load-local'){modalStack.length=0;$('#modalRoot').innerHTML='';load();return;}
@@ -923,25 +947,23 @@ function handleModalAction(action){
   if(action==='split-track'){
     try{
       const id=globalThis.crypto?.randomUUID?.()||'split-'+Date.now();
-      const [left,right]=splitClip(t,state.position,id);
       checkpoint();
-      const index=state.tracks.findIndex(x=>x.id===t.id);
-      right.color=COLORS[(COLORS.indexOf(t.color)+1)%COLORS.length];
-      state.tracks.splice(index,1,left,right);
-      state.selected=id;
+      const clipId=getEditableClip(t,state.selectedClip)?.id;
+      const [left,right]=splitTrackClip(t,clipId,state.position,id);
+      state.selected=t.id;state.selectedClip=right.id;
       modalStack.length=0;$('#modalRoot').innerHTML='';
       render();restartPlayback();
-      toast('Pista dividida en el marcador, sin modificar el audio original.');
+      toast('Clip dividido dentro del mismo canal, sin alterar el original.');
     }catch(error){toast(error.message);}
     return;
   }
   if(action==='duplicate-track'){
-    const clone={...t,id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
+    const clone={...cloneTrackMetadata(t),id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
     checkpoint();state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
   }
   if(action==='delete-track'){
     if(!confirm('¿Eliminar la capa "'+t.name+'"?'))return;
-    checkpoint();state.tracks=state.tracks.filter(x=>x.id!==t.id);state.selected=state.tracks[0]?.id||null;
+    checkpoint();state.tracks=state.tracks.filter(x=>x.id!==t.id);state.selected=state.tracks[0]?.id||null;state.selectedClip=null;
     modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa eliminada');
   }
 }
@@ -1002,10 +1024,12 @@ function setupClipDragging(){
     if(!track)return;
     event.preventDefault();event.stopPropagation();
     checkpoint();
-    state.dragClip={id:track.id,startX:event.clientX,original:track.offset||0,
+    const clip=Array.isArray(track.clips)?getEditableClip(track,handle.dataset.dragClip):track;
+    if(!clip)return;
+    state.dragClip={id:track.id,clipId:clip.id,startX:event.clientX,original:clip.offset||0,
       span:timelineSpan(state.tracks),width:handle.closest('.track-wave').getBoundingClientRect().width,
       handle};
-    state.selected=track.id;
+    state.selected=track.id;state.selectedClip=clip.id;
     handle.setPointerCapture(event.pointerId);
     handle.closest('.track-wave').classList.add('is-moving');
   });
@@ -1014,12 +1038,14 @@ function setupClipDragging(){
     if(!drag)return;
     const track=state.tracks.find(t=>t.id===drag.id);
     if(!track)return;
+    const clip=Array.isArray(track.clips)?getEditableClip(track,drag.clipId):track;
+    if(!clip)return;
     const delta=(event.clientX-drag.startX)/Math.max(1,drag.width)*drag.span;
-    setOffset(track,Math.max(0,drag.original+delta),state.bpm,state.snap);
+    setOffset(clip,Math.max(0,drag.original+delta),state.bpm,state.snap);
     const span=timelineSpan(state.tracks);
-    drag.handle.style.left=Math.max(0,Math.min(95,track.offset/span*100))+'%';
+    drag.handle.style.left=Math.max(0,Math.min(95,clip.offset/span*100))+'%';
     const label=drag.handle.parentElement.querySelector('.wave-label');
-    if(label)label.textContent='+'+track.offset.toFixed(2)+'s';
+    if(label)label.textContent=Array.isArray(track.clips)?track.clips.length+' CLIPS':'+'+clip.offset.toFixed(2)+'s';
     drawWaves();
   });
   const finish=event=>{
@@ -1027,7 +1053,8 @@ function setupClipDragging(){
     const drag=state.dragClip;
     if(event.type==='pointercancel'){
       const track=state.tracks.find(t=>t.id===drag.id);
-      if(track)track.offset=drag.original;
+      const clip=track&&(Array.isArray(track.clips)?getEditableClip(track,drag.clipId):track);
+      if(clip)clip.offset=drag.original;
     }
     state.dragClip=null;
     render();restartPlayback();
@@ -1059,6 +1086,10 @@ function wire(){
   });
   $('#importBtn').onclick=$('#addTrackBtn').onclick=$('#emptyImportBtn').onclick=()=>$('#fileInput').click();
   $('#fileInput').onchange=async e=>{await importFiles(e.target.files);e.target.value='';};
+  $('#clipFileInput').onchange=async e=>{
+    const target=state.clipImportTrack;state.clipImportTrack=null;
+    await importClipIntoTrack(e.target.files?.[0],target);e.target.value='';
+  };
   $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
@@ -1077,12 +1108,19 @@ function wire(){
     if(wave){
       const rect=wave.getBoundingClientRect(),full=projectDuration(state.tracks);
       state.position=Math.min(full,pointerTime(e.clientX,rect,timelineSpan(state.tracks)));
+      const track=state.tracks.find(t=>t.id===wave.dataset.wave);
+      if(track){
+        state.selected=track.id;
+        const hit=clipsOf(track).find(clip=>state.position>=clip.offset&&state.position<=clip.offset+clipDuration(clip));
+        state.selectedClip=hit?.id||null;
+        renderInspector();renderMixer();
+      }
       if(engine.playing)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(err=>toast(err.message));
       updateTransport();return;
     }
-    const card=e.target.closest('[data-track]');if(card){state.selected=card.dataset.track;render();}
+    const card=e.target.closest('[data-track]');if(card){state.selected=card.dataset.track;state.selectedClip=null;render();}
   });
-  $('#tracks').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.track-card')){e.preventDefault();state.selected=e.target.dataset.track;render();}});
+  $('#tracks').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.track-card')){e.preventDefault();state.selected=e.target.dataset.track;state.selectedClip=null;render();}});
   document.addEventListener('click',e=>{
     const opening=e.target.closest('[data-project-open]');if(opening){openNamed(opening.dataset.projectOpen);return;}
     const deletion=e.target.closest('[data-project-delete]');if(deletion){removeNamed(deletion.dataset.projectDelete);return;}

@@ -2,6 +2,7 @@ import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
+import {clipsOf,clipDuration} from './track-clips.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -254,11 +255,14 @@ export class AudioEngine {
     for(const id of BUS_IDS)this.buses.set(id,makeBus(ctx,this.output.gain,this.busSettings[id]));
     for(const track of tracks){
       if(track.muted || (solo&&!track.solo))continue;
-      if(effectiveDuration(track)<.002)continue;
+      const segments=clipsOf(track).filter(clip=>clipDuration(clip)>=.002);
+      if(!segments.length)continue;
       const graph=createGraph(ctx,track,this.buses.get(busForTrack(track)).gain,ir);
       this.graphs.set(track.id,graph);
-      const src=scheduleClip(ctx,track,graph,this.from,this.startCtxTime);
-      if(src)this.sources.push(src);
+      for(const clip of segments){
+        const source=scheduleClip(ctx,clip,graph,this.from,this.startCtxTime);
+        if(source)this.sources.push(source);
+      }
     }
     this.playing=this.sources.length>0;
     this.syncPitchTelemetry();
@@ -409,7 +413,7 @@ export class AudioEngine {
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
     for(const track of active){
       const graph=createGraph(offline,track,exportBuses.get(busForTrack(track)).gain,ir);
-      scheduleClip(offline,track,graph,0,0);
+      for(const clip of clipsOf(track))scheduleClip(offline,clip,graph,0,0);
     }
     const rendered=await offline.startRendering();
     return encodeWav(rendered,depth);

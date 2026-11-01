@@ -13,8 +13,11 @@ export const PRESETS = {
 export function defaults() {return {autotune:0,retune:60,clean:25,brightness:50,warmth:20,echo:0,space:8,drive:0,volume:85,pan:0,fadeIn:0,fadeOut:0,trimStart:0,trimEnd:0,offset:0,key:0,scale:0,muted:false,solo:false,bypassEffects:false,tuneX:.16,tuneY:-1,tunePreset:'natural',preset:'natural'};}
 export function clamp(value,min,max) {return Math.min(max,Math.max(min,Number(value)||0));}
 export function clock(seconds) { const s=Math.max(0,Math.floor(seconds||0)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
-export function effectiveDuration(track) {return Math.max(0,track.buffer.duration-(track.trimStart||0)-(track.trimEnd||0));}
-export function projectDuration(tracks) {return tracks.reduce((a,t)=>Math.max(a,(t.offset||0)+effectiveDuration(t)),0);}
+export function effectiveDuration(track) {
+  if(Array.isArray(track.clips))return track.clips.reduce((sum,clip)=>sum+Math.max(0,(clip.buffer?.duration||0)-(clip.trimStart||0)-(clip.trimEnd||0)),0);
+  return Math.max(0,track.buffer.duration-(track.trimStart||0)-(track.trimEnd||0));
+}
+export function projectDuration(tracks) {return tracks.reduce((a,t)=>Math.max(a,...(Array.isArray(t.clips)?t.clips:[t]).map(c=>(c.offset||0)+Math.max(0,(c.buffer?.duration||0)-(c.trimStart||0)-(c.trimEnd||0)))),0);}
 export function nearestNote(midi,key=0,scale=0) {
   const allowed=scale===1?[0,2,3,5,7,8,10]:scale===2?[0,1,2,3,4,5,6,7,8,9,10,11]:[0,2,4,5,7,9,11];
   let closest=Math.round(midi),diff=Infinity;
