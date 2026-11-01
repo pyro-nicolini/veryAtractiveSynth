@@ -1,6 +1,6 @@
 // Cache only application assets; never cache microphone data or imported user audio.
-const CACHE = 'vas-studio-v1';
-const ASSETS = ['./','./index.html','./src/styles.css','./src/app.js','./src/engine.js','./src/dsp.js','./src/project-store.js','./src/worklets/voice-processor.js','./assets/icon.svg','./manifest.webmanifest'];
+const CACHE = 'vas-studio-v2';
+const ASSETS = ['./','./index.html','./src/styles.css','./src/app.js','./src/engine.js','./src/dsp.js','./src/project-store.js','./src/recording-utils.js','./src/portable-project.js','./src/zip-store.js','./src/worklets/capture-processor.js','./src/worklets/voice-processor.js','./assets/icon.svg','./manifest.webmanifest'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

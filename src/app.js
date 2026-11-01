@@ -1,15 +1,18 @@
 import {AudioEngine} from './engine.js';
 import {KEYS,SCALES,COLORS,PRESETS,defaults,clock,clamp,projectDuration,effectiveDuration,peaks,synthBeat,downloadBlob,safeFilename} from './dsp.js';
 import {saveSession,loadSession} from './project-store.js';
+import {MAX_RECORDING_SECONDS,meterLevel,audioFileHint} from './recording-utils.js';
+import {exportProject,importProject} from './portable-project.js';
+import {zipStore} from './zip-store.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,master:85,busy:false};
+const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,master:85,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
-  timeline:['Línea de tiempo','Cada forma de onda representa un sonido. Toca cualquier punto de una onda para ir a ese momento de la mezcla. En AJUSTAR TIEMPOS puedes desplazar, recortar y suavizar entradas y salidas.'],
+  timeline:['Línea de tiempo','Cada forma de onda representa un sonido. Toca o arrastra el cabezal verde en la regla de tiempo para adelantar o retroceder. También puedes tocar una onda. Usa las flechas izquierda y derecha del teclado para avanzar o retroceder 1 segundo. En AJUSTAR TIEMPOS puedes desplazar, recortar y suavizar entradas y salidas.'],
   inspector:['Ajustes de la capa','Los tres controles principales son volumen, afinación y limpieza. Prueba un estilo predefinido si no sabes por dónde empezar. Los efectos adicionales se encuentran en MÁS EFECTOS.'],
   volume:['Volumen de esta capa','Sube o baja únicamente el sonido seleccionado. No cambia el volumen de las otras pistas.'],
   master:['Volumen final','Controla lo que escuchas y lo que sale en el archivo exportado. Evita subirlo tanto que distorsione.'],
@@ -29,12 +32,43 @@ const HELP={
   fades:['Transiciones suaves','Entrada: el sonido aparece progresivamente. Salida: desaparece progresivamente. Ideal para introducciones y finales.'],
   presets:['Estilos listos para usar','Selecciona un estilo para ajustar varios efectos de la capa de una vez. Después puedes modificar cualquier control por separado.'],
   export:['Exportación WAV','Se genera una mezcla estéreo WAV con los efectos aplicados. 16-bit es compatible con casi todos los equipos; 24-bit se usa habitualmente para producción; 32-bit float sirve para continuar mezclando. Una calidad de salida alta no puede recuperar detalle perdido en una grabación original.'],
-  recording:['Grabar con el micrófono','Permite grabar tu voz como una capa independiente. Usa auriculares para cantar sobre una base. Puedes activar escucharte con efectos, pero eso puede producir acoples si usas altavoces. La toma se guarda localmente al detener.'],
-  monitor:['Escucharme con efectos','Si activas esta opción oirás tu micrófono procesado mientras cantas. Requiere auriculares para evitar acoples y puede haber latencia según el dispositivo.'],
-  offline:['Tus sonidos son privados','Nada se envía a servidores. Guarda la sesión en este navegador con GUARDAR. El almacenamiento local puede borrarse al limpiar los datos del navegador; exporta tus mezclas importantes.']
+  recording:['Grabar con el micrófono','Selecciona el micrófono, presiona PROBAR ENTRADA y comprueba que el medidor se mueve con tu voz. Después comienza a grabar: se dibujará una forma de onda mientras cantas. La captura es PCM local (sin incompatibilidades del archivo comprimido de MediaRecorder). Usa auriculares para cantar sobre la base.'],
+  monitor:['Escucharme con efectos','Si activas esta opción oirás tu micrófono con efectos. Usa auriculares cableados para evitar acoples y reducir la latencia. Para activar o desactivar esta opción, vuelve a probar la entrada.'],
+  offline:['Tus sonidos son privados','Nada se envía a servidores. Guarda la sesión en este navegador con GUARDAR. El almacenamiento local puede borrarse al limpiar los datos del navegador; exporta tus mezclas importantes.'],
+  microphone:['Elegir la entrada de sonido','Elige entre los micrófonos detectados. Pulsa PROBAR ENTRADA para conceder permiso: los nombres completos suelen aparecer solo después de autorizarlo. Si conectas otro micrófono, vuelve a seleccionarlo.'],
+  signal:['Comprobar que llega sonido','Habla al micrófono. La barra y la onda deberían moverse. Verde: señal correcta. Rosado: nivel alto. Si no se mueven, cambia micrófono o revisa los permisos del sistema.'],
+  seek:['Mover el momento actual','Toca o arrastra la regla superior de la línea de tiempo. Puedes usar las flechas del teclado (1 segundo) y Mayús + flecha (5 segundos).']
 };
 let toastTimer,raf=0;
 const modalStack=[];
+const history={past:[],future:[]};
+function captureState(){
+  return {tracks:state.tracks.map(t=>({...t})),selected:state.selected,position:state.position,master:state.master};
+}
+function historyUI(){
+  if($('#undoBtn'))$('#undoBtn').disabled=!history.past.length||!!state.recording;
+  if($('#redoBtn'))$('#redoBtn').disabled=!history.future.length||!!state.recording;
+}
+function checkpoint(){
+  if(state.recording)return;
+  history.past.push(captureState());if(history.past.length>25)history.past.shift();
+  history.future=[];historyUI();
+}
+function restoreState(snapshot){
+  const wasPlaying=engine.playing;engine.stop();cancelAnimationFrame(raf);
+  state.tracks=snapshot.tracks.map(t=>({...t}));state.selected=snapshot.selected;state.position=snapshot.position;
+  state.master=snapshot.master;engine.setMaster(state.master);
+  $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
+  render();if(wasPlaying)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(e=>toast(e.message));
+}
+function undo(){
+  if(!history.past.length||state.recording)return;
+  history.future.push(captureState());restoreState(history.past.pop());historyUI();
+}
+function redo(){
+  if(!history.future.length||state.recording)return;
+  history.past.push(captureState());restoreState(history.future.pop());historyUI();
+}
 const html=(text)=>String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trackColor=(t)=>COLORS.includes(t.color)?t.color:COLORS[0];
 const current=()=>state.tracks.find(t=>t.id===state.selected);
@@ -50,8 +84,11 @@ function modal(title,content,actions=[]){
   $('.focus-panel')?.focus();
 }
 function closeModal(){
-  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();return;}
+  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();return;}
   if(state.recording){toast('Detén la grabación antes de cerrar');return;}
+  cancelAnimationFrame(state.meterFrame);
+  state.preview=null;
+  engine.stopMic();
   $('#modalRoot').innerHTML='';
 }
 function dial(label,key,value,color='var(--green)',min=0,max=100){
@@ -62,13 +99,15 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
 function addTrack(buffer,name,type='audio',offset=0){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
   const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset)};
-  state.tracks.push(t);state.selected=id;render();if(engine.playing)restartPlayback();
+  checkpoint();state.tracks.push(t);state.selected=id;render();if(engine.playing)restartPlayback();
   return t;
 }
 function render(){
   $('#trackCount').textContent=String(state.tracks.length).padStart(2,'0');
   const duration=projectDuration(state.tracks);
   $('#endTimeLabel').textContent=clock(duration);
+  $('#ruler').setAttribute('aria-valuemax',String(Math.ceil(duration)));
+  $('#ruler').setAttribute('aria-valuenow',String(Math.round(state.position)));
   $('#emptyState').classList.toggle('hidden',state.tracks.length>0);
   $('#tracks').innerHTML=state.tracks.map((t,i)=>{
     const active=t.id===state.selected;
@@ -120,6 +159,8 @@ function renderInspector(){
 function updateTransport(){
   const duration=projectDuration(state.tracks),pos=engine.playing?engine.position():state.position;
   $('#timeDisplay').innerHTML=clock(pos)+' <span>/ '+clock(duration)+'</span>';
+  $('#ruler').setAttribute('aria-valuenow',String(Math.round(pos)));
+  $('#ruler').setAttribute('aria-valuetext',clock(pos));
   $('#playBtn').textContent=engine.playing?'Ⅱ':'▶';
   $('#playBtn').setAttribute('aria-label',engine.playing?'Pausar':'Reproducir');
   const percent=duration>0?clamp(pos/duration*100,0,100):0;
@@ -151,12 +192,21 @@ async function restartPlayback(){
 function stop(){engine.stop();state.position=0;cancelAnimationFrame(raf);render();}
 async function importFiles(files){
   if(!files?.length)return;
-  toast('Preparando sonidos...');
+  toast('Preparando sonidos del teléfono o computador...');
+  let imported=0;const failures=[];
   for(const file of Array.from(files)){
-    try{const b=await engine.decode(file);addTrack(b,file.name.replace(/\.[^.]+$/,''));}
-    catch(e){toast(file.name+': '+e.message);}
+    try{
+      const b=await engine.decode(file);
+      addTrack(b,file.name.replace(/\.[^.]+$/,''));
+      imported++;
+    }catch(error){failures.push(file.name+': '+error.message+' '+audioFileHint(file));}
   }
-  toast('Sonido listo. Selecciona una capa para personalizarlo.');
+  if(failures.length){
+    modal('Algunos audios no se pudieron abrir','<p>Se importaron '+imported+' archivo(s). Estos formatos necesitan atención:</p>'+
+      '<div class="note">'+failures.map(x=>'<p>'+html(x)+'</p>').join('')+'</div>'+
+      '<p>Prueba a exportar las notas de voz desde tu teléfono como WAV PCM o M4A AAC. No subimos tus archivos a ningún servidor.</p>',
+      [{label:'ENTENDIDO',type:'close',primary:true}]);
+  }else if(imported)toast('Sonido listo. ¡Ya puedes crear!');
 }
 async function demo(){
   try{
@@ -178,6 +228,7 @@ function openEffects(){
 }
 function openTiming(){
   const t=current();if(!t)return;
+  checkpoint();
   const avail=t.buffer.duration,controls=[
     ['offset','Mover sonido (segundos)','position',Math.max(180,Math.ceil(projectDuration(state.tracks))),.05],
     ['trimStart','Recortar inicio (segundos)','trims',Math.max(0,avail-(t.trimEnd||0)-.01),.05],
@@ -199,64 +250,174 @@ function openTrackActions(id){
     '<p style="margin-top:14px">Duplica una capa para crear armonías o combinar efectos distintos sin cambiar el audio original.</p>',
     [{label:'ELIMINAR',type:'delete-track'},{label:'DUPLICAR',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
 }
+
+async function listMicrophones(){
+  try{return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');}
+  catch{return [];}
+}
+async function updateMicrophoneChoices(preferred=state.preferredInput){
+  const select=$('#micSelect');if(!select)return;
+  const devices=await listMicrophones();
+  if(!$('#micSelect'))return;
+  select.innerHTML='<option value="">Micrófono predeterminado</option>'+devices
+    .filter(d=>d.deviceId && d.deviceId!=='default')
+    .map((d,i)=>'<option value="'+html(d.deviceId)+'">'+html(d.label||'Micrófono '+(i+1))+'</option>').join('');
+  const known=Array.from(select.options).some(option=>option.value===preferred);
+  select.value=known?preferred:'';
+  state.preferredInput=select.value;
+}
+function drawMicPreview(){
+  const preview=state.preview;
+  if(!preview)return;
+  if(!$('#recordMeter'))return;
+  const samples=new Float32Array(2048);
+  if(engine.getMicMeterData(samples)){
+    const {rms,peak}=meterLevel(samples);
+    const level=Math.min(100,Math.round(Math.sqrt(rms)*170));
+    $('#recordMeter').style.width=level+'%';
+    $('#recordMeter').style.background=peak>.92?'var(--pink)':'var(--green)';
+    $('#recordPeak').textContent=peak>.92?'¡MUY ALTO!':rms>.006?'ENTRADA ACTIVA':'SIN SEÑAL';
+    state.recordMeterHistory.push(Math.min(1,peak));
+    if(state.recordMeterHistory.length>180)state.recordMeterHistory.shift();
+    const canvas=$('#recordWave');
+    if(canvas){
+      const bounds=canvas.getBoundingClientRect(),scale=Math.min(2,devicePixelRatio||1);
+      const width=Math.max(1,Math.round(bounds.width*scale)),height=Math.max(1,Math.round(bounds.height*scale));
+      if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+      const g=canvas.getContext('2d');g.clearRect(0,0,width,height);
+      g.strokeStyle='#4e6059';g.beginPath();g.moveTo(0,height/2);g.lineTo(width,height/2);g.stroke();
+      g.strokeStyle=peak>.92?'#ff73b7':'#a5ff73';g.lineWidth=Math.max(1,2*scale);g.beginPath();
+      const history=state.recordMeterHistory,span=width/Math.max(1,history.length);
+      history.forEach((value,i)=>{
+        const x=i*span+span/2,h=Math.max(2,value*height*.43);
+        g.moveTo(x,height/2-h);g.lineTo(x,height/2+h);
+      });
+      g.stroke();
+    }
+  }
+  if(state.recording){
+    const seconds=state.recording.seconds || (performance.now()-state.recording.started)/1000;
+    const timer=$('#recordTimer');
+    if(timer)timer.textContent='● '+clock(seconds)+' · GRABANDO';
+    const ghost=$('#recordingGhost');
+    if(ghost && (!state.lastGhostPaint || performance.now()-state.lastGhostPaint>140)){
+      state.lastGhostPaint=performance.now();
+      ghost.innerHTML='<div class="recording-ghost"><span class="recording-live">● REC</span><span>Mi voz se está capturando</span><span>'+clock(seconds)+'</span><span class="ghost-level">'+Array.from({length:13},(_,i)=>'<b style="height:'+Math.max(3,Math.round((state.recordMeterHistory.at(-(13-i))||0)*29))+'px"></b>').join('')+'</span></div>';
+    }
+  }
+  state.meterFrame=requestAnimationFrame(drawMicPreview);
+}
+async function prepareSelectedMic(){
+  if(state.recording)return;
+  if(!navigator.mediaDevices?.getUserMedia)return toast('Se requiere HTTPS o localhost y un navegador compatible');
+  const selected=$('#micSelect')?.value||'',monitor=!!$('#monitorToggle')?.checked;
+  const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
+  state.preferredInput=selected;
+  const status=$('#micStatus');if(status)status.textContent='Solicitando permiso al micrófono...';
+  let stream;
+  try{
+    // Release the previous device before opening a different one.
+    cancelAnimationFrame(state.meterFrame);engine.stopMic();state.preview=null;
+    await engine.ready(); // Resume audio while the PROBAR button still has user activation.
+    stream=await navigator.mediaDevices.getUserMedia({audio:{
+      ...(selected?{deviceId:{exact:selected}}:{}),
+      echoCancellation:!monitor,noiseSuppression:!monitor,autoGainControl:false
+    },video:false});
+    if(!$('#micSelect')){stream.getTracks().forEach(t=>t.stop());return;}
+    const monitorTrack={...defaults(),autotune:tune,clean,space:8,volume:75};
+    await engine.prepareMic(stream,monitorTrack,monitor);
+    state.preview={stream,monitorTrack,monitor};
+    stream.getAudioTracks()[0]?.addEventListener('ended',()=>{
+      if(state.recording)stopRecording();
+      else {state.preview=null;$('#micStatus').textContent='Micrófono desconectado: vuelve a probar la entrada.';}
+    },{once:true});
+    const actualId=stream.getAudioTracks()[0]?.getSettings?.().deviceId || selected;
+    await updateMicrophoneChoices(actualId);
+    if($('#micStatus'))$('#micStatus').textContent='ENTRADA CONECTADA · HABLA PARA PROBAR';
+    const start=$('[data-action="start-record"]');if(start)start.disabled=false;
+    const test=$('[data-action="test-mic"]');if(test)test.textContent='↻ CAMBIAR / PROBAR';
+    state.recordMeterHistory=[];drawMicPreview();
+  }catch(error){
+    stream?.getTracks().forEach(t=>t.stop());
+    const msg=error.name==='NotAllowedError'?'Permiso denegado. Activa el micrófono en el navegador y en tu sistema.':
+      error.name==='OverconstrainedError'?'El dispositivo elegido ya no está disponible. Selecciona el predeterminado.':
+      error.name==='NotFoundError'?'No se encontró ningún micrófono conectado.':error.message;
+    if($('#micStatus'))$('#micStatus').textContent=msg;
+    toast(msg);
+  }
+}
 async function openRecording(){
   if(state.recording)return;
-  if(!navigator.mediaDevices?.getUserMedia)return help('recording');
+  if(!navigator.mediaDevices?.getUserMedia){
+    modal('Micrófono no disponible','<p>Para grabar desde el teléfono, abre el estudio en HTTPS. En computador utiliza http://127.0.0.1:4173. Revisa también los permisos del navegador.</p>',[{label:'ENTENDIDO',type:'close',primary:true}]);
+    return;
+  }
   modal('Grabar tu voz',
-    '<p>Tu voz se agregará como una capa. Puedes reproducir la base al mismo tiempo y grabar encima.</p>'+
-    '<div class="record-visual"><span class="record-glyph"></span><span id="recordTimer">LISTO PARA GRABAR</span></div>'+
+    '<p>Elige tu micrófono, pruébalo y comprueba que llega señal. Después graba sobre tu base.</p>'+
+    '<div class="field"><label for="micSelect">MICRÓFONO '+buttonInfo('microphone')+'</label><select id="micSelect" class="modal-select"><option value="">Micrófono predeterminado</option></select></div>'+
+    '<div id="micStatus" class="mic-status" role="status">Selecciona y prueba tu micrófono</div>'+
+    '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+
     '<div class="control-row"><label for="monitorToggle">Escucharme con efectos (auriculares)</label><input type="checkbox" class="toggle-switch" id="monitorToggle">'+buttonInfo('monitor')+'</div>'+
     '<div class="control-row"><label for="recordTune">Afinación al escucharme</label><input type="range" min="0" max="100" value="80" id="recordTune">'+buttonInfo('autotune')+'</div>'+
     '<div class="control-row"><label for="recordClean">Limpieza al escucharme</label><input type="range" min="0" max="100" value="35" id="recordClean">'+buttonInfo('clean')+'</div>'+
-    '<div class="note">Usa auriculares si reproduces una pista de fondo. La grabación se conserva sin efectos destructivos; podrás aplicar efectos a su capa después.</div>',
-    [{label:'COMENZAR A GRABAR',type:'start-record',primary:true}]);
+    '<div class="control-row"><label for="recordBacking">Reproducir base al grabar</label><input type="checkbox" class="toggle-switch" id="recordBacking" '+(state.tracks.length?'checked':'')+'></div>'+
+    '<div class="note">Grabación PCM sin archivos comprimidos intermedios. El medidor se mueve cuando llega tu voz. Duración máxima por toma: 5 minutos.</div>',
+    [{label:'PROBAR ENTRADA',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
+  const start=$('[data-action="start-record"]');if(start)start.disabled=true;
+  await updateMicrophoneChoices();
 }
 async function startRecording(){
-  if(state.recording)return;
-  const monitor=$('#monitorToggle')?.checked||false,tune=Number($('#recordTune')?.value||80),clean=Number($('#recordClean')?.value||35);
-  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){toast('Este navegador no permite grabar audio');return;}
-  let stream;
+  if(state.recording||!state.preview)return toast('Primero presiona PROBAR ENTRADA');
+  const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
+  state.preview.monitorTrack.autotune=tune;state.preview.monitorTrack.clean=clean;
+  engine.updateMic(state.preview.monitorTrack);
+  if($('#recordBacking')?.checked && state.tracks.length && !engine.playing){
+    try{await engine.play(state.tracks,state.position);runTicker();render();}
+    catch(error){toast('No se pudo reproducir la base: '+error.message);}
+  }
+  const offset=engine.playing?engine.position():state.position;
+  const data={offset,started:performance.now(),seconds:0,tune,clean,stopping:false};
   try{
-    await engine.ready();
-    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:!monitor,noiseSuppression:!monitor,autoGainControl:!monitor},video:false});
-    const recorder=new MediaRecorder(stream),chunks=[],offset=engine.playing?engine.position():state.position;
-    const monitorTrack={...defaults(),autotune:tune,clean,space:8,volume:80};
-    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-    recorder.onerror=()=>toast('Error de grabación: revisa el micrófono');
-    recorder.onstop=async()=>{
-      try{
-        engine.stopMonitor();
-        stream.getTracks().forEach(t=>t.stop());
-        const blob=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});
-        if(blob.size<100)return toast('La grabación quedó vacía');
-        const buffer=await engine.decode(blob);
-        const t=addTrack(buffer,'Mi voz '+(state.tracks.filter(x=>x.type==='voice').length+1),'voice',offset);
-        Object.assign(t,{autotune:tune,clean,retune:70,space:12,preset:'star'});
-        render();toast('¡Voz agregada! Puedes afinarla y escucharla con la base.');
-      }catch(err){toast('No se pudo preparar la toma: '+err.message);}
-      finally{state.recording=null;modalStack.length=0;$('#modalRoot').innerHTML='';}
-    };
-    if(monitor)await engine.monitor(stream,monitorTrack);
-    state.recording={recorder,stream,started:Date.now(),monitorTrack};
-    recorder.start(250);
-    const actions=$('.focus-footer');actions.innerHTML='<button class="button button-primary" data-action="stop-record">■ DETENER Y AGREGAR</button>';
-    $('#recordTimer').textContent='● GRABANDO...';
-    const timer=setInterval(()=>{
-      if(!state.recording){clearInterval(timer);return;}
-      const display=$('#recordTimer');if(display)display.textContent='● '+clock((Date.now()-state.recording.started)/1000)+' · GRABANDO';
-    },250);
-  }catch(error){
-    stream?.getTracks().forEach(t=>t.stop());
-    engine.stopMonitor();
-    toast('No se pudo iniciar el micrófono: '+error.message);
+    state.recording=data;
+    const capture=await engine.startCapture(seconds=>{
+      if(state.recording)state.recording.seconds=seconds;
+      if(seconds>=MAX_RECORDING_SECONDS&&!state.recording?.stopping)stopRecording();
+    });
+    state.recording={...data,capture};
+    if($('#recordTimer'))$('#recordTimer').textContent='● 00:00 · GRABANDO';
+    if($('#micStatus'))$('#micStatus').textContent='GRABACIÓN ACTIVA · LA ONDA SE ESTÁ DIBUJANDO';
+    const select=$('#micSelect');if(select)select.disabled=true;
+    const actions=$('.focus-footer');
+    if(actions)actions.innerHTML='<button class="button button-primary" data-action="stop-record">■ DETENER Y AGREGAR</button>';
+  }catch(error){state.recording=null;toast('No se pudo comenzar: '+error.message);}
+}
+async function stopRecording(){
+  const recording=state.recording;
+  if(!recording||recording.stopping)return;
+  recording.stopping=true;
+  if($('#recordTimer'))$('#recordTimer').textContent='PREPARANDO EL AUDIO...';
+  try{
+    const buffer=await engine.stopCapture();
+    if(!buffer||buffer.duration<.05)throw Error('La toma es demasiado corta o quedó vacía');
+    const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',recording.offset);
+    Object.assign(track,{autotune:recording.tune,clean:recording.clean,retune:70,space:12,preset:'custom'});
+    toast('¡Toma grabada! La capa de voz ya aparece en tu mezcla.');
+  }catch(error){toast('No se pudo finalizar la grabación: '+error.message);}
+  finally{
+    state.recording=null;
+    cancelAnimationFrame(state.meterFrame);
+    engine.stopMic();state.preview=null;
+    modalStack.length=0;$('#modalRoot').innerHTML='';
+    const ghost=$('#recordingGhost');if(ghost)ghost.innerHTML='';
+    render();
   }
 }
-function stopRecording(){if(!state.recording)return;const rec=state.recording.recorder;if(rec.state!=='inactive')rec.stop();$('#recordTimer').textContent='PREPARANDO TU VOZ...';}
+
 function openExport(){
   if(!state.tracks.length)return toast('Agrega un sonido antes de exportar');
   modal('Exportar mi canción',
     '<p>Elige cómo quieres recibir tu sonido. Se crea un archivo WAV local con tus efectos.</p>'+
-    '<div class="field"><label>Qué quieres exportar</label><select id="exportScope" class="modal-select"><option value="mix">Toda la mezcla</option>'+(current()?'<option value="selected">Solo capa: '+html(current().name)+'</option>':'')+'</select></div>'+
+    '<div class="field"><label>Qué quieres exportar</label><select id="exportScope" class="modal-select"><option value="mix">Toda la mezcla WAV</option><option value="stems">Pistas separadas (ZIP)</option><option value="project">Proyecto editable (.vasproject)</option>'+(current()?'<option value="selected">Solo capa: '+html(current().name)+'</option>':'')+'</select></div>'+
     '<div class="field"><label>Calidad</label><select id="exportDepth" class="modal-select"><option value="24">WAV 24-bit · Producción (recomendado)</option><option value="16">WAV 16-bit · Compatible</option><option value="32">WAV 32-bit float · Continuar mezclando</option></select></div>'+
     '<div class="field"><label>Frecuencia</label><select id="exportRate" class="modal-select"><option value="48000">48 kHz · Video y producción</option><option value="44100">44.1 kHz · Música</option></select></div>'+
     '<div class="note" style="margin-top:16px">No se puede convertir una grabación de baja calidad en una fuente realmente profesional solo aumentando los bits. Se respetarán los efectos que escuchas.</div>',
@@ -268,9 +429,26 @@ async function performExport(){
   const depth=Number($('#exportDepth')?.value||24),rate=Number($('#exportRate')?.value||48000);
   const onlyId=$('#exportScope')?.value==='selected'?state.selected:null;
   try{
-    const blob=await engine.exportMix(state.tracks,{depth,rate,onlyId});
-    downloadBlob(blob,safeFilename(onlyId?current().name:'veryAtractiveSynth-mi-mezcla')+'-'+rate/1000+'k-'+depth+'bit.wav');
-    modalStack.length=0;$('#modalRoot').innerHTML='';toast('Tu archivo WAV está listo.');
+    const scope=$('#exportScope')?.value||'mix';
+    if(scope==='project'){
+      const blob=await exportProject(state.tracks,state.master);
+      downloadBlob(blob,'veryAtractiveSynth-proyecto.vasproject');
+      toast('Proyecto editable respaldado con los audios originales.');
+    }else if(scope==='stems'){
+      const entries=[];
+      for(let i=0;i<state.tracks.length;i++){
+        const track={...state.tracks[i],muted:false,solo:false};
+        const data=await engine.exportMix([track],{depth,rate});
+        entries.push({name:'pistas/'+String(i+1).padStart(2,'0')+'-'+safeFilename(track.name)+'.wav',data});
+      }
+      downloadBlob(await zipStore(entries),'veryAtractiveSynth-pistas-separadas.zip');
+      toast('Pistas separadas listas en un archivo ZIP.');
+    }else{
+      const blob=await engine.exportMix(state.tracks,{depth,rate,onlyId});
+      downloadBlob(blob,safeFilename(onlyId?current().name:'veryAtractiveSynth-mi-mezcla')+'-'+rate/1000+'k-'+depth+'bit.wav');
+      toast('Tu WAV está listo.');
+    }
+    modalStack.length=0;$('#modalRoot').innerHTML='';
   }catch(e){toast('Exportación: '+e.message);}
   finally{state.busy=false;if(btn)btn.textContent='CREAR MI WAV';}
 }
@@ -286,10 +464,28 @@ async function load(){
   try{
     engine.stop();const ctx=await engine.ready(),data=await loadSession(ctx);
     if(!data)return toast('Todavía no tienes una sesión guardada');
-    state.tracks=data.tracks;state.selected=state.tracks[0]?.id||null;state.master=data.master||85;
+    checkpoint();state.tracks=data.tracks;state.selected=state.tracks[0]?.id||null;state.master=data.master||85;
     engine.setMaster(state.master);$('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
     state.position=0;render();toast('Sesión recuperada. Todo está en este dispositivo.');
   }catch(e){toast('No se pudo recuperar: '+e.message);}
+}
+function openProjectMenu(){
+  modal('Abrir tu proyecto',
+    '<p>Recupera tu última sesión local o abre un respaldo portátil .vasproject. Todo se procesa en este dispositivo.</p>'+
+    '<div class="note">Para crear un respaldo usa EXPORTAR → Proyecto editable. Guarda todos los audios originales y sus parámetros.</div>',
+    [{label:'ABRIR RESPALDO',type:'browse-project'},{label:'ÚLTIMA SESIÓN LOCAL',type:'load-local',primary:true}]);
+}
+async function loadPortable(file){
+  if(!file)return;
+  if(state.tracks.length&&!confirm('¿Reemplazar la mezcla actual por el proyecto de respaldo?'))return;
+  try{
+    const ctx=await engine.ready(),bundle=await importProject(file,ctx);
+    checkpoint();engine.stop();state.tracks=bundle.tracks;state.selected=bundle.tracks[0]?.id||null;
+    state.position=0;state.master=bundle.master;engine.setMaster(state.master);
+    $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
+    modalStack.length=0;$('#modalRoot').innerHTML='';render();
+    toast('Proyecto recuperado desde tu respaldo.');
+  }catch(error){toast('No se pudo abrir el proyecto: '+error.message);}
 }
 async function setSetting(key,value,element){
   const t=current();if(!t||!(key in defaults()))return;
@@ -317,7 +513,7 @@ function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(action==='edit'){openTrackActions(id);return;}
   if(action==='mute'||action==='solo'){
-    t[action==='mute'?'muted':'solo']=!t[action==='mute'?'muted':'solo'];
+    checkpoint();t[action==='mute'?'muted':'solo']=!t[action==='mute'?'muted':'solo'];
     render();restartPlayback();
   }
 }
@@ -325,27 +521,82 @@ function handleModalAction(action){
   if(action==='close-modal'||action==='close'){closeModal();return;}
   if(action==='effects'){openEffects();return;}
   if(action==='timing'){openTiming();return;}
+  if(action==='load-local'){modalStack.length=0;$('#modalRoot').innerHTML='';load();return;}
+  if(action==='browse-project'){$('#projectInput').click();return;}
+  if(action==='test-mic'){prepareSelectedMic();return;}
   if(action==='start-record'){startRecording();return;}
   if(action==='stop-record'){stopRecording();return;}
   if(action==='do-export'){performExport();return;}
   const t=current();if(!t)return;
-  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
+  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');checkpoint();t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
   if(action==='duplicate-track'){
     const clone={...t,id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
-    state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
+    checkpoint();state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
   }
   if(action==='delete-track'){
     if(!confirm('¿Eliminar la capa "'+t.name+'"?'))return;
-    state.tracks=state.tracks.filter(x=>x.id!==t.id);state.selected=state.tracks[0]?.id||null;
+    checkpoint();state.tracks=state.tracks.filter(x=>x.id!==t.id);state.selected=state.tracks[0]?.id||null;
     modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa eliminada');
   }
 }
+
+function setupScrubber(){
+  const ruler=$('#ruler');
+  let active=null, resume=false;
+  const seekPoint=clientX=>{
+    const duration=projectDuration(state.tracks);
+    if(!duration)return;
+    const rect=ruler.getBoundingClientRect();
+    state.position=clamp((clientX-rect.left)/Math.max(rect.width,1),0,1)*duration;
+    updateTransport();
+  };
+  ruler.addEventListener('pointerdown',event=>{
+    if(!state.tracks.length || event.button!==0)return;
+    event.preventDefault();
+    active=event.pointerId;resume=engine.playing;
+    if(resume){state.position=engine.pause();cancelAnimationFrame(raf);}
+    state.scrubbing=true;
+    ruler.setPointerCapture(event.pointerId);
+    seekPoint(event.clientX);
+  });
+  ruler.addEventListener('pointermove',event=>{
+    if(active!==event.pointerId)return;
+    seekPoint(event.clientX);
+  });
+  const end=()=>{
+    if(active===null)return;
+    active=null;state.scrubbing=false;
+    if(resume){
+      resume=false;
+      engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(err=>toast(err.message));
+    }else updateTransport();
+  };
+  ruler.addEventListener('pointerup',end);
+  ruler.addEventListener('pointercancel',end);
+  ruler.addEventListener('keydown',event=>{
+    if(!state.tracks.length)return;
+    const length=projectDuration(state.tracks),step=event.shiftKey?5:1;
+    if(event.key==='ArrowRight')state.position=Math.min(length,state.position+step);
+    else if(event.key==='ArrowLeft')state.position=Math.max(0,state.position-step);
+    else if(event.key==='Home')state.position=0;
+    else if(event.key==='End')state.position=length;
+    else return;
+    event.preventDefault();
+    if(engine.playing)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(err=>toast(err.message));
+    updateTransport();
+  });
+}
 function wire(){
+  setupScrubber();
+
   $('#importBtn').onclick=$('#addTrackBtn').onclick=$('#emptyImportBtn').onclick=()=>$('#fileInput').click();
   $('#fileInput').onchange=async e=>{await importFiles(e.target.files);e.target.value='';};
   $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
-  $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=load;
+  $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=openProjectMenu;
+  $('#projectInput').onchange=async event=>{await loadPortable(event.target.files?.[0]);event.target.value='';};
+  $('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
+  document.addEventListener('pointerdown',event=>{if(event.target.matches('[data-setting], #masterVolume'))checkpoint();});
   $('#helpBtn').onclick=()=>help('studio');$('#tracksInfo').onclick=()=>help('tracks');
   $('#timelineInfo').onclick=()=>help('timeline');$('#inspectorInfo').onclick=()=>help('inspector');$('#masterInfo').onclick=()=>help('master');
   $('#masterVolume').oninput=e=>{state.master=Number(e.target.value);engine.setMaster(state.master);$('#volumeValue').textContent=state.master+'%';};
@@ -366,7 +617,7 @@ function wire(){
     const action=e.target.closest('[data-action]');if(action){handleModalAction(action.dataset.action);return;}
     const preset=e.target.closest('[data-preset]');if(preset){
       const t=current(),p=PRESETS[preset.dataset.preset];if(!t||!p)return;
-      Object.assign(t,p,{preset:preset.dataset.preset});engine.updateTrack(t);renderInspector();toast('Estilo aplicado: '+p.label);return;
+      checkpoint();Object.assign(t,p,{preset:preset.dataset.preset});engine.updateTrack(t);renderInspector();toast('Estilo aplicado: '+p.label);return;
     }
     if(e.target.id==='modalBackdrop')closeModal();
   });
@@ -374,14 +625,22 @@ function wire(){
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
     if(e.target.id==='recordTune'||e.target.id==='recordClean'){
-      if(!state.recording)return;state.recording.monitorTrack[e.target.id==='recordTune'?'autotune':'clean']=Number(e.target.value);engine.updateMonitor(state.recording.monitorTrack);
+      if(state.preview){
+        state.preview.monitorTrack[e.target.id==='recordTune'?'autotune':'clean']=Number(e.target.value);
+        engine.updateMic(state.preview.monitorTrack);
+      }
     }
   });
   document.addEventListener('change',e=>{
     if(e.target.matches('select[data-setting]'))renderInspector();
     if(e.target.matches('[data-timing]')){render();restartPlayback();}
+    if(e.target.id==='micSelect' && state.preview)prepareSelectedMic();
+    if(e.target.id==='monitorToggle' && state.preview)prepareSelectedMic();
   });
   document.addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&!document.activeElement?.matches('input[type="text"],textarea')){
+      e.preventDefault();if(e.shiftKey)redo();else undo();return;
+    }
     if(e.key==='Tab'&&$('#modalBackdrop')){
       const targets=$('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',$('.focus-panel'));
       if(targets.length){const first=targets[0],last=targets[targets.length-1];
@@ -391,6 +650,7 @@ function wire(){
     if(e.key==='Escape'&&$('#modalBackdrop')){closeModal();return;}
     if(e.key===' '&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement?.tagName||'')&&!$('#modalBackdrop')){e.preventDefault();playPause();}
   });
+  navigator.mediaDevices?.addEventListener?.('devicechange',()=>{if($('#micSelect')&&!state.recording)updateMicrophoneChoices();});
   window.addEventListener('resize',()=>requestAnimationFrame(drawWaves));
   document.addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files'))e.preventDefault();});
   document.addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();importFiles(e.dataTransfer.files);}});
@@ -399,7 +659,7 @@ function wire(){
 async function restartPlaybackAtZero(){
   try{await engine.play(state.tracks,0);render();runTicker();}catch(err){toast(err.message);}
 }
-wire();render();
+wire();render();historyUI();
 if('serviceWorker' in navigator&&window.isSecureContext){
   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }

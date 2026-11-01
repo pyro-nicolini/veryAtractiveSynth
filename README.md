@@ -4,6 +4,24 @@
 
 > **Estado actual: DesignPhase · MVP 0.1.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
+
+## ACTUALIZACIÓN DesignPhase 0.2: grabar y recuperar pistas
+
+**Selección de micrófono.** Abre GRABAR MI VOZ, elige un dispositivo en el desplegable MICRÓFONO y pulsa PROBAR ENTRADA. Concede permiso para mostrar los nombres disponibles. En móvil el navegador puede mostrar solo el micrófono predeterminado. Al conectar uno USB, vuelve a seleccionar/probar. Para grabar usa HTTPS o localhost; una IP http de la red no es un origen seguro.
+
+**Comprobar audio antes de grabar.** Habla: la forma de onda y la barra de señal deben moverse. Verde indica señal; rosado con MUY ALTO indica que puede saturar. SIN SEÑAL pide revisar dispositivo y permisos. Usa auriculares para la opción Escucharme con efectos.
+
+**Grabación sin códec intermedio.** Presiona GRABAR: se activa temporizador, REC y barras que se mueven mientras llega la señal. Detén para crear una capa. Las nuevas grabaciones se capturan como PCM mediante AudioWorklet, evitando el problema de capturar con MediaRecorder y luego no decodificar el mismo archivo en ciertos móviles. Límite de 5 minutos por toma.
+
+**Importar audios del teléfono.** WAV PCM, MP3 y M4A AAC pueden abrirse si el navegador ofrece esos códecs. Formatos exportados desde mensajería como AMR, 3GP, CAF o ciertos OGG/Opus no están garantizados. Si un audio falla, se identifica qué archivo falló y cómo convertirlo localmente a WAV PCM o M4A AAC; no se envía a servidores.
+
+**Mover el momento actual.** En la regla superior puedes tocar y arrastrar el marcador verde con mouse o dedo. Con teclado, flechas mueven 1 segundo, Mayús+flechas 5 segundos, Inicio/Fin saltan al extremo.
+
+**Respaldos y exportación.** GUARDAR conserva la sesión de este navegador. EXPORTAR → Proyecto editable crea un respaldo portátil .vasproject (ZIP con manifiesto y WAV float originales por capa); ABRIR → ABRIR RESPALDO lo restaura. EXPORTAR → Pistas separadas crea un ZIP con un WAV procesado por cada capa. ↶ / ↷ y Ctrl+Z / Ctrl+Mayús+Z permiten deshacer o rehacer hasta 25 cambios recientes.
+
+**Pendiente:** QA real Android/iOS y diferentes micrófonos, corrección de tono comercial, limpieza avanzada por IA/WASM, compensación automática de latencia, códecs telefónicos que no soporte el navegador y automatización por compases. Los respaldos grandes consumen memoria temporal; conserva copias externas.
+
+
 ## Inicio rápido
 
 Requisitos: **Node.js 20+** y **Chrome o Edge moderno** (para el micrófono y el motor de efectos, HTTPS o localhost). No se requieren dependencias ni cuentas.

@@ -40,6 +40,19 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+### Fase 0.2 — Captura, controles y portabilidad
+
+- [x] Selector de entradas de micrófono, permisos y detección de dispositivos.
+- [x] Medidor de entrada y forma de onda durante prueba/grabación.
+- [x] Captura PCM mono en AudioWorklet, sin contenedor MediaRecorder temporal.
+- [x] Cabezal arrastrable (mouse, touch y teclado).
+- [x] Diagnóstico de archivos telefónicos sin códec nativo disponible.
+- [x] Backups editables .vasproject y exportación WAV stems ZIP.
+- [x] Historial de deshacer/rehacer hasta 25 cambios.
+- [ ] QA hardware real y pruebas e2e en Chrome/Edge/Safari iOS/Android.
+- [ ] Códecs telefónicos AMR/3GP/Opus que no soporte el navegador: conversor WASM local.
+- [ ] Latencia calibrada y afinación de calidad comercial.
+
 ### Fase 0 — MVP local (esta entrega)
 
 - [x] Estudio neón responsive y panel de 3 perillas.

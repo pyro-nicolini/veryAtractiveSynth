@@ -48,10 +48,10 @@
       <div class="track-area">
         <div class="section-heading">
           <div><div class="section-overline">01 / CAPAS DE SONIDO</div><h2>Tu mezcla <span id="trackCount" class="count">00</span></h2></div>
-          <div class="section-tools"><button class="mini-action" id="tracksInfo" aria-label="Información sobre las capas">i</button><button class="mini-action mini-add" id="addTrackBtn">+ AGREGAR</button></div>
+          <div class="section-tools"><button class="mini-action" id="undoBtn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" disabled>↶</button><button class="mini-action" id="redoBtn" title="Rehacer (Ctrl+Mayús+Z)" aria-label="Rehacer" disabled>↷</button><button class="mini-action" id="tracksInfo" aria-label="Información sobre las capas">i</button><button class="mini-action mini-add" id="addTrackBtn">+ AGREGAR</button></div>
         </div>
-        <div class="timeline-ruler"><span>INICIO</span><div class="ruler-line" id="ruler"><span class="playhead" id="playhead"></span></div><span id="endTimeLabel">00:00</span></div>
-        <div id="tracks" class="track-list" aria-live="polite"></div>
+        <div class="timeline-ruler"><span>INICIO</span><div class="ruler-line" id="ruler" role="slider" tabindex="0" aria-label="Mover el momento actual" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0" aria-valuetext="00:00" title="Arrastra el marcador verde para adelantar o retroceder"><span class="playhead" id="playhead"></span></div><span id="endTimeLabel">00:00</span></div>
+        <div id="tracks" class="track-list" aria-live="polite"></div><div id="recordingGhost" aria-live="off"></div>
         <div id="emptyState" class="empty-state">
           <div class="empty-vinyl"><div class="empty-center"></div></div>
           <h3>Tu próxima canción comienza aquí.</h3>
@@ -79,7 +79,7 @@
     <div class="transport-right"><span>VOLUMEN FINAL</span><input id="masterVolume" aria-label="Volumen final" type="range" min="0" max="100" value="85"><span id="volumeValue">85%</span><button class="mini-action" id="masterInfo" aria-label="¿Qué es el volumen final?">i</button></div>
   </footer>
 </div>
-<input id="fileInput" type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.opus" multiple hidden>
+<input id="projectInput" type="file" accept=".vasproject,.zip,application/zip" hidden><input id="fileInput" type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.opus,.3gp,.3gpp,.mp4,.caf,.amr,.oga" multiple hidden>
 <div id="modalRoot"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script type="module" src="./src/app.js"></script>

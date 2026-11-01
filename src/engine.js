@@ -1,6 +1,8 @@
 import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
+import {assembleRecording} from './recording-utils.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
+const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
 
 function saturationCurve(amount){
   const samples=2048,curve=new Float32Array(samples),k=Math.max(0,amount)*.085;
@@ -106,12 +108,13 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
       if(!context.audioWorklet)throw Error('El navegador no admite procesamiento de audio de baja latencia');
       await context.audioWorklet.addModule(WORKLET_URL);
+      await context.audioWorklet.addModule(CAPTURE_URL);
       this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume);
     }
     if(this.ctx.state==='suspended')await this.ctx.resume();
@@ -121,8 +124,10 @@ export class AudioEngine {
     const ctx=await this.ready();
     if(file.size>350*1024*1024)throw Error('El archivo supera el límite de 350 MB');
     const bytes=await file.arrayBuffer();
-    try{return await ctx.decodeAudioData(bytes);}
-    catch{throw Error('No se pudo abrir este audio. Prueba WAV, MP3 o un formato compatible con tu navegador.');}
+    try{return await ctx.decodeAudioData(bytes.slice(0));}
+    catch{
+      throw Error('El audio no es compatible con los códecs de este navegador.');
+    }
   }
   setMaster(value){this.masterVolume=clamp(value,0,100);if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);}
   async play(tracks,from=0){
@@ -157,6 +162,80 @@ export class AudioEngine {
     const graph=this.graphs.get(track.id);
     if(graph)setParams(graph,track,this.ctx);
   }
+
+  /** Connect microphone to a silent meter, with optional explicit monitoring.
+      The stream is owned by the caller and its tracks are closed by stopMic. */
+  async prepareMic(stream,settings,monitor=false){
+    await this.ready();
+    this.stopMic();
+    const ctx=this.ctx,source=ctx.createMediaStreamSource(stream);
+    const analyser=ctx.createAnalyser();
+    analyser.fftSize=2048;analyser.smoothingTimeConstant=.3;
+    source.connect(analyser);
+    const meterSilent=ctx.createGain();meterSilent.gain.value=0;
+    analyser.connect(meterSilent);meterSilent.connect(ctx.destination);
+    let monitorGraph=null;
+    if(monitor){
+      monitorGraph=createGraph(ctx,settings,this.output.gain,impulse(ctx));
+      source.connect(monitorGraph.input);
+    }
+    this.mic={stream,source,analyser,meterSilent,monitorGraph};
+    return analyser;
+  }
+  updateMic(settings){
+    if(this.mic?.monitorGraph)setParams(this.mic.monitorGraph,settings,this.ctx);
+  }
+  getMicMeterData(buffer){
+    if(!this.mic)return false;
+    this.mic.analyser.getFloatTimeDomainData(buffer);
+    return true;
+  }
+  async startCapture(onProgress){
+    if(!this.mic)throw Error('Primero selecciona y activa un micrófono');
+    if(this.capture)throw Error('La grabación ya está activa');
+    const ctx=this.ctx,source=this.mic.source;
+    const node=new AudioWorkletNode(ctx,'vas-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
+    // Keep worklet processing while routing guaranteed silence to destination.
+    const silent=ctx.createGain();silent.gain.value=0;
+    node.connect(silent);silent.connect(ctx.destination);
+    const chunks=[];let frames=0;
+    let resolver,rejecter;
+    const completion=new Promise((resolve,reject)=>{resolver=resolve;rejecter=reject;});
+    this.capture={node,silent,chunks,completion};
+    node.port.onmessage=event=>{
+      const message=event.data;
+      if(message?.type==='chunk'){
+        chunks.push(message.samples);frames+=message.frames;
+        onProgress?.(frames/ctx.sampleRate);
+      }
+      if(message?.type==='complete'){
+        const actual=message.frames;
+        try{resolver(assembleRecording(ctx,chunks,actual));}
+        catch(error){rejecter(error);}
+        finally{
+          try{source.disconnect(node);node.disconnect();silent.disconnect();}catch{}
+          if(this.capture?.node===node)this.capture=null;
+        }
+      }
+    };
+    source.connect(node);
+    return {startedAt:ctx.currentTime,completion};
+  }
+  async stopCapture(){
+    if(!this.capture)return null;
+    const capture=this.capture;
+    capture.node.port.postMessage({type:'stop'});
+    return await capture.completion;
+  }
+  stopMic(){
+    if(this.capture)return; // do not cut a recording in progress
+    if(!this.mic)return;
+    const {source,analyser,meterSilent,monitorGraph,stream}=this.mic;
+    try{source.disconnect();analyser.disconnect();meterSilent.disconnect();monitorGraph?.input.disconnect();monitorGraph?.volume.disconnect();}catch{}
+    stream.getTracks().forEach(track=>track.stop());
+    this.mic=null;
+  }
+
   async monitor(stream,track){
     await this.ready();this.stopMonitor();
     const node=this.ctx.createMediaStreamSource(stream);

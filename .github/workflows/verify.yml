@@ -15,7 +15,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ''
       - name: Check JavaScript syntax
         run: |
           node --check server.js
@@ -23,6 +22,10 @@ jobs:
           node --check src/engine.js
           node --check src/dsp.js
           node --check src/project-store.js
+          node --check src/recording-utils.js
+          node --check src/portable-project.js
+          node --check src/zip-store.js
+          node --check src/worklets/capture-processor.js
           node --check src/worklets/voice-processor.js
       - name: Run DSP unit tests
         run: npm test
