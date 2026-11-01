@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.2 implementado
+## 3. Estado 0.3 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -39,6 +39,20 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 **Privacidad:** nunca subir audio, micrófono ni metadatos a un servicio; cualquier futura IA en nube requiere autorización separada.
 
 ## 5. Fases propuestas
+
+### Fase 0.3 — Herramientas musicales iniciales
+
+- [x] BPM ajustable y guía de metrónomo con AudioContext.
+- [x] Marcador y capas arrastrables directamente desde la línea de tiempo.
+- [x] Ajuste magnético opcional al pulso al mover sonidos.
+- [x] División de una capa en dos mediante un corte no destructivo.
+- [x] Repetición de la mezcla al terminar.
+- [x] Medidor de nivel final y alerta visual de picos altos.
+- [x] Autoguardado local con debounce; conserva BPM y estado del metrónomo.
+- [x] Margen de cola para reverberación/eco en exportación.
+- [ ] QA end-to-end con navegador real y pruebas de latencia en hardware.
+- [ ] Múltiples clips por pista, cuentas de entrada, loops sample-accurate y metrónomo durante grabación sin base.
+- [ ] Separación de formantes, automatización, DAW-quality pitch correction y restauración profesional.
 
 ### Fase 0.2 — Captura, controles y portabilidad
 
@@ -78,10 +92,13 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ### Fase 2 — Producción creativa
 
-- [ ] Metrónomo, tempo/BPM y grilla musical.
-- [ ] Clips múltiples por pista, zoom de timeline y crossfade.
+- [x] Metrónomo y tempo/BPM inicial.
+- [ ] Grilla musical completa, cuenta de entrada y loops sin pausas.
+- [x] División no destructiva en capas separadas.
+- [ ] Clips múltiples dentro de una misma pista, zoom de timeline y crossfade interactivo.
 - [x] Undo/redo básico en memoria (25 cambios).
-- [ ] Autosave incremental en background no bloqueante.
+- [x] Guardado automático debounced de la sesión local completa.
+- [ ] Autosave **incremental** de buffers/metadata en worker para proyectos grandes.
 - [ ] Proyecto portable (audio + parámetros) y exportación de stems.
 - [ ] Packs de presets y ajuste A/B; control de panorámica estéreo avanzada.
 - [ ] Pruebas visuales, QA automatizado y benchmark de exportaciones largas.

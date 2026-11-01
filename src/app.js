@@ -4,11 +4,12 @@ import {saveSession,loadSession} from './project-store.js';
 import {MAX_RECORDING_SECONDS,meterLevel,audioFileHint} from './recording-utils.js';
 import {exportProject,importProject} from './portable-project.js';
 import {zipStore} from './zip-store.js';
+import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,master:85,busy:false};
+const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,master:85,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
@@ -37,13 +38,29 @@ const HELP={
   offline:['Tus sonidos son privados','Nada se envía a servidores. Guarda la sesión en este navegador con GUARDAR. El almacenamiento local puede borrarse al limpiar los datos del navegador; exporta tus mezclas importantes.'],
   microphone:['Elegir la entrada de sonido','Elige entre los micrófonos detectados. Pulsa PROBAR ENTRADA para conceder permiso: los nombres completos suelen aparecer solo después de autorizarlo. Si conectas otro micrófono, vuelve a seleccionarlo.'],
   signal:['Comprobar que llega sonido','Habla al micrófono. La barra y la onda deberían moverse. Verde: señal correcta. Rosado: nivel alto. Si no se mueven, cambia micrófono o revisa los permisos del sistema.'],
-  seek:['Mover el momento actual','Toca o arrastra la regla superior de la línea de tiempo. Puedes usar las flechas del teclado (1 segundo) y Mayús + flecha (5 segundos).']
+  seek:['Mover el momento actual','Toca o arrastra la regla superior de la línea de tiempo. Puedes usar las flechas del teclado (1 segundo) y Mayús + flecha (5 segundos).'],
+  tempo:['BPM / velocidad','La velocidad de la canción en pulsos por minuto. Activa ♩ para escuchar un metrónomo durante la reproducción. No modifica automáticamente la velocidad de los archivos importados.'],
+  snap:['Ajustar al ritmo','Cuando está activado, mover una capa con ↔ la coloca en el pulso musical más cercano según los BPM. Desactívalo para moverla libremente.'],
+  clip:['Mover una capa','Arrastra el símbolo ↔ sobre la forma de onda para cambiar su posición en el tiempo. El sonido original se conserva.'],
+  loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.']
 };
-let toastTimer,raf=0;
+let toastTimer,raf=0,autosaveTimer=null,autosaveBusy=false,autosaveQueued=false;
 const modalStack=[];
 const history={past:[],future:[]};
+function getProjectOptions(){
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop};
+}
+function applyProjectOptions(options={}){
+  state.bpm=clamp(options.bpm??104,40,240);
+  state.metronome=!!options.metronome;state.snap=!!options.snap;state.loop=!!options.loop;
+  const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
+  $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
+  $('#snapBtn')?.setAttribute('aria-pressed',String(state.snap));
+  $('#loopBtn')?.setAttribute('aria-pressed',String(state.loop));
+  engine.setMetronome(state.metronome,state.bpm);
+}
 function captureState(){
-  return {tracks:state.tracks.map(t=>({...t})),selected:state.selected,position:state.position,master:state.master};
+  return {tracks:state.tracks.map(t=>({...t})),selected:state.selected,position:state.position,master:state.master,options:getProjectOptions()};
 }
 function historyUI(){
   if($('#undoBtn'))$('#undoBtn').disabled=!history.past.length||!!state.recording;
@@ -57,7 +74,7 @@ function checkpoint(){
 function restoreState(snapshot){
   const wasPlaying=engine.playing;engine.stop();cancelAnimationFrame(raf);
   state.tracks=snapshot.tracks.map(t=>({...t}));state.selected=snapshot.selected;state.position=snapshot.position;
-  state.master=snapshot.master;engine.setMaster(state.master);
+  state.master=snapshot.master;engine.setMaster(state.master);applyProjectOptions(snapshot.options);
   $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
   render();if(wasPlaying)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(e=>toast(e.message));
 }
@@ -68,6 +85,31 @@ function undo(){
 function redo(){
   if(!history.future.length||state.recording)return;
   history.past.push(captureState());restoreState(history.future.pop());historyUI();
+}
+function saveStatus(label,kind=''){
+  const el=$('#saveStatus');if(!el)return;
+  el.textContent=label;el.className='save-status '+kind;
+}
+function queueAutosave(){
+  if(!state.tracks.length||state.recording)return;
+  clearTimeout(autosaveTimer);
+  saveStatus('CAMBIOS SIN GUARDAR','saving');
+  autosaveTimer=setTimeout(async()=>{
+    if(state.recording||!state.tracks.length)return;
+    if(autosaveBusy){autosaveQueued=true;return;}
+    autosaveBusy=true;
+    saveStatus('GUARDANDO EN ESTE EQUIPO...','saving');
+    try{
+      await saveSession(state.tracks,state.master,getProjectOptions());
+      saveStatus('✓ RESPALDO AUTOMÁTICO LOCAL','saved');
+    }catch(error){
+      saveStatus('ERROR AL GUARDAR','failed');
+      toast('Guardado automático: '+error.message);
+    }finally{
+      autosaveBusy=false;
+      if(autosaveQueued){autosaveQueued=false;queueAutosave();}
+    }
+  },3800);
 }
 const html=(text)=>String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trackColor=(t)=>COLORS.includes(t.color)?t.color:COLORS[0];
@@ -105,7 +147,8 @@ function addTrack(buffer,name,type='audio',offset=0){
 function render(){
   $('#trackCount').textContent=String(state.tracks.length).padStart(2,'0');
   const duration=projectDuration(state.tracks);
-  $('#endTimeLabel').textContent=clock(duration);
+  const span=timelineSpan(state.tracks);
+  $('#endTimeLabel').textContent=clock(span);
   $('#ruler').setAttribute('aria-valuemax',String(Math.ceil(duration)));
   $('#ruler').setAttribute('aria-valuenow',String(Math.round(state.position)));
   $('#emptyState').classList.toggle('hidden',state.tracks.length>0);
@@ -114,13 +157,13 @@ function render(){
     return '<article class="track-card'+(active?' selected':'')+'" style="--track-color:'+trackColor(t)+'" data-track="'+html(t.id)+'" tabindex="0" aria-label="Seleccionar capa '+html(t.name)+'">'+
       '<div class="vinyl'+(engine.playing&&!t.muted?' spinning':'')+'" aria-hidden="true"><div class="vinyl-center"></div></div>'+
       '<div class="track-info"><strong class="track-name" title="'+html(t.name)+'">'+html(t.name)+'</strong><div class="track-sub">'+(t.type==='voice'?'◉ VOZ':t.type==='demo'?'♫ BEAT':'≋ AUDIO')+' · '+clock(effectiveDuration(t))+'</div><div class="track-buttons"><button class="small-toggle'+(t.muted?' active':'')+'" data-track-action="mute" data-id="'+html(t.id)+'" title="Silenciar" aria-label="Silenciar '+html(t.name)+'">M</button><button class="small-toggle solo'+(t.solo?' active':'')+'" data-track-action="solo" data-id="'+html(t.id)+'" title="Escuchar solo" aria-label="Escuchar solo '+html(t.name)+'">S</button></div></div>'+
-      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div></div>'+
+      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div><button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(t.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" title="Arrastrar este sonido" aria-label="Mover capa '+html(t.name)+'">↔</button></div>'+
       '<div class="track-tail"><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
-  renderInspector();requestAnimationFrame(drawWaves);updateTransport();
+  renderInspector();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
 }
 function drawWaves(){
-  const full=Math.max(.01,projectDuration(state.tracks));
+  const full=timelineSpan(state.tracks);
   $$('#tracks canvas').forEach(canvas=>{
     const t=state.tracks.find(x=>x.id===canvas.dataset.canvas);if(!t)return;
     const rect=canvas.getBoundingClientRect();if(!rect.width)return;
@@ -163,15 +206,27 @@ function updateTransport(){
   $('#ruler').setAttribute('aria-valuetext',clock(pos));
   $('#playBtn').textContent=engine.playing?'Ⅱ':'▶';
   $('#playBtn').setAttribute('aria-label',engine.playing?'Pausar':'Reproducir');
-  const percent=duration>0?clamp(pos/duration*100,0,100):0;
+  const percent=duration>0?clamp(pos/timelineSpan(state.tracks)*100,0,100):0;
   $('#playhead').style.left=percent+'%';$('#playhead').style.opacity=state.tracks.length?1:0;
+}
+function updateMasterMeter(){
+  const {peak,rms}=engine.getMasterMeter();
+  const fill=$('#masterMeter'),label=$('#masterPeak');
+  if(fill)fill.style.height=Math.round(Math.min(1,Math.sqrt(rms)*1.8)*100)+'%';
+  if(label){label.textContent=peak>.94?'ALTO':Math.round(peak*100)+'%';label.classList.toggle('clip-warning',peak>.94);}
 }
 function runTicker(){
   cancelAnimationFrame(raf);
   const tick=()=>{
     if(engine.playing){
-      const p=engine.position();state.position=p;updateTransport();
-      if(p>=projectDuration(state.tracks)-.015){engine.stop();state.position=0;render();return;}
+      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();
+      if(p>=projectDuration(state.tracks)-.015){
+        engine.stop();state.position=0;
+        if(state.loop&&state.tracks.length){
+          engine.play(state.tracks,0).then(()=>{render();runTicker();}).catch(error=>toast(error.message));
+        }else render();
+        return;
+      }
       raf=requestAnimationFrame(tick);
     }
   };
@@ -189,7 +244,7 @@ async function restartPlayback(){
   try{await engine.play(state.tracks,p);runTicker();}
   catch(error){toast(error.message);}
 }
-function stop(){engine.stop();state.position=0;cancelAnimationFrame(raf);render();}
+function stop(){engine.stop();state.position=0;cancelAnimationFrame(raf);render();updateMasterMeter();}
 async function importFiles(files){
   if(!files?.length)return;
   toast('Preparando sonidos del teléfono o computador...');
@@ -248,7 +303,7 @@ function openTrackActions(id){
   modal('Opciones de la capa',
     '<div class="field"><label>Nombre de la capa</label><input type="text" id="renameInput" maxlength="80" value="'+html(t.name)+'" style="background:#1b222b;border:1px solid #495362;border-radius:7px;padding:11px;color:white"></div>'+
     '<p style="margin-top:14px">Duplica una capa para crear armonías o combinar efectos distintos sin cambiar el audio original.</p>',
-    [{label:'ELIMINAR',type:'delete-track'},{label:'DUPLICAR',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
+    [{label:'ELIMINAR',type:'delete-track'},{label:'✂ DIVIDIR',type:'split-track'},{label:'DUPLICAR',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
 }
 
 async function listMicrophones(){
@@ -432,7 +487,7 @@ async function performExport(){
   try{
     const scope=$('#exportScope')?.value||'mix';
     if(scope==='project'){
-      const blob=await exportProject(state.tracks,state.master);
+      const blob=await exportProject(state.tracks,state.master,getProjectOptions());
       downloadBlob(blob,'veryAtractiveSynth-proyecto.vasproject');
       toast('Proyecto editable respaldado con los audios originales.');
     }else if(scope==='stems'){
@@ -456,7 +511,7 @@ async function performExport(){
 async function save(){
   if(state.busy)return;
   if(!state.tracks.length)return toast('No hay pistas para guardar');
-  try{state.busy=true;await saveSession(state.tracks,state.master);toast('Sesión guardada en este navegador');}
+  try{state.busy=true;clearTimeout(autosaveTimer);saveStatus('GUARDANDO...','saving');await saveSession(state.tracks,state.master,getProjectOptions());saveStatus('✓ GUARDADO LOCAL','saved');toast('Sesión guardada en este navegador');}
   catch(e){toast('No se pudo guardar: '+e.message);}
   finally{state.busy=false;}
 }
@@ -465,7 +520,7 @@ async function load(){
   try{
     engine.stop();const ctx=await engine.ready(),data=await loadSession(ctx);
     if(!data)return toast('Todavía no tienes una sesión guardada');
-    checkpoint();state.tracks=data.tracks;state.selected=state.tracks[0]?.id||null;state.master=data.master||85;
+    checkpoint();state.tracks=data.tracks;state.selected=state.tracks[0]?.id||null;state.master=data.master??85;applyProjectOptions(data.options);
     engine.setMaster(state.master);$('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
     state.position=0;render();toast('Sesión recuperada. Todo está en este dispositivo.');
   }catch(e){toast('No se pudo recuperar: '+e.message);}
@@ -482,7 +537,7 @@ async function loadPortable(file){
   try{
     const ctx=await engine.ready(),bundle=await importProject(file,ctx);
     checkpoint();engine.stop();state.tracks=bundle.tracks;state.selected=bundle.tracks[0]?.id||null;
-    state.position=0;state.master=bundle.master;engine.setMaster(state.master);
+    state.position=0;state.master=bundle.master;engine.setMaster(state.master);applyProjectOptions(bundle.options);
     $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
     modalStack.length=0;$('#modalRoot').innerHTML='';render();
     toast('Proyecto recuperado desde tu respaldo.');
@@ -491,7 +546,7 @@ async function loadPortable(file){
 async function setSetting(key,value,element){
   const t=current();if(!t||!(key in defaults()))return;
   t[key]=clamp(value,key==='pan'?-100:0,key==='pan'?100:key==='key'?11:key==='scale'?2:100);
-  t.preset='custom';engine.updateTrack(t);
+  t.preset='custom';engine.updateTrack(t);queueAutosave();
   if(element&&element.type==='range'){
     const dialNode=element.closest('.dial-wrap')?.querySelector('.dial');
     const inner=element.closest('.dial-wrap')?.querySelector('.dial-inner span');
@@ -507,6 +562,7 @@ async function setTiming(key,value){
   const maxTrim=t.buffer.duration-.02;
   if(t.trimStart+t.trimEnd>maxTrim){if(key==='trimStart')t.trimEnd=Math.max(0,maxTrim-t.trimStart);else t.trimStart=Math.max(0,maxTrim-t.trimEnd);}
   t.fadeIn=clamp(t.fadeIn,0,effectiveDuration(t));t.fadeOut=clamp(t.fadeOut,0,effectiveDuration(t));
+  queueAutosave();
   const note=$('.focus-content .hint');
   if(note)note.textContent='Duración audible: '+clock(effectiveDuration(t))+' · Original: '+clock(t.buffer.duration);
 }
@@ -530,6 +586,21 @@ function handleModalAction(action){
   if(action==='do-export'){performExport();return;}
   const t=current();if(!t)return;
   if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');checkpoint();t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
+  if(action==='split-track'){
+    try{
+      const id=globalThis.crypto?.randomUUID?.()||'split-'+Date.now();
+      const [left,right]=splitClip(t,state.position,id);
+      checkpoint();
+      const index=state.tracks.findIndex(x=>x.id===t.id);
+      right.color=COLORS[(COLORS.indexOf(t.color)+1)%COLORS.length];
+      state.tracks.splice(index,1,left,right);
+      state.selected=id;
+      modalStack.length=0;$('#modalRoot').innerHTML='';
+      render();restartPlayback();
+      toast('Pista dividida en el marcador, sin modificar el audio original.');
+    }catch(error){toast(error.message);}
+    return;
+  }
   if(action==='duplicate-track'){
     const clone={...t,id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
     checkpoint();state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
@@ -548,7 +619,7 @@ function setupScrubber(){
     const duration=projectDuration(state.tracks);
     if(!duration)return;
     const rect=ruler.getBoundingClientRect();
-    state.position=clamp((clientX-rect.left)/Math.max(rect.width,1),0,1)*duration;
+    state.position=Math.min(duration,pointerTime(clientX,rect,timelineSpan(state.tracks)));
     updateTransport();
   };
   ruler.addEventListener('pointerdown',event=>{
@@ -587,26 +658,89 @@ function setupScrubber(){
     updateTransport();
   });
 }
+
+function setupClipDragging(){
+  const tracks=$('#tracks');
+  tracks.addEventListener('pointerdown',event=>{
+    const handle=event.target.closest('[data-drag-offset]');
+    if(!handle||event.button!==0||state.recording)return;
+    const track=state.tracks.find(t=>t.id===handle.dataset.dragOffset);
+    if(!track)return;
+    event.preventDefault();event.stopPropagation();
+    checkpoint();
+    state.dragClip={id:track.id,startX:event.clientX,original:track.offset||0,
+      span:timelineSpan(state.tracks),width:handle.closest('.track-wave').getBoundingClientRect().width,
+      handle};
+    state.selected=track.id;
+    handle.setPointerCapture(event.pointerId);
+    handle.closest('.track-wave').classList.add('is-moving');
+  });
+  tracks.addEventListener('pointermove',event=>{
+    const drag=state.dragClip;
+    if(!drag)return;
+    const track=state.tracks.find(t=>t.id===drag.id);
+    if(!track)return;
+    const delta=(event.clientX-drag.startX)/Math.max(1,drag.width)*drag.span;
+    setOffset(track,Math.max(0,drag.original+delta),state.bpm,state.snap);
+    const span=timelineSpan(state.tracks);
+    drag.handle.style.left=Math.max(0,Math.min(95,track.offset/span*100))+'%';
+    const label=drag.handle.parentElement.querySelector('.wave-label');
+    if(label)label.textContent='+'+track.offset.toFixed(2)+'s';
+    drawWaves();
+  });
+  const finish=event=>{
+    if(!state.dragClip)return;
+    const drag=state.dragClip;
+    if(event.type==='pointercancel'){
+      const track=state.tracks.find(t=>t.id===drag.id);
+      if(track)track.offset=drag.original;
+    }
+    state.dragClip=null;
+    render();restartPlayback();
+  };
+  tracks.addEventListener('pointerup',finish);
+  tracks.addEventListener('pointercancel',finish);
+}
+
 function wire(){
   setupScrubber();
-
+  setupClipDragging();
+  const bpm=$('#bpmInput'),metro=$('#metronomeBtn'),snapBtn=$('#snapBtn');
+  bpm.addEventListener('change',()=>{
+    checkpoint();state.bpm=Math.max(40,Math.min(240,Math.round(Number(bpm.value)||104)));
+    bpm.value=String(state.bpm);
+    engine.setMetronome(state.metronome,state.bpm);
+    toast('Velocidad: '+state.bpm+' BPM');
+  });
+  metro.addEventListener('click',()=>{
+    checkpoint();state.metronome=!state.metronome;metro.setAttribute('aria-pressed',String(state.metronome));
+    engine.setMetronome(state.metronome,state.bpm);
+    toast(state.metronome?'Metrónomo activado':'Metrónomo desactivado');
+  });
+  snapBtn.addEventListener('click',()=>{
+    checkpoint();state.snap=!state.snap;snapBtn.setAttribute('aria-pressed',String(state.snap));
+    toast(state.snap?'Ajuste al ritmo activado':'Movimiento libre activado');
+  });
   $('#importBtn').onclick=$('#addTrackBtn').onclick=$('#emptyImportBtn').onclick=()=>$('#fileInput').click();
   $('#fileInput').onchange=async e=>{await importFiles(e.target.files);e.target.value='';};
   $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
+  $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
   $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=openProjectMenu;
   $('#projectInput').onchange=async event=>{await loadPortable(event.target.files?.[0]);event.target.value='';};
   $('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
   document.addEventListener('pointerdown',event=>{if(event.target.matches('[data-setting], #masterVolume'))checkpoint();});
+  $('#bpmInput').title='BPM: Velocidad musical, no acelera automáticamente las pistas';
   $('#helpBtn').onclick=()=>help('studio');$('#tracksInfo').onclick=()=>help('tracks');
   $('#timelineInfo').onclick=()=>help('timeline');$('#inspectorInfo').onclick=()=>help('inspector');$('#masterInfo').onclick=()=>help('master');
-  $('#masterVolume').oninput=e=>{state.master=Number(e.target.value);engine.setMaster(state.master);$('#volumeValue').textContent=state.master+'%';};
+  $('#masterVolume').oninput=e=>{state.master=Number(e.target.value);engine.setMaster(state.master);$('#volumeValue').textContent=state.master+'%';queueAutosave();};
   $('#tracks').addEventListener('click',e=>{
     const toggle=e.target.closest('[data-track-action]');if(toggle){handleTrackAction(toggle.dataset.trackAction,toggle.dataset.id);return;}
+    if(e.target.closest('[data-drag-offset]'))return;
     const wave=e.target.closest('[data-wave]');
     if(wave){
       const rect=wave.getBoundingClientRect(),full=projectDuration(state.tracks);
-      state.position=clamp((e.clientX-rect.left)/rect.width,0,1)*full;
+      state.position=Math.min(full,pointerTime(e.clientX,rect,timelineSpan(state.tracks)));
       if(engine.playing)engine.play(state.tracks,state.position).then(()=>{render();runTicker();}).catch(err=>toast(err.message));
       updateTransport();return;
     }

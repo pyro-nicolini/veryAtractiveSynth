@@ -30,8 +30,9 @@ function makeMaster(ctx,destination,volume){
   const limiter=ctx.createDynamicsCompressor();
   limiter.threshold.value=-3;limiter.knee.value=3;limiter.ratio.value=16;
   limiter.attack.value=.003;limiter.release.value=.14;
-  gain.connect(limiter);limiter.connect(destination);
-  return {gain,limiter};
+  const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.35;
+  gain.connect(limiter);limiter.connect(meter);meter.connect(destination);
+  return {gain,limiter,meter};
 }
 function setParams(graph,track,ctx){
   const now=ctx.currentTime||0,settle=.016;
@@ -108,7 +109,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -129,7 +130,56 @@ export class AudioEngine {
       throw Error('El audio no es compatible con los códecs de este navegador.');
     }
   }
-  setMaster(value){this.masterVolume=clamp(value,0,100);if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);}
+
+  setMaster(value){
+    this.masterVolume=clamp(value,0,100);
+    if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
+  }
+  getMasterMeter(){
+    if(!this.output||!this.ctx)return {peak:0,rms:0};
+    this.output.meter.getFloatTimeDomainData(this.masterData);
+    let peak=0,sum=0;
+    for(const sample of this.masterData){
+      const v=Math.abs(sample);
+      peak=Math.max(peak,v);sum+=sample*sample;
+    }
+    return {peak,rms:Math.sqrt(sum/this.masterData.length)};
+  }
+  setMetronome(enabled,bpm=this.bpm){
+    this.metronomeEnabled=!!enabled;
+    this.bpm=clamp(bpm,40,240);
+    if(this.playing){this.stopMetronome();if(this.metronomeEnabled)this.startMetronome(this.position(),this.ctx.currentTime);}
+  }
+  stopMetronome(){
+    if(this.metroTimer!==null){clearInterval(this.metroTimer);this.metroTimer=null;}
+  }
+  scheduleClick(time,accent){
+    const ctx=this.ctx,osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.type='sine';osc.frequency.setValueAtTime(accent?1380:950,time);
+    gain.gain.setValueAtTime(.0001,time);
+    gain.gain.exponentialRampToValueAtTime(accent?.12:.08,time+.002);
+    gain.gain.exponentialRampToValueAtTime(.0001,time+.055);
+    osc.connect(gain);gain.connect(this.output.gain);
+    osc.start(time);osc.stop(time+.065);
+    osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch{}};
+  }
+  startMetronome(position=this.from,contextStart=this.ctx?.currentTime||0){
+    if(!this.metronomeEnabled||!this.ctx)return;
+    this.stopMetronome();
+    const beat=60/this.bpm;
+    this.beatIndex=Math.max(0,Math.ceil((position-1e-4)/beat));
+    this.nextBeatTime=contextStart+this.beatIndex*beat-position;
+    const schedule=()=>{
+      if(!this.playing||!this.metronomeEnabled){this.stopMetronome();return;}
+      while(this.nextBeatTime<this.ctx.currentTime+.16){
+        if(this.nextBeatTime>=this.ctx.currentTime-.025)this.scheduleClick(Math.max(this.ctx.currentTime+.003,this.nextBeatTime),this.beatIndex%4===0);
+        this.beatIndex++;this.nextBeatTime+=beat;
+      }
+    };
+    schedule();
+    this.metroTimer=setInterval(schedule,25);
+  }
+
   async play(tracks,from=0){
     await this.ready();this.stop();
     const ctx=this.ctx;this.duration=projectDuration(tracks);
@@ -147,6 +197,7 @@ export class AudioEngine {
       if(src)this.sources.push(src);
     }
     this.playing=this.sources.length>0;
+    if(this.playing&&this.metronomeEnabled)this.startMetronome(this.from,this.startCtxTime);
   }
   position(){
     if(!this.playing||!this.ctx)return this.from;
@@ -154,6 +205,7 @@ export class AudioEngine {
   }
   pause(){const p=this.position();this.stop();this.from=p;return p;}
   stop(){
+    this.stopMetronome();
     for(const source of this.sources){try{source.stop();}catch{}try{source.disconnect();}catch{}}
     for(const graph of this.graphs.values())try{graph.input.disconnect();graph.volume.disconnect();}catch{}
     this.sources=[];this.graphs.clear();this.playing=false;
@@ -256,7 +308,11 @@ export class AudioEngine {
     const duration=projectDuration(active);
     if(!duration)throw Error('No hay audio que exportar');
     if(duration>60*20)throw Error('El render local admite hasta 20 minutos por exportación');
-    const offline=new OfflineAudioContext(2,Math.ceil((duration+.8)*rate),rate);
+    const hasReverb=active.some(track=>Number(track.space)>0);
+    const hasDelay=active.some(track=>Number(track.echo)>0);
+    const tail=hasReverb?1.9:hasDelay?1.1:.08;
+    // Account for the effects tail so the end is not truncated.
+    const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
     if(!offline.audioWorklet)throw Error('Este navegador no permite aplicar afinación y limpieza durante la exportación. Usa Chrome o Edge actualizados.');
     try{await offline.audioWorklet.addModule(WORKLET_URL);}
     catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}

@@ -26,10 +26,10 @@ export function decodeProjectWav(bytes,ctx){
   return buffer;
 }
 
-export async function exportProject(tracks,master){
+export async function exportProject(tracks,master,options={}){
   if(!tracks.length)throw Error('Agrega una pista antes de respaldar');
   const manifest={format:'veryAtractiveSynth-project',version:1,createdAt:new Date().toISOString(),
-    master,tracks:[]};
+    master,options,tracks:[]};
   const entries=[];
   for(let i=0;i<tracks.length;i++){
     const track=tracks[i],file='audio/'+String(i+1).padStart(3,'0')+'.wav';
@@ -71,5 +71,5 @@ export async function importProject(file,ctx){
       preset:typeof t.preset==='string'?t.preset:'natural',buffer
     });
   }
-  return {master:clamp(manifest.master??85,0,100),tracks};
+  return {master:clamp(manifest.master??85,0,100),options:manifest.options||{},tracks};
 }

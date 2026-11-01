@@ -17,9 +17,9 @@ function transact(db,mode,method,value){
     tx.oncomplete=()=>db.close();tx.onerror=()=>db.close();
   });
 }
-export async function saveSession(tracks,master){
+export async function saveSession(tracks,master,options={}){
   const data={
-    savedAt:new Date().toISOString(),master,
+    savedAt:new Date().toISOString(),master,options,
     tracks:tracks.map(t=>({
       id:t.id,name:t.name,color:t.color,type:t.type,
       settings:(( {buffer,peaks,...rest} )=>rest)(t),
@@ -32,7 +32,7 @@ export async function loadSession(ctx){
   const db=await openDB(),data=await transact(db,'readonly','get');
   if(!data)return null;
   return {
-    master:data.master,
+    master:data.master,options:data.options||{},
     tracks:data.tracks.map(t=>{
       const buffer=ctx.createBuffer(t.channels.length,t.channels[0].length,t.rate);
       t.channels.forEach((channel,c)=>buffer.copyToChannel(channel,c));

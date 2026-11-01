@@ -2,7 +2,24 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.2.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.3.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+
+
+
+## DesignPhase 0.3 — edición más directa y escucha controlada
+
+Esta fase incorpora cambios utilizables, conservando la interfaz simple:
+
+- **Mover clips directamente:** cada onda tiene un control ↔. Arrástralo para colocar la voz donde debe sonar, sin alterar el original. El botón ⌗ activa la alineación a pulsos; desactivado, el movimiento es libre.
+- **BPM + metrónomo:** define la velocidad con el selector BPM y activa ♩ para escuchar una guía mientras la mezcla se reproduce. El metrónomo no se incluye en la exportación y **cambiar BPM no acelera ni desacelera las pistas existentes**.
+- **Dividir sin destruir:** desplaza el cabezal verde al punto deseado, selecciona ⋯ en una pista y presiona ✂ DIVIDIR. Se crean dos clips editables como capas independientes que comparten la fuente original (sin copiar ni degradar audio).
+- **Repetir mezcla:** ↺ en el transporte reproduce de nuevo al llegar al final. El cambio de ciclo puede contener una pequeña pausa y todavía no es un loop continuo a nivel de muestra.
+- **Volumen de salida visible:** barra y advertencia ALTO para detectar señales cercanas al máximo. No sustituye medición profesional true peak ni LUFS.
+- **Autoguardado local:** los cambios en pistas se guardan automáticamente en IndexedDB después de aproximadamente 4 segundos sin cambios. El estado se muestra en el transporte. El almacenamiento depende de la cuota del navegador y no reemplaza el respaldo portátil de EXPORTAR.
+- **Preservar ajustes musicales:** BPM, metrónomo, alineación y repetición se incluyen también en los respaldos locales y en los proyectos .vasproject.
+- **Mejoras de exportación:** la duración de render conserva un margen mayor al final para eco y reverberación; debe validarse con audios de referencia.
+
+**Importante:** BPM y metrónomo son herramientas de edición inicial. La grabación sincronizada con cuenta regresiva, calibración de latencia, múltiples clips dentro de una misma pista, formatos telefónicos no admitidos y autotune de calidad comercial siguen pendientes.
 
 
 ## ACTUALIZACIÓN DesignPhase 0.2: grabar y recuperar pistas
@@ -112,6 +129,7 @@ src/worklets/capture-processor.js
                               captura mono PCM en hilo de audio
 src/portable-project.js        respaldo portable con pistas originales
 src/zip-store.js               creador/lector local ZIP sin compresión
+src/timeline.js                edición de clips, beat snapping y división
 server.js                     servidor sin dependencias, solo localhost
 sw.js                         cache de aplicación estática, no audio
 tests/dsp.test.js             test automatizados PCM y WAV
