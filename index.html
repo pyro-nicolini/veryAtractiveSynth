@@ -9,6 +9,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./src/styles.css">
   <link rel="stylesheet" href="./src/tune-lab.css">
+  <link rel="stylesheet" href="./src/studio-mixer.css">
   <title>Very Atractive Synth | Laboratorio de sonido</title>
 </head>
 <body>
@@ -21,6 +22,7 @@
     <div class="top-actions">
       <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
       <button type="button" class="button button-muted" id="helpBtn" aria-label="Guía del estudio">? <span class="desktop-only">GUÍA</span></button>
+      <button type="button" class="button button-muted" id="mixerToggle" aria-controls="mixerArea" aria-expanded="false" aria-pressed="false"> <span aria-hidden="true">☷</span> MIXER</button>
       <button type="button" class="button button-muted" id="loadBtn">↗ <span class="desktop-only">ABRIR</span></button>
       <button type="button" class="button button-muted" id="saveBtn">▣ <span class="desktop-only">GUARDAR</span></button>
       <button type="button" class="button button-primary" id="exportBtn">↓ EXPORTAR</button>
@@ -68,6 +70,10 @@
         </div>
         <div id="inspectorBody"><div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div></div>
       </aside>
+    </section>
+    <section class="studio-mixer" id="mixerArea" aria-label="Consola del mezclador" hidden>
+      <div class="studio-mixer-head"><div><div class="section-overline">03 / CONSOLA DE MEZCLA</div><h2>Studio Mixer</h2><p>Control independiente de canales, posición y buses · todo llega al master.</p></div><div><button type="button" class="mini-action" id="mixerHelp" aria-label="Ayuda de Studio Mixer">i</button> <button type="button" class="mini-action mix-close" id="mixerClose">✕ CERRAR</button></div></div>
+      <div id="mixerBody" class="mixer-body"></div>
     </section>
   </main>
   <footer class="transport">

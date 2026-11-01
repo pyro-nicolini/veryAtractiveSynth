@@ -59,7 +59,10 @@ export function encodeWav(buffer,depth=24){
   const samples=Array.from({length:channels},(_,c)=>buffer.getChannelData(c));
   let pos=44;
   for(let i=0;i<buffer.length;i++)for(let c=0;c<channels;c++){
-    const x=clamp(samples[c][i],-1,1);
+    const raw=samples[c][i];
+    // Preserve full finite IEEE float values in 32-bit WAV/project backups.
+    // Only integer PCM is clipped to [-1, 1] for quantization.
+    const x=depth===32?(Number.isFinite(raw)?raw:0):clamp(raw,-1,1);
     if(depth===16){view.setInt16(pos,x<0?Math.round(x*32768):Math.round(x*32767),true);pos+=2;}
     else if(depth===24){const v=x<0?Math.round(x*8388608):Math.round(x*8388607);view.setUint8(pos++,v&255);view.setUint8(pos++,(v>>8)&255);view.setUint8(pos++,(v>>16)&255);}
     else {view.setFloat32(pos,x,true);pos+=4;}

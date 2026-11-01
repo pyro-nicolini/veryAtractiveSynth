@@ -8,17 +8,20 @@ import {TUNE_POINTS,normalizeTune,tunePointFromManual,applyTunePoint,findTunePre
 import {pitchReadout} from './pitch-display.js';
 import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMarkup} from './tune-lab-ui.js';
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
+import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mixer.js';
+import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,master:85,busy:false};
+const state={tracks:[],selected:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
   timeline:['Línea de tiempo','Cada forma de onda representa un sonido. Toca o arrastra el cabezal verde en la regla de tiempo para adelantar o retroceder. También puedes tocar una onda. Usa las flechas izquierda y derecha del teclado para avanzar o retroceder 1 segundo. En AJUSTAR TIEMPOS puedes desplazar, recortar y suavizar entradas y salidas.'],
   inspector:['Ajustes de la capa','Los tres controles principales son volumen, afinación y limpieza. Prueba un estilo predefinido si no sabes por dónde empezar. Los efectos adicionales se encuentran en MÁS EFECTOS.'],
   volume:['Volumen de esta capa','Sube o baja únicamente el sonido seleccionado. No cambia el volumen de las otras pistas.'],
+  mixer:['Consola Studio','La consola agrupa cada capa y sus controles. Modifica su volumen, posición izquierda/derecha, silencia o escucha solo una pista; asigna música, voces o efectos a un BUS para ajustar un grupo entero de una vez. Cada bus llega al MASTER. El volumen indica dB relativos: 0 dB equivale a 100% de ganancia, y bajar a −∞ silencia la señal. El MASTER controla la salida final. Es un mezclador inicial de tres buses, aún sin envíos de efectos auxiliares ni automatización.'],
   master:['Volumen final','Controla lo que escuchas y lo que sale en el archivo exportado. Evita subirlo tanto que distorsione.'],
   autotune:['Afinación automática','Hace que las notas de la voz se acerquen a una escala musical. 0% es voz original; 100% es un efecto pronunciado. Funciona mejor con una voz individual y clara. El algoritmo actual es experimental, no equivale a un procesador vocal profesional.'],
   retune:['Velocidad de afinación','Alta: efecto robótico y cambios más rápidos. Baja: transiciones más suaves y naturales.'],
@@ -57,12 +60,14 @@ let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses}};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
   state.metronome=!!options.metronome;state.snap=!!options.snap;state.loop=!!options.loop;
   state.recordShiftMs=Math.round(clamp(options.recordShiftMs??0,-300,300));
+  state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
+  state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
   $('#snapBtn')?.setAttribute('aria-pressed',String(state.snap));
@@ -101,11 +106,11 @@ function saveStatus(label,kind=''){
   el.textContent=label;el.className='save-status '+kind;
 }
 function queueAutosave(){
-  if(!state.tracks.length||state.recording)return;
+  if(state.recording)return;
   clearTimeout(autosaveTimer);
   saveStatus('CAMBIOS SIN GUARDAR','saving');
   autosaveTimer=setTimeout(async()=>{
-    if(state.recording||!state.tracks.length)return;
+    if(state.recording)return;
     if(autosaveBusy){autosaveQueued=true;return;}
     autosaveBusy=true;
     saveStatus('GUARDANDO EN ESTE EQUIPO...','saving');
@@ -153,7 +158,7 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
 }
 function addTrack(buffer,name,type='audio',offset=0){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
-  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset)};
+  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:type==='voice'?'vocals':'music'};
   checkpoint();state.tracks.push(t);state.selected=id;render();if(engine.playing)restartPlayback();
   return t;
 }
@@ -173,7 +178,79 @@ function render(){
       '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div><button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(t.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" title="Arrastrar este sonido" aria-label="Mover capa '+html(t.name)+'">↔</button></div>'+
       '<div class="track-tail"><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
-  renderInspector();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
+  renderInspector();renderMixer();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
+}
+function renderMixer(){
+  const area=$('#mixerArea'),body=$('#mixerBody');
+  if(!area||!body)return;
+  area.hidden=!state.mixerOpen;
+  const toggle=$('#mixerToggle');
+  if(toggle){toggle.setAttribute('aria-expanded',String(state.mixerOpen));toggle.setAttribute('aria-pressed',String(state.mixerOpen));}
+  if(state.mixerOpen)body.innerHTML=mixerMarkup(state.tracks,state.buses,state.selected);
+}
+function paintMixerMeters(){
+  if(state.mixerOpen)updateMixerMeters($('#mixerArea'),engine,state.tracks);
+}
+function openMixer(force){
+  state.mixerOpen=typeof force==='boolean'?force:!state.mixerOpen;
+  renderMixer();
+}
+function setupMixer(){
+  $('#mixerToggle').onclick=()=>openMixer();
+  $('#mixerClose').onclick=()=>openMixer(false);
+  $('#mixerHelp').onclick=()=>help('mixer');
+  const root=$('#mixerBody');
+  root.addEventListener('pointerdown',event=>{
+    if(event.target.matches('[data-mix-volume],[data-mix-pan],[data-mix-bus-volume]'))checkpoint();
+  });
+  root.addEventListener('keydown',event=>{
+    if(event.target.matches('input[type="range"]')&&
+       ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)&&!event.repeat)checkpoint();
+  });
+  root.addEventListener('click',event=>{
+    const tSelect=event.target.closest('[data-mix-select]');
+    if(tSelect){state.selected=tSelect.dataset.mixSelect;renderInspector();renderMixer();return;}
+    const mute=event.target.closest('[data-mix-mute]');
+    if(mute){handleTrackAction('mute',mute.dataset.mixMute);return;}
+    const solo=event.target.closest('[data-mix-solo]');
+    if(solo){handleTrackAction('solo',solo.dataset.mixSolo);return;}
+  });
+  root.addEventListener('input',event=>{
+    const input=event.target;
+    if(input.hasAttribute('data-mix-bus-volume')){
+      const bus=input.dataset.mixBusVolume;
+      if(!BUS_IDS.includes(bus))return;
+      state.buses[bus]=clamp(input.value,0,100);
+      engine.setBuses(state.buses);
+      const label=Array.from(root.querySelectorAll('[data-mix-bus-value]')).find(e=>e.dataset.mixBusValue===bus);
+      if(label)label.textContent=formatDb(state.buses[bus]);
+      queueAutosave();return;
+    }
+    const volume=input.dataset.mixVolume,pan=input.dataset.mixPan,id=volume||pan;
+    if(!id)return;
+    const track=state.tracks.find(t=>t.id===id);if(!track)return;
+    if(volume){
+      track.volume=clamp(input.value,0,100);
+      const label=Array.from(root.querySelectorAll('[data-mix-value]')).find(e=>e.dataset.mixValue===id);
+      if(label)label.textContent=formatDb(track.volume);
+    }else{
+      track.pan=clamp(input.value,-100,100);
+      const label=Array.from(root.querySelectorAll('[data-mix-pantext]')).find(e=>e.dataset.mixPantext===id);
+      if(label)label.textContent=track.pan===0?'CENTRO':track.pan<0?'IZQ '+Math.abs(track.pan):'DER '+track.pan;
+    }
+    engine.updateTrack(track);queueAutosave();
+  });
+  root.addEventListener('change',event=>{
+    const input=event.target;
+    if(input.hasAttribute('data-mix-route')){
+      const track=state.tracks.find(t=>t.id===input.dataset.mixRoute);
+      if(!track||!BUS_IDS.includes(input.value))return;
+      checkpoint();track.bus=input.value;
+      renderMixer();restartPlayback();queueAutosave();
+    }else if(input.matches('[data-mix-volume],[data-mix-pan],[data-mix-bus-volume]')){
+      renderInspector();queueAutosave();
+    }
+  });
 }
 function drawWaves(){
   const full=timelineSpan(state.tracks);
@@ -236,7 +313,7 @@ function runTicker(){
   cancelAnimationFrame(raf);
   const tick=()=>{
     if(engine.playing){
-      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();
+      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();
       if(p>=projectDuration(state.tracks)-.015){
         engine.stop();state.position=0;
         if(state.loop&&state.tracks.length){
@@ -512,6 +589,8 @@ async function prepareSelectedMic(){
   if(!navigator.mediaDevices?.getUserMedia)return toast('Se requiere HTTPS o localhost y un navegador compatible');
   const selected=$('#micSelect')?.value||'',monitor=!!$('#monitorToggle')?.checked;
   const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
+  state.inputGain=clamp($('#recordGain')?.value??state.inputGain,0,200);
+  state.monitorGain=clamp($('#monitorGain')?.value??state.monitorGain,0,100);
   state.preferredInput=selected;
   const status=$('#micStatus');if(status)status.textContent='Solicitando permiso al micrófono...';
   let stream;
@@ -524,8 +603,9 @@ async function prepareSelectedMic(){
       echoCancellation:!monitor,noiseSuppression:!monitor,autoGainControl:false
     },video:false});
     if(!$('#micSelect')){stream.getTracks().forEach(t=>t.stop());return;}
-    const monitorTrack={...defaults(),autotune:tune,clean,space:8,volume:75};
+    const monitorTrack={...defaults(),autotune:tune,clean,space:8,volume:state.monitorGain};
     await engine.prepareMic(stream,monitorTrack,monitor);
+    engine.setMicGain(state.inputGain);
     state.preview={stream,monitorTrack,monitor};
     stream.getAudioTracks()[0]?.addEventListener('ended',()=>{
       if(state.recording)stopRecording();
@@ -557,6 +637,8 @@ async function openRecording(){
     '<div class="field"><label for="micSelect">MICRÓFONO '+buttonInfo('microphone')+'</label><select id="micSelect" class="modal-select"><option value="">Micrófono predeterminado</option></select></div>'+
     '<div id="micStatus" class="mic-status" role="status">Selecciona y prueba tu micrófono</div>'+
     '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+
+    '<div class="control-row"><label for="recordGain">GANANCIA DE ENTRADA</label><input id="recordGain" type="range" min="0" max="200" step="5" value="'+state.inputGain+'"><output id="recordGainValue">'+state.inputGain+'%</output></div>'+
+    '<div class="control-row"><label for="monitorGain">VOLUMEN DE MONITOREO</label><input id="monitorGain" type="range" min="0" max="100" step="5" value="'+state.monitorGain+'"><output id="monitorGainValue">'+state.monitorGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorToggle">Escucharme con efectos (auriculares)</label><input type="checkbox" class="toggle-switch" id="monitorToggle">'+buttonInfo('monitor')+'</div>'+
     '<div class="control-row"><label for="recordTune">Afinación al escucharme</label><input type="range" min="0" max="100" value="80" id="recordTune">'+buttonInfo('autotune')+'</div>'+
     '<div class="control-row"><label for="recordClean">Limpieza al escucharme</label><input type="range" min="0" max="100" value="35" id="recordClean">'+buttonInfo('clean')+'</div>'+
@@ -955,6 +1037,7 @@ function setupClipDragging(){
 }
 
 function wire(){
+  setupMixer();
   installTuneGestures();
   setupScrubber();
   setupClipDragging();
@@ -1034,6 +1117,18 @@ function wire(){
     }
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
+    if(e.target.id==='recordGain'){
+      state.inputGain=clamp(e.target.value,0,200);
+      engine.setMicGain(state.inputGain);
+      const output=$('#recordGainValue');if(output)output.textContent=state.inputGain+'%';
+      queueAutosave();
+    }
+    if(e.target.id==='monitorGain'){
+      state.monitorGain=clamp(e.target.value,0,100);
+      if(state.preview){state.preview.monitorTrack.volume=state.monitorGain;engine.updateMic(state.preview.monitorTrack);}
+      const output=$('#monitorGainValue');if(output)output.textContent=state.monitorGain+'%';
+      queueAutosave();
+    }
     if(e.target.id==='recordShift'){
       const output=$('#recordShiftValue'),value=Number(e.target.value);
       if(output)output.textContent=value===0?'Sin ajuste':(value<0?'Adelantar ':'Retrasar ')+Math.abs(value)+' ms';

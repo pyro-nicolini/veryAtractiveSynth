@@ -1,6 +1,7 @@
 import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
+import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -34,6 +35,12 @@ function makeMaster(ctx,destination,volume){
   const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.35;
   gain.connect(limiter);limiter.connect(meter);meter.connect(destination);
   return {gain,limiter,meter};
+}
+function makeBus(ctx,destination,percent){
+  const gain=ctx.createGain(),meter=ctx.createAnalyser();
+  gain.gain.value=percent/100;meter.fftSize=1024;meter.smoothingTimeConstant=.4;
+  gain.connect(meter);meter.connect(destination);
+  return {gain,meter,data:new Float32Array(1024)};
 }
 function setParams(graph,track,ctx){
   const now=ctx.currentTime||0,settle=.016;
@@ -84,10 +91,17 @@ function createGraph(ctx,track,destination,ir){
   delay.connect(delayFeedback);delayFeedback.connect(delay);
   compressor.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(processedBus);
   input.connect(bypassBus);bypassBus.connect(sum);processedBus.connect(sum);
-  sum.connect(pan);pan.connect(volume);volume.connect(destination);
-  const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet,processedBus,bypassBus};
+  const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.4;
+  sum.connect(pan);pan.connect(volume);volume.connect(meter);meter.connect(destination);
+  const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet,processedBus,bypassBus,meter,meterData:new Float32Array(1024),
+    nodes:[input,voice,hp,lp,low,high,drive,compressor,dry,delay,delayWet,delayFeedback,convolver,reverbWet,sum,processedBus,bypassBus,pan,volume,meter]};
   setParams(graph,track,ctx);
   return graph;
+}
+function disposeGraph(graph){
+  if(!graph)return;
+  try{graph.voice.port.onmessage=null;graph.voice.port.postMessage({type:'monitor',enabled:false});}catch{}
+  for(const node of graph.nodes||[graph.input,graph.volume])try{node.disconnect();}catch{}
 }
 function fadeValue(track,at,total){
   const fadeIn=Math.min(track.fadeIn||0,total),fadeOut=Math.min(track.fadeOut||0,total);
@@ -119,7 +133,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -152,6 +166,22 @@ export class AudioEngine {
   setMaster(value){
     this.masterVolume=clamp(value,0,100);
     if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
+  }
+  setBuses(settings){
+    this.busSettings=sanitiseBuses(settings);
+    for(const [id,bus] of this.buses)bus.gain.gain.setTargetAtTime(this.busSettings[id]/100,this.ctx.currentTime,.02);
+  }
+  getTrackMeter(id){
+    const graph=this.graphs.get(id);
+    if(!graph)return {peak:0,rms:0,db:null};
+    graph.meter.getFloatTimeDomainData(graph.meterData);
+    return meterStats(graph.meterData);
+  }
+  getBusMeter(id){
+    const bus=this.buses.get(id);
+    if(!bus)return {peak:0,rms:0,db:null};
+    bus.meter.getFloatTimeDomainData(bus.data);
+    return meterStats(bus.data);
   }
   getMasterMeter(){
     if(!this.output||!this.ctx)return {peak:0,rms:0};
@@ -221,10 +251,11 @@ export class AudioEngine {
     this.startCtxTime=ctx.currentTime+.06;
     const solo=tracks.some(t=>t.solo);
     const ir=impulse(ctx);
+    for(const id of BUS_IDS)this.buses.set(id,makeBus(ctx,this.output.gain,this.busSettings[id]));
     for(const track of tracks){
       if(track.muted || (solo&&!track.solo))continue;
       if(effectiveDuration(track)<.002)continue;
-      const graph=createGraph(ctx,track,this.output.gain,ir);
+      const graph=createGraph(ctx,track,this.buses.get(busForTrack(track)).gain,ir);
       this.graphs.set(track.id,graph);
       const src=scheduleClip(ctx,track,graph,this.from,this.startCtxTime);
       if(src)this.sources.push(src);
@@ -241,8 +272,9 @@ export class AudioEngine {
   stop(){
     this.stopMetronome();
     for(const source of this.sources){try{source.stop();}catch{}try{source.disconnect();}catch{}}
-    for(const graph of this.graphs.values())try{graph.input.disconnect();graph.volume.disconnect();}catch{}
-    this.sources=[];this.graphs.clear();this.playing=false;
+    for(const graph of this.graphs.values())disposeGraph(graph);
+    for(const bus of this.buses.values()){try{bus.gain.disconnect();bus.meter.disconnect();}catch{}}
+    this.sources=[];this.graphs.clear();this.buses.clear();this.playing=false;
   }
   updateTrack(track){
     const graph=this.graphs.get(track.id);
@@ -273,16 +305,20 @@ export class AudioEngine {
     const ctx=this.ctx,source=ctx.createMediaStreamSource(stream);
     const analyser=ctx.createAnalyser();
     analyser.fftSize=2048;analyser.smoothingTimeConstant=.3;
-    source.connect(analyser);
+    const inputGain=ctx.createGain();inputGain.gain.value=1;
+    source.connect(inputGain);inputGain.connect(analyser);
     const meterSilent=ctx.createGain();meterSilent.gain.value=0;
     analyser.connect(meterSilent);meterSilent.connect(ctx.destination);
     let monitorGraph=null;
     if(monitor){
       monitorGraph=createGraph(ctx,settings,this.output.gain,impulse(ctx));
-      source.connect(monitorGraph.input);
+      inputGain.connect(monitorGraph.input);
     }
-    this.mic={stream,source,analyser,meterSilent,monitorGraph};
+    this.mic={stream,source,inputGain,analyser,meterSilent,monitorGraph};
     return analyser;
+  }
+  setMicGain(percent){
+    if(this.mic?.inputGain)this.mic.inputGain.gain.setTargetAtTime(clamp(percent,0,200)/100,this.ctx.currentTime,.012);
   }
   updateMic(settings){
     if(this.mic?.monitorGraph)setParams(this.mic.monitorGraph,settings,this.ctx);
@@ -295,7 +331,7 @@ export class AudioEngine {
   async startCapture(onProgress){
     if(!this.mic)throw Error('Primero selecciona y activa un micrófono');
     if(this.capture)throw Error('La grabación ya está activa');
-    const ctx=this.ctx,source=this.mic.source;
+    const ctx=this.ctx,source=this.mic.inputGain;
     const node=new AudioWorkletNode(ctx,'vas-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
     // Keep worklet processing while routing guaranteed silence to destination.
     const silent=ctx.createGain();silent.gain.value=0;
@@ -332,8 +368,9 @@ export class AudioEngine {
   stopMic(){
     if(this.capture)return; // do not cut a recording in progress
     if(!this.mic)return;
-    const {source,analyser,meterSilent,monitorGraph,stream}=this.mic;
-    try{source.disconnect();analyser.disconnect();meterSilent.disconnect();monitorGraph?.input.disconnect();monitorGraph?.volume.disconnect();}catch{}
+    const {source,inputGain,analyser,meterSilent,monitorGraph,stream}=this.mic;
+    try{source.disconnect();inputGain.disconnect();analyser.disconnect();meterSilent.disconnect();}catch{}
+    disposeGraph(monitorGraph);
     stream.getTracks().forEach(track=>track.stop());
     this.mic=null;
   }
@@ -347,7 +384,8 @@ export class AudioEngine {
   updateMonitor(track){if(this.live)setParams(this.live.graph,track,this.ctx);}
   stopMonitor(){
     if(!this.live)return;
-    try{this.live.node.disconnect();this.live.graph.input.disconnect();this.live.graph.volume.disconnect();}catch{}
+    try{this.live.node.disconnect();}catch{}
+    disposeGraph(this.live.graph);
     this.live=null;
   }
   async exportMix(tracks,{depth=24,rate=48000,onlyId=null}={}){
@@ -368,8 +406,9 @@ export class AudioEngine {
     catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
     const output=makeMaster(offline,offline.destination,this.masterVolume);
     const ir=impulse(offline);
+    const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
     for(const track of active){
-      const graph=createGraph(offline,track,output.gain,ir);
+      const graph=createGraph(offline,track,exportBuses.get(busForTrack(track)).gain,ir);
       scheduleClip(offline,track,graph,0,0);
     }
     const rendered=await offline.startRendering();

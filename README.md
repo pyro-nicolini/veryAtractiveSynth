@@ -2,9 +2,20 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.6.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.7.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
+
+
+## DesignPhase 0.7 — Studio Mixer y entradas
+
+**NUEVO: botón MIXER** (barra superior). Abre una consola dentro del estudio y **sin abandonar la línea de tiempo**. Cada pista tiene fader de volumen (en dB relativos), medidor RMS aproximado, panorámica estéreo, Mute, Solo y selección de bus. Los tres buses (MÚSICA, VOCES, EFECTOS) tienen faders y medidores propios; llegan a la salida MASTER. El volumen de un bus modifica sus pistas al escuchar **y** al exportar. No es todavía un rack de efectos auxiliares: los buses solo agrupan niveles.
+
+**ENTRADAS / SALIDAS:** en Grabar mi voz ahora puedes modificar GANANCIA DE ENTRADA (0–200%) antes de capturar y VOLUMEN DE MONITOREO (0–100%) independientemente. La ganancia de entrada afecta el audio PCM grabado, la señal visual y la escucha; el volumen de monitoreo afecta **solo la escucha procesada**, no la toma. No puede subir artificialmente el nivel del micrófono físico, y valores mayores a 100% pueden saturar. La selección de salida de audio aún depende de capacidades del navegador.
+
+**Seguridad del proyecto:** los buses, ganancias y opciones de entrada quedan en la sesión, biblioteca local y respaldo .vasproject. Los proyectos anteriores se abren con buses al 100% y asignación automática de voz a VOCES y demás audio a MÚSICA. Se mejoró la desconexión de nodos y loops de eco, la navegación de modales con Tab y el respaldo WAV float32 que conserva muestras superiores a ±1 (el PCM entero sigue limitado).
+
+**No completado:** múltiple clips dentro de una misma pista, envíos a buses de efectos, automatizaciones, calibración de latencia real, autotune profesional, reducción de ruido avanzada ni compatibilidad de todos los códecs móviles.
 
 
 ## DesignPhase 0.6 — Nota detectada y cuenta regresiva

@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.6 implementado
+## 3. Estado 0.7 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,19 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 0.7 — Studio Core / mixer no destructivo
+
+- [x] Consola desplegable con faders por pista, lectura en dB, mute, solo y paneo.
+- [x] Medidores individuales y tres buses de grupo (MÚSICA, VOCES y EFECTOS).
+- [x] Ruta de bus idéntica en escucha y render offline; niveles persistidos en proyectos.
+- [x] Control de ganancia de entrada y volumen de monitoreo por separado.
+- [x] Reparación de trampa de foco de modales y desconexión de nodos de efectos.
+- [x] Exportación WAV de 32-bit float preserva rango flotante completo.
+- [x] Un proyecto sin pistas también puede autoguardarse, evitando resucitar la sesión anterior.
+- [ ] Verificación e2e con interfaz y hardware reales para faders, captura, audio y exportación.
+- [ ] Edición con múltiples clips por pista, bus sends, automatizaciones, medición LUFS/true peak.
+- [ ] Latencia automática, pitch DSP profesional, supresión avanzada de ruido y códecs móviles.
 
 ### Fase 0.6 — Medición de tono y grabación asistida
 
