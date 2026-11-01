@@ -1,4 +1,5 @@
-import {PAD_KEYS,padBounds,copySample,waveformPoints,safePadName} from './sample-bank.js';
+import {PAD_KEYS,padBounds,copySample,waveformPoints,safePadName,SAMPLE_FX,sampleEffect} from './sample-bank.js';
+import {defaults,encodeWav,downloadBlob,safeFilename} from './dsp.js';
 import {savePad,loadPads} from './sample-pad-store.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function padWaveSVG(buffer,from=0,to=buffer.duration){
@@ -45,10 +46,16 @@ export class SampleDeck{
       '<div class="sample-trim"><label>INICIO <output id="sampleStartLabel">'+from.toFixed(2)+' s</output><input id="sampleStart" type="range" min="0" max="'+duration+'" step=".01" value="'+from+'"></label>'+
       '<label>FINAL <output id="sampleEndLabel">'+to.toFixed(2)+' s</output><input id="sampleEnd" type="range" min="0" max="'+duration+'" step=".01" value="'+to+'"></label></div>':
       '<p class="sample-edit-empty">Carga un sonido de hasta 30 segundos o corta uno desde tu pista seleccionada.</p>')+
+    (pad?'<label class="sample-fx-label" for="sampleFx">COLOR DEL SAMPLE <select id="sampleFx" aria-label="Efecto del pad">'+
+      Object.entries(SAMPLE_FX).map(([id,fx])=>'<option value="'+id+'" '+((pad.fx||'original')===id?'selected':'')+'>'+esc(fx.name)+'</option>').join('')+
+      '</select></label><p class="sample-fx-hint">El original se conserva · escucha el pad con el color elegido, o exporta cualquiera de las dos versiones.</p>':'')+
     '<div class="sample-editor-actions"><button type="button" data-pad-import>↑ Cargar audio</button>'+
     '<button type="button" data-pad-from-track>✂ Desde la pista</button>'+
     '<button type="button" data-pad-save '+(!pad?'disabled':'')+'>✓ Guardar pad</button>'+
-    (pad?'<button type="button" data-pad-insert>＋ Enviar a pistas</button><button type="button" data-pad-remove>Eliminar</button>':'')+'</div>';
+    (pad?'<button type="button" data-pad-insert>＋ Enviar a pistas</button>'+
+     '<button type="button" data-pad-export="dry">↓ WAV original</button>'+
+     '<button type="button" data-pad-export="wet">↓ WAV con FX</button>'+
+     '<button type="button" data-pad-remove>Eliminar</button>':'')+'</div>';
  }
  select(i){this.selected=i;this.draft=this.pads[i]?{...this.pads[i]}:null;this.render();}
  async click(event){
@@ -61,6 +68,21 @@ export class SampleDeck{
   }
   if(target.hasAttribute('data-pad-close')){this.selected=null;this.draft=null;this.render();return;}
   if(this.selected===null)return;
+  if(target.hasAttribute('data-pad-export')){
+    const pad=this.draft||this.pads[this.selected];if(!pad)return;
+    try{
+      const ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
+      const processed=target.dataset.padExport==='wet';
+      const fx=sampleEffect(pad.fx);
+      const wav=processed&&pad.fx!=='original'
+        ?await this.engine.exportMix([{...defaults(),...fx.settings,id:'pad-export',name:pad.name,
+          type:'audio',buffer,volume:85,bus:'music',muted:false,solo:false}],{depth:24,rate:48000})
+        :encodeWav(buffer,24);
+      downloadBlob(wav,safeFilename(pad.name)+(processed?'-con-fx':'-original')+'.wav');
+      this.say('Sample exportado como WAV '+(processed?'procesado':'original'));
+    }catch(error){this.say('No se pudo exportar el pad: '+error.message);}
+    return;
+  }
   if(target.hasAttribute('data-pad-import')){this.root.querySelector('#sampleFile')?.click();return;}
   if(target.hasAttribute('data-pad-from-track')){
     const item=this.onSource();if(!item?.buffer){this.say('Selecciona una pista con sonido primero');return;}
@@ -84,7 +106,7 @@ export class SampleDeck{
   if(target.hasAttribute('data-pad-insert')){
     const pad=this.draft||this.pads[this.selected];if(!pad)return;
     try{const ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
-      this.onAdd(buffer,pad.name);this.say('Sample agregado como pista');}
+      this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings);this.say('Sample agregado como pista con sus efectos editables');}
     catch(error){this.say(error.message);}return;
   }
   if(target.hasAttribute('data-pad-remove')){
@@ -94,6 +116,10 @@ export class SampleDeck{
   }
  }
  async change(event){
+  if(event.target.id==='sampleFx'){
+    if(this.selected!==null){this.draft={...(this.draft||this.pads[this.selected]),fx:sampleEffect(event.target.value)===SAMPLE_FX.original?'original':event.target.value};this.say('Efecto elegido. Pulsa Guardar pad para conservarlo.');}
+    return;
+  }
   if(event.target.id!=='sampleFile')return;
   const file=event.target.files?.[0];if(!file)return;
   try{
@@ -115,6 +141,12 @@ export class SampleDeck{
  async play(index){
   const pad=this.pads[index];if(!pad)return;
   try{
+   if(pad.fx&&pad.fx!=='original'){
+     const source=await this.engine.previewSample(pad.buffer,pad.from,pad.to,sampleEffect(pad.fx).settings);
+     const tile=this.root.querySelector('[data-pad-play="'+index+'"]');tile?.classList.add('is-playing');
+     source.addEventListener('ended',()=>tile?.classList.remove('is-playing'),{once:true});
+     return;
+   }
    const ctx=await this.engine.ready(),source=ctx.createBufferSource();
    source.buffer=pad.buffer;source.connect(this.engine.output.gain);
    source.start(ctx.currentTime,pad.from,pad.to-pad.from);
