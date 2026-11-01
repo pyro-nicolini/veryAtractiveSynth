@@ -1616,7 +1616,7 @@ function openTrackExport(id){
   state.exportTrackId=id;
   modal('Exportar o guardar · '+track.name,
     '<p>Conservamos todos tus clips originales. Puedes descargar esta capa con efectos o sin ellos, o crear una nueva pista renderizada dentro del proyecto.</p>'+
-    '<div class="field"><label for="trackExportMode">Sonido</label><select class="modal-select" id="trackExportMode"><option value="wet">Con efectos y automatizaciones actuales</option><option value="dry">Sin efectos (mantiene cortes, tiempo, volumen y panorama)</option></select></div>'+
+    '<div class="field"><label for="trackExportMode">Sonido</label><select class="modal-select" id="trackExportMode"><option value="wet">Con los efectos actuales</option><option value="dry">Sin efectos (mantiene cortes, tiempo, volumen y panorama)</option></select></div>'+
     '<div class="field"><label for="trackExportDepth">Formato WAV</label><select class="modal-select" id="trackExportDepth"><option value="24">24-bit · producción</option><option value="16">16-bit · compatible</option><option value="32">32-bit float</option></select></div>'+
     '<p class="hint">Se incluye el espacio previo a la pista para conservar la sincronía con la canción. Crear una nueva pista no borra ni silencia la original.</p>',
     [{label:'↓ DESCARGAR WAV',type:'do-track-export',primary:true},{label:'▣ GUARDAR COMO PISTA',type:'do-track-bounce'}]);
@@ -1635,6 +1635,7 @@ async function performTrackExport(asTrack=false){
       const buffer=await engine.decode(new File([blob],safeFilename(track.name)+'.wav',{type:'audio/wav'}));
       const added=addTrack(buffer,track.name+(dry?' · original':' · con FX'),track.type,0);
       added.bypassEffects=true;added.bus=track.bus;added.volume=100;
+      engine.updateTrack(added);if(engine.playing)restartPlayback();
       modalStack.length=0;$('#modalRoot').innerHTML='';
       render();toast('Nueva pista renderizada sin modificar la fuente.');
     }else{
