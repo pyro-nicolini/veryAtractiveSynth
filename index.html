@@ -24,6 +24,7 @@
       <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
       <button type="button" class="button button-muted" id="helpBtn" aria-label="Guía del estudio">? <span class="desktop-only">GUÍA</span></button>
       <button type="button" class="button button-muted" id="voiceLabBtn" title="Jugar con autotune usando el micrófono en vivo">✦ VOICE LAB</button>
+      <button type="button" class="button button-muted" id="sampleToggle" aria-controls="sampleDeck" aria-expanded="false">◫ SAMPLES</button>
       <button type="button" class="button button-muted" id="flowToggle" aria-expanded="true" aria-controls="flowArea">◉ <span class="desktop-only">CONEXIONES</span></button>
       <button type="button" class="button button-muted" id="mixerToggle" aria-controls="mixerArea" aria-expanded="false" aria-pressed="false"> <span aria-hidden="true">☷</span> MIXER</button>
       <button type="button" class="button button-muted" id="loadBtn">↗ <span class="desktop-only">ABRIR</span></button>
@@ -33,7 +34,7 @@
   </header>
   <main>
     <section class="intro">
-      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · VERSIÓN 1.4.1</div>
+      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · VERSIÓN 1.5.0</div>
         <h1>Tu música, <em>a tu manera.</em></h1>
         <p>Elige un ritmo, conecta tus voces y arrastra efectos. Puedes cambiar todo sin perder el original.</p>
       </div>
@@ -50,6 +51,7 @@
         <span class="action-symbol">♫</span><span class="tile-copy"><strong>Explorar ritmos</strong><small>10 bases originales para probar</small></span><span class="tile-arrow">↗</span>
       </button>
     </section>
+    <section class="sample-deck" id="sampleDeck" hidden aria-label="Banco de 12 samples personalizados"><div id="sampleDeckBody"></div></section>
     <section class="sound-library" id="soundLibrary" aria-label="Biblioteca de sonidos">
       <div class="soft-section-heading"><div><div class="section-overline">INSPIRACIÓN · 100% LOCAL</div><h2>Elige tu sonido</h2><p>Todo empieza con una idea. Toca para probar o arrastra hasta una pista.</p></div><button type="button" class="mini-action" id="libraryHelp" aria-label="Cómo utilizar la biblioteca">?</button></div>
       <div id="libraryBody"></div>

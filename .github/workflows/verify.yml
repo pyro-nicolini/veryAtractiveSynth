@@ -32,6 +32,9 @@ jobs:
           node --check src/fx-rack.js
           node --check src/studio-mixer.js
           node --check src/studio-mixer-ui.js
+          node --check src/sample-bank.js
+          node --check src/sample-pad-store.js
+          node --check src/sample-deck.js
           node --check src/studio-library.js
           node --check src/library-ui.js
           node --check src/flow-studio.js

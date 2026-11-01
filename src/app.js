@@ -19,11 +19,13 @@ import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
 import {pitchReviewMarkup,drawPitchWave,selectionPercent,sourceTimeFromPointer} from './pitch-review-ui.js';
+import {SampleDeck} from './sample-deck.js';
+import {signalQuality} from './sample-bank.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null,zoom:1,recordNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null,zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -157,6 +159,7 @@ function modal(title,content,actions=[]){
   $('.focus-panel')?.focus();
 }
 function closeModal(){
+  if(state.liveRecording)return toast('Detén y guarda la toma antes de cerrar Voice Lab');
   const leavingTune=!!$('#tuneLab');
   if(state.countingIn){state.countingIn.cancelled=true;state.countingIn=null;}
   finishTuneGesture();
@@ -843,6 +846,7 @@ function onTunePitch(message){
 }
 
 function stopLiveTuneMic(){
+  if(state.liveRecording){toast('Detén primero la grabación de Voice Lab');return;}
   state.liveMicToken++;
   state.liveMicActive=false;
   cancelAnimationFrame(state.liveMeterFrame);
@@ -855,10 +859,15 @@ function stopLiveTuneMic(){
 }
 function runLiveTuneMeter(){
   cancelAnimationFrame(state.liveMeterFrame);
-  const samples=new Float32Array(2048);
+  const samples=new Float32Array(4096);
   const tick=()=>{
     if(!state.liveMicActive||state.tuneMode!=='live'||!$('#labLiveMeter'))return;
     if(engine.getMicMeterData(samples)){
+      if(performance.now()-state.liveNoteLast>140){
+        state.liveNoteLast=performance.now();
+        const note=estimateNote(samples,engine.ctx?.sampleRate||48000);
+        onTunePitch(note?{voiced:true,midi:note.midi,target:note.nearest,cents:note.cents,frequency:note.frequency,confidence:note.confidence}:{voiced:false});
+      }
       const {rms,peak}=meterLevel(samples);
       const bar=$('#labLiveMeter');
       bar.style.width=Math.min(100,Math.round(Math.sqrt(rms)*165))+'%';
@@ -890,11 +899,11 @@ async function startLiveTuneMic(){
   const chosen=$('#labMicSelect')?.value||'';
   let stream;
   try{
-    await engine.ready();
     stream=await navigator.mediaDevices.getUserMedia({audio:{
       ...(chosen?{deviceId:{exact:chosen}}:{}),
       echoCancellation:false,noiseSuppression:false,autoGainControl:false
     },video:false});
+    await engine.ready();
     if(request!==state.liveMicToken||state.tuneMode!=='live'||!$('#tuneLab')){
       stream.getTracks().forEach(t=>t.stop());return;
     }
@@ -907,22 +916,70 @@ async function startLiveTuneMic(){
     }
     engine.setMicGain(clamp($('#labLiveInputGain')?.value??state.inputGain,0,150));
     state.liveMicActive=true;
+    stream.getAudioTracks()[0]?.addEventListener('mute',()=>{
+      if($('#micStatus'))$('#micStatus').textContent='⚠ Micrófono silenciado por el sistema o navegador';
+    });
+    stream.getAudioTracks()[0]?.addEventListener('unmute',()=>{
+      if($('#micStatus'))$('#micStatus').textContent='● Micrófono activo · comprueba la onda';
+    });
     stream.getAudioTracks()[0]?.addEventListener('ended',()=>{
       if(state.liveMicActive){stopLiveTuneMic();toast('El micrófono fue desconectado');}
     },{once:true});
-    engine.watchMicPitch(onTunePitch);
+    engine.watchMicPitch(null);
     runLiveTuneMeter();
     const label=$('#labLiveStatus');
     if(label)label.textContent='◉ VOZ EN VIVO · AURICULARES RECOMENDADOS · SIN GRABACIÓN';
     await populateLiveInputs();
   }catch(error){
-    stream?.getTracks().forEach(t=>t.stop());
+    stream?.getTracks().forEach(t=>t.stop());state.preview=null;state.micSignal=false;
+    engine.stopMic();
     const msg=error.name==='NotAllowedError'?'Permiso de micrófono denegado':error.name==='NotFoundError'?'No hay micrófono disponible':error.message;
     if($('#labLiveStatus'))$('#labLiveStatus').textContent=msg;
     toast(msg);
   }finally{state.liveMicBusy=false;}
 }
+
+async function startLiveRecording(){
+  if(state.liveRecording||!state.liveMicActive||!engine.mic)return toast('Primero activa y autoriza el micrófono');
+  if(engine.capture||state.recording)return toast('Ya hay una grabación en curso');
+  try{
+    const settings={...state.liveTuneTrack,fxBypass:{...state.liveTuneTrack.fxBypass}};
+    const offset=engine.playing?engine.position():state.position;
+    const capture=await engine.startCapture(seconds=>{
+      if(state.liveRecording)state.liveRecording.seconds=seconds;
+      if(seconds>=MAX_RECORDING_SECONDS&&state.liveRecording&&!state.liveRecording.stopping)stopLiveRecording();
+    });
+    state.liveRecording={settings,offset,seconds:0,capture,stopping:false};
+    const status=$('#labLiveStatus');
+    if(status)status.textContent='● GRABANDO · conserva el original y aplica efectos al reproducir';
+    const start=$('[data-action="tune-live-record"]'),stop=$('[data-action="tune-live-save"]');
+    if(start)start.disabled=true;if(stop)stop.disabled=false;
+  }catch(error){toast('No se pudo comenzar: '+error.message);}
+}
+async function stopLiveRecording(){
+  const rec=state.liveRecording;if(!rec||rec.stopping)return;
+  rec.stopping=true;
+  try{
+    const buffer=await engine.stopCapture();
+    if(!signalQuality(buffer).valid)throw Error('El micrófono no entregó voz; no se creó una pista vacía');
+    state.liveRecording=null;
+    const t=addTrack(buffer,'Voz Lab '+(state.tracks.filter(x=>x.type==='voice').length+1),'voice',rec.offset);
+    const keep={id:t.id,buffer:t.buffer,name:t.name,type:t.type,color:t.color,offset:t.offset,bus:t.bus};
+    Object.assign(t,rec.settings,keep);
+    engine.updateTrack(t);queueAutosave();render();
+    toast('Toma guardada: voz original y efectos editables');
+  }catch(error){toast('No se guardó: '+error.message);}
+  finally{
+    state.liveRecording=null;
+    const start=$('[data-action="tune-live-record"]'),stop=$('[data-action="tune-live-save"]');
+    if(start)start.disabled=false;if(stop)stop.disabled=true;
+    const status=$('#labLiveStatus');
+    if(status)status.textContent='◉ MICRÓFONO ACTIVO · PUEDES GRABAR OTRA TOMA';
+  }
+}
+
 function switchTuneSource(mode){
+  if(state.liveRecording)return toast('Detén la grabación antes de cambiar de modo');
   if(!['live','track'].includes(mode))return;
   if(mode==='track'&&!current())return toast('Primero selecciona o graba una pista');
   if(mode!==state.tuneMode)stopLiveTuneMic();
@@ -1063,6 +1120,8 @@ function tuneAction(action){
   if(action==='tune-source-live'){switchTuneSource('live');return;}
   if(action==='tune-source-track'){switchTuneSource('track');return;}
   if(action==='tune-live-start'){startLiveTuneMic();return;}
+  if(action==='tune-live-record'){startLiveRecording();return;}
+  if(action==='tune-live-save'){stopLiveRecording();return;}
   if(action==='tune-live-stop'){stopLiveTuneMic();return;}
   if(action==='tune-apply'){
     if(state.tuneMode!=='live'||!current())return toast('Selecciona una pista antes de aplicar');
@@ -1326,16 +1385,21 @@ function drawMicPreview(){
   const preview=state.preview;
   if(!preview)return;
   if(!$('#recordMeter'))return;
-  const samples=new Float32Array(2048);
+  const samples=new Float32Array(4096);
   if(engine.getMicMeterData(samples)){
     if(performance.now()-state.recordNoteLast>115){
       state.recordNoteLast=performance.now();
-      const note=estimateNote(samples,engine.ctx?.sampleRate||48000),label=$('#singingNote'),fine=$('#singingCents');
+      const detected=estimateNote(samples,engine.ctx?.sampleRate||48000),label=$('#singingNote'),fine=$('#singingCents');
+      // Discard isolated octave jumps and release the display in silence.
+      state.noteHistory=detected?[...state.noteHistory.slice(-3),detected.nearest]:[];
+      const same=detected&&state.noteHistory.filter(n=>Math.abs(n-detected.nearest)<=1).length>=2;
+      const note=same?detected:null;
       if(label)label.textContent=note?note.name+note.octave:'—';
-      if(fine)fine.textContent=note?(Math.abs(note.cents)<=15?'✓ Cerca de la nota':(note.cents<0?'↑ Un poco más alto':'↓ Un poco más bajo')+' · '+Math.abs(note.cents)+' cents'):'No hay nota clara';
+      if(fine)fine.textContent=note?(Math.abs(note.cents)<=15?'✓ Dentro de ±15 cents':(note.cents<0?'↑ Sube un poco':'↓ Baja un poco')+' · '+Math.abs(note.cents)+' cents'):'Escuchando · canta una nota sostenida';
       for(const step of $('#noteSteps [data-note]'))step.classList.toggle('is-active',!!note&&step.dataset.note===note.name);
     }
     const {rms,peak}=meterLevel(samples);
+    if(rms>.008)state.micSignal=true;
     const level=Math.min(100,Math.round(Math.sqrt(rms)*170));
     $('#recordMeter').style.width=level+'%';
     $('#recordMeter').style.background=peak>.92?'var(--pink)':'var(--green)';
@@ -1382,12 +1446,12 @@ async function prepareSelectedMic(){
   let stream;
   try{
     // Release the previous device before opening a different one.
-    cancelAnimationFrame(state.meterFrame);engine.stopMic();state.preview=null;
-    await engine.ready(); // Resume audio while the PROBAR button still has user activation.
+    cancelAnimationFrame(state.meterFrame);engine.stopMic();state.preview=null;state.micSignal=false;state.noteHistory=[];
     stream=await navigator.mediaDevices.getUserMedia({audio:{
       ...(selected?{deviceId:{exact:selected}}:{}),
       echoCancellation:!monitor,noiseSuppression:!monitor,autoGainControl:false
     },video:false});
+    await engine.ready();
     if(!$('#micSelect')){stream.getTracks().forEach(t=>t.stop());return;}
     const monitorTrack={...defaults(),autotune:tune,clean,space:8,volume:state.monitorGain};
     await engine.prepareMic(stream,monitorTrack,monitor);
@@ -1399,7 +1463,7 @@ async function prepareSelectedMic(){
     },{once:true});
     const actualId=stream.getAudioTracks()[0]?.getSettings?.().deviceId || selected;
     await updateMicrophoneChoices(actualId);
-    if($('#micStatus'))$('#micStatus').textContent='ENTRADA CONECTADA · HABLA PARA PROBAR';
+    if($('#micStatus'))$('#micStatus').textContent='● PERMISO CONCEDIDO · HABLA Y COMPRUEBA LA ONDA';
     const start=$('[data-action="start-record"]');if(start)start.disabled=false;
     const test=$('[data-action="test-mic"]');if(test)test.textContent='↻ CAMBIAR / PROBAR';
     state.recordMeterHistory=[];drawMicPreview();
@@ -1409,6 +1473,7 @@ async function prepareSelectedMic(){
       error.name==='OverconstrainedError'?'El dispositivo elegido ya no está disponible. Selecciona el predeterminado.':
       error.name==='NotFoundError'?'No se encontró ningún micrófono conectado.':error.message;
     if($('#micStatus'))$('#micStatus').textContent=msg;
+    const start=$('[data-action="start-record"]');if(start)start.disabled=true;
     toast(msg);
   }
 }
@@ -1421,8 +1486,10 @@ async function openRecording(){
   modal('Grabar tu voz',
     '<p>Elige tu micrófono, pruébalo y comprueba que llega señal. Después graba sobre tu base.</p>'+
     '<div class="field"><label for="micSelect">MICRÓFONO '+buttonInfo('microphone')+'</label><select id="micSelect" class="modal-select"><option value="">Micrófono predeterminado</option></select></div>'+
-    '<div id="micStatus" class="mic-status" role="status">Selecciona y prueba tu micrófono</div>'+
+    '<div class="mic-permission-explainer"><strong>① Autorizar micrófono</strong><span>Presiona PERMITIR MICRÓFONO y acepta el permiso del navegador. Habla para comprobar la onda antes de grabar. No se enviará audio a internet.</span></div>'+ 
+    '<div id="micStatus" class="mic-status" role="status">Esperando permiso · micrófono apagado</div>'+
     '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+    '<section class="singing-coach" aria-label="Entrenador de notas en vivo"><div><strong>CALENTAMIENTO VOCAL · NOTA ACTUAL</strong><span id="singingNote" aria-live="off">—</span><small id="singingCents">Canta una nota para comenzar · aproximado</small></div><div class="note-steps" id="noteSteps">'+['DO','RE','MI','FA','SOL','LA','SI','DO'].map(n=>'<span data-note="'+n+'">'+n+'</span>').join('')+'</div></section>'+
+    '<details class="record-advanced"><summary>⚙ Opciones avanzadas · efectos, sincronía y monitor</summary>'+ 
     '<div class="control-row"><label for="recordGain">GANANCIA DE ENTRADA</label><input id="recordGain" type="range" min="0" max="200" step="5" value="'+state.inputGain+'"><output id="recordGainValue">'+state.inputGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorGain">VOLUMEN DE MONITOREO</label><input id="monitorGain" type="range" min="0" max="100" step="5" value="'+state.monitorGain+'"><output id="monitorGainValue">'+state.monitorGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorToggle">Escucharme con efectos (auriculares)</label><input type="checkbox" class="toggle-switch" id="monitorToggle">'+buttonInfo('monitor')+'</div>'+
@@ -1431,13 +1498,15 @@ async function openRecording(){
     '<div class="control-row"><label for="recordBacking">Reproducir base al grabar</label><input type="checkbox" class="toggle-switch" id="recordBacking" '+(state.tracks.length?'checked':'')+'></div>'+
     '<div class="control-row"><label for="recordCountIn">Cuenta de 4 pulsos antes de grabar</label><input type="checkbox" id="recordCountIn" class="toggle-switch" checked>'+buttonInfo('countIn')+'</div>'+
     '<div class="control-row"><label for="recordShift">Ajuste de sincronía de tu voz</label><input id="recordShift" type="range" min="-300" max="300" step="25" value="'+state.recordShiftMs+'"><output id="recordShiftValue">'+(state.recordShiftMs===0?'Sin ajuste':state.recordShiftMs+' ms')+'</output>'+buttonInfo('alignment')+'</div>'+
+    '</details>'+ 
     '<div class="note">Grabación PCM sin compresión intermedia. Si tu voz queda desfasada al escucharla, puedes adelantarla o retrasarla con el ajuste de sincronía. Duración máxima: 5 minutos.</div>',
-    [{label:'PROBAR ENTRADA',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
+    [{label:'🎙 PERMITIR MICRÓFONO',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
   const start=$('[data-action="start-record"]');if(start)start.disabled=true;
   await updateMicrophoneChoices();
 }
 async function startRecording(){
-  if(state.recording||state.countingIn||!state.preview)return toast('Primero presiona PROBAR ENTRADA');
+  if(state.recording||state.countingIn||!state.preview)return toast('Primero presiona PERMITIR MICRÓFONO');
+  if(state.preview.stream?.getAudioTracks?.()[0]?.readyState!=='live')return toast('Micrófono desconectado. Vuelve a activarlo.');
   const tune=Number($('#recordTune')?.value??80),clean=Number($('#recordClean')?.value??35);
   state.recordShiftMs=Math.round(Number($('#recordShift')?.value||0));
   state.preview.monitorTrack.autotune=tune;state.preview.monitorTrack.clean=clean;
@@ -1495,21 +1564,34 @@ async function stopRecording(){
   if($('#recordTimer'))$('#recordTimer').textContent='PREPARANDO EL AUDIO...';
   try{
     const buffer=await engine.stopCapture();
-    if(!buffer||buffer.duration<.05)throw Error('La toma es demasiado corta o quedó vacía');
+    if(!buffer||buffer.duration<.08)throw Error('La toma es demasiado corta o quedó vacía');
+    const quality=signalQuality(buffer);
+    if(!quality.valid)throw Error('La grabación está en silencio. No se agregó una pista vacía. Revisa la entrada seleccionada, el permiso del navegador y el medidor; luego graba otra vez.');
     state.recording=null; // capture is finished; allow undo of the newly created take
     const adjustedStart=recording.offset+(recording.recordShiftMs||0)/1000;
     const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',Math.max(0,adjustedStart));
     if(adjustedStart<0)track.trimStart=Math.min(buffer.duration-.02,-adjustedStart);
     Object.assign(track,{autotune:recording.tune,clean:recording.clean,retune:70,space:12,preset:'custom'});
     toast('¡Toma grabada! La capa de voz ya aparece en tu mezcla.');
-  }catch(error){toast('No se pudo finalizar la grabación: '+error.message);}
+  }catch(error){
+    toast('Grabación no guardada: '+error.message);
+    if($('#micStatus'))$('#micStatus').textContent='⚠ '+error.message;
+    const footer=$('.focus-footer');
+    if(footer)footer.innerHTML='<button class="button button-muted" data-action="test-mic">↻ CAMBIAR MICRÓFONO</button>'+
+      '<button class="button button-primary" data-action="start-record">● REINTENTAR GRABACIÓN</button>';
+    if($('#recordTimer'))$('#recordTimer').textContent='TOMA NO GUARDADA';
+  }
   finally{
     state.recording=null;
-    cancelAnimationFrame(state.meterFrame);
-    engine.stopMic();state.preview=null;
-    modalStack.length=0;$('#modalRoot').innerHTML='';
-    const ghost=$('#recordingGhost');if(ghost)ghost.innerHTML='';
-    render();
+    if(!$('#recordTimer')||$('#recordTimer').textContent!=='TOMA NO GUARDADA'){
+      cancelAnimationFrame(state.meterFrame);
+      engine.stopMic();state.preview=null;
+      modalStack.length=0;$('#modalRoot').innerHTML='';
+      const ghost=$('#recordingGhost');if(ghost)ghost.innerHTML='';
+      render();
+    }else{
+      const ghost=$('#recordingGhost');if(ghost)ghost.innerHTML='';
+    }
   }
 }
 
@@ -1844,8 +1926,43 @@ function setupClipDragging(){
   tracks.addEventListener('pointercancel',finish);
 }
 
+
+function setupSamples(){
+ const root=$('#sampleDeckBody');
+ if(!root)return;
+ const deck=new SampleDeck({
+  root,engine,onMessage:toast,
+  onSource:()=>{
+   const track=current();
+   if(!track)return null;
+   const clip=getEditableClip(track,state.selectedClip);
+   if(!clip?.buffer)return null;
+   const bounds=clipSourceBounds(clip);
+   const loop=validLoop(clip);
+   return {name:clip.name||track.name,buffer:clip.buffer,
+    from:loop?.from??bounds.start,to:loop?.to??bounds.end};
+  },
+  onAdd:(buffer,name)=>addTrack(buffer,name,'audio',state.position)
+ });
+ state.sampleDeck=deck;
+ const area=$('#sampleDeck'),toggle=$('#sampleToggle');
+ const open=async()=>{
+  const visible=area.hidden;
+  area.hidden=!visible;
+  toggle.setAttribute('aria-expanded',String(visible));
+  if(visible){await deck.load();area.scrollIntoView({behavior:'smooth',block:'nearest'});}
+ };
+ toggle.addEventListener('click',open);
+ document.addEventListener('keydown',event=>{
+  if(area.hidden||event.repeat||event.ctrlKey||event.metaKey||event.altKey||
+   event.target.closest('input,textarea,select,[contenteditable],button')||$('#modalBackdrop'))return;
+  const index=['1','2','3','4','5','6','7','8','9','0','-','='].indexOf(event.key);
+  if(index!==-1&&deck.pads[index]){event.preventDefault();deck.play(index);}
+ });
+}
+
 function wire(){
-  setupMixer();setupFlow();
+  setupMixer();setupFlow();setupSamples();
   installTuneGestures();setupCharacterGestures();
   setupScrubber();
   setupClipDragging();

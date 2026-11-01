@@ -364,7 +364,7 @@ export class AudioEngine {
     this.stopMic();
     const ctx=this.ctx,source=ctx.createMediaStreamSource(stream);
     const analyser=ctx.createAnalyser();
-    analyser.fftSize=2048;analyser.smoothingTimeConstant=.3;
+    analyser.fftSize=4096;analyser.smoothingTimeConstant=.25;
     const inputGain=ctx.createGain();inputGain.gain.value=1;
     source.connect(inputGain);inputGain.connect(analyser);
     const meterSilent=ctx.createGain();meterSilent.gain.value=0;
@@ -413,7 +413,12 @@ export class AudioEngine {
     const chunks=[];let frames=0;
     let resolver,rejecter;
     const completion=new Promise((resolve,reject)=>{resolver=resolve;rejecter=reject;});
-    this.capture={node,silent,chunks,completion};
+    // A worklet error must fail the take, never silently create zero-filled PCM.
+    const cleanup=()=>{try{source.disconnect(node);node.disconnect();silent.disconnect();}catch{}
+      if(this.capture?.node===node)this.capture=null;};
+    node.onprocessorerror=()=>{cleanup();rejecter(Error('El procesador del micrófono se interrumpió. Reinicia la captura.'));};
+    this.capture={node,silent,chunks,completion,cleanup};
+    completion.catch(()=>{});
     node.port.onmessage=event=>{
       const message=event.data;
       if(message?.type==='chunk'){
@@ -425,8 +430,7 @@ export class AudioEngine {
         try{resolver(assembleRecording(ctx,chunks,actual));}
         catch(error){rejecter(error);}
         finally{
-          try{source.disconnect(node);node.disconnect();silent.disconnect();}catch{}
-          if(this.capture?.node===node)this.capture=null;
+          cleanup();
         }
       }
     };
@@ -437,7 +441,13 @@ export class AudioEngine {
     if(!this.capture)return null;
     const capture=this.capture;
     capture.node.port.postMessage({type:'stop'});
-    return await capture.completion;
+    let timeoutId;
+    try{
+      return await Promise.race([
+        capture.completion,
+        new Promise((_,reject)=>{timeoutId=setTimeout(()=>reject(Error('No llegaron muestras completas del micrófono en 5 segundos')),5000);})
+      ]);
+    }finally{clearTimeout(timeoutId);capture.cleanup?.();}
   }
   stopMic(){
     if(this.capture)return; // do not cut a recording in progress

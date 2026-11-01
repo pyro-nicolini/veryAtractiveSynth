@@ -46,7 +46,9 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
       '<label for="labMicSelect">ENTRADA DE MICRÓFONO</label>'+
       '<select id="labMicSelect" aria-label="Elegir micrófono para Voice Playground"><option value="">Micrófono predeterminado</option></select>'+
       '<button type="button" class="lab-action lab-play" data-action="tune-live-start">◉ ACTIVAR MI VOZ</button>'+
-      '<button type="button" class="lab-action" data-action="tune-live-stop">■ DETENER MICRÓFONO</button>'+
+      '<button type="button" class="lab-action" data-action="tune-live-stop">■ DETENER MICRÓFONO</button>'+ 
+      '<button type="button" class="lab-action lab-play" data-action="tune-live-record">● GRABAR TOMA</button>'+ 
+      '<button type="button" class="lab-action" data-action="tune-live-save" disabled>■ GUARDAR VOZ</button>'+
       '<div class="lab-live-gains"><label>ENTRADA <input id="labLiveInputGain" type="range" min="0" max="150" step="5" value="100" aria-label="Ganancia de entrada"></label><output id="labLiveInputValue">100%</output>'+
       '<label>MONITOR <input id="labLiveMonitor" type="range" min="0" max="80" step="5" value="'+Math.min(80,track.volume??60)+'" aria-label="Volumen de escucha en vivo"></label><output id="labLiveMonitorValue">'+Math.min(80,track.volume??60)+'%</output></div>'+
       '<div class="lab-live-meter"><span id="labLiveMeter"></span></div>'+

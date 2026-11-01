@@ -4,35 +4,55 @@
 export const SOLFEGE=Object.freeze(['DO','DO♯','RE','RE♯','MI','FA','FA♯','SOL','SOL♯','LA','LA♯','SI']);
 export const midiFrequency=midi=>440*Math.pow(2,(midi-69)/12);
 export function solfege(midi){if(!Number.isFinite(midi))return '—';return SOLFEGE[((Math.round(midi)%12)+12)%12];}
-export function estimateNote(samples,sampleRate=48000,{low=85,high=800}={}){
-  if(!samples?.length||!Number.isFinite(sampleRate)||sampleRate<8000)return null;
-  const n=samples.length,step=4;
-  let sum=0,peak=0;
-  for(let i=0;i<n;i+=step){const x=samples[i]||0;sum+=x*x;peak=Math.max(peak,Math.abs(x));}
-  const rms=Math.sqrt(sum/Math.ceil(n/step));
-  if(rms<.012||peak<.025)return null;
-  const lo=Math.max(16,Math.floor(sampleRate/high)),hi=Math.min(Math.floor(sampleRate/low),n-150);
-  let best={lag:0,confidence:.63};
-  const candidates=[];
-  for(let lag=lo;lag<=hi;lag+=2){
-    let numerator=0,energy1=0,energy2=0;
-    for(let i=0;i<n-lag;i+=step){
-      const a=samples[i]||0,b=samples[i+lag]||0;
-      numerator+=a*b;energy1+=a*a;energy2+=b*b;
-    }
-    const confidence=numerator/Math.sqrt(energy1*energy2+1e-9);
-    if(confidence>.63)candidates.push({lag,confidence});
-    if(confidence>best.confidence+.0004)best={lag,confidence};
+/** YIN-like normalized-difference detector, A4=440 Hz.
+ * Detects a stable monophonic fundamental, rejecting harmonics and silence.
+ */
+export function estimateNote(samples,sampleRate=48000,{low=80,high=800}={}){
+ if(!samples?.length||!Number.isFinite(sampleRate)||sampleRate<8000)return null;
+ const n=samples.length;
+ let rms=0,peak=0,mean=0;
+ for(let i=0;i<n;i++){const v=samples[i]||0;rms+=v*v;mean+=v;peak=Math.max(peak,Math.abs(v));}
+ rms=Math.sqrt(rms/n);mean/=n;
+ if(rms<.016||peak<.04)return null;
+ // Work on a decimated, DC-corrected signal to bound CPU work on phones.
+ const decimate=sampleRate>=32000?2:1,rate=sampleRate/decimate;
+ const length=Math.floor(n/decimate),data=new Float32Array(length);
+ for(let i=0;i<length;i++)data[i]=(samples[i*decimate]||0)-mean;
+ const minLag=Math.max(8,Math.floor(rate/high)),maxLag=Math.min(Math.ceil(rate/low),Math.floor(length*.48));
+ if(maxLag<=minLag)return null;
+ const differences=new Float32Array(maxLag+1),cmnd=new Float32Array(maxLag+1);
+ let cumulative=0;
+ for(let tau=1;tau<=maxLag;tau++){
+  let difference=0;
+  const last=length-tau;
+  for(let i=0;i<last;i+=2){
+   const d=data[i]-data[i+tau];difference+=d*d;
   }
-  if(!best.lag)return null;
-  // Shortest near-optimal period avoids confusing harmonics with octaves.
-  // Pure stable notes often correlate marginally better at 2× or 3× periods.
-  best=candidates.find(c=>c.confidence>=best.confidence-.018)||best;
-  const frequency=sampleRate/best.lag,midi=69+12*Math.log2(frequency/440);
-  if(!Number.isFinite(midi)||midi<25||midi>105)return null;
-  const nearest=Math.round(midi),cents=Math.round((midi-nearest)*100);
-  return {frequency,midi,nearest,cents,confidence:best.confidence,rms,
-    name:solfege(nearest),octave:Math.floor(nearest/12)-1};
+  differences[tau]=difference;cumulative+=difference;
+  cmnd[tau]=cumulative>1e-8?difference*tau/cumulative:1;
+ }
+ let candidate=-1;
+ const threshold=.13;
+ for(let tau=minLag;tau<=maxLag;tau++){
+  if(cmnd[tau]>=threshold)continue;
+  while(tau+1<=maxLag&&cmnd[tau+1]<cmnd[tau])tau++;
+  candidate=tau;break;
+ }
+ if(candidate<0){
+  let best=1;
+  for(let tau=minLag;tau<=maxLag;tau++)if(cmnd[tau]<cmnd[best])best=tau;
+  if(cmnd[best]>.19)return null;
+  candidate=best;
+ }
+ const previous=cmnd[Math.max(1,candidate-1)],middle=cmnd[candidate],next=cmnd[Math.min(maxLag,candidate+1)];
+ const denominator=previous-2*middle+next;
+ const correction=Math.abs(denominator)>1e-8?Math.max(-1,Math.min(1,.5*(previous-next)/denominator)):0;
+ const refined=candidate+correction;
+ const frequency=rate/refined,midi=69+12*Math.log2(frequency/440);
+ const confidence=1-middle;
+ if(!Number.isFinite(midi)||midi<25||midi>105||confidence<.80||frequency<low||frequency>high)return null;
+ const nearest=Math.round(midi),cents=Math.round((midi-nearest)*100);
+ return {frequency,midi,nearest,cents,confidence,rms,name:solfege(nearest),octave:Math.floor(nearest/12)-1};
 }
 export function noteRegions(buffer,{step=.40,maxRegions=550}={}){
   if(!buffer?.numberOfChannels||!buffer.sampleRate)throw Error('Se necesita una pista de audio');
