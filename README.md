@@ -7,6 +7,18 @@
 
 
 
+## DesignPhase 1.3 — Singing Coach / clips con notas / personajes de voz
+
+**Grabación — DO RE MI:** el modal GRABAR MI VOZ muestra la nota aproximada detectada del micrófono (DO, RE, MI, FA, SOL, LA, SI con octava) en tiempo real, la desviación en cents y una fila visual iluminada. Funciona con el audio de entrada, aunque no actives el monitoreo. Es útil para calentar o entrenar una melodía monofónica; no detecta polifonía ni confirma afinación de estudio. La entrada no sale del equipo.
+
+**Revisión vocal:** selecciona una pista y abre EDITAR NOTAS POR FRAGMENTOS. Puedes delimitar un intervalo en segundos del archivo fuente y desplazar el tono entre −12 y +12 semitonos, sin modificar su PCM. También puedes pulsar DETECTAR NOTAS (solo análisis, no altera audio) o uno de los tres botones AUTO AFINADO: Natural, Estudio y Electrónico. El análisis automático busca el tono fundamental en ventanas, proyecta la nota a la escala/key elegidos y almacena la máscara temporal por clip. Se aplica mediante un AudioWorklet al escuchar y al exportar. Las máscaras se guardan en IndexedDB y el proyecto portable. Limitación: hasta 550 segmentos analizados por clip; es una aproximación monofónica y no sustituye una herramienta de corrección profesional. El desplazamiento granular puede introducir artefactos.
+
+**Personajes de voz:** dentro del mismo Voice Playground hay un segundo mapa XY para jugar con el timbre (izquierda=grave, derecha=agudo, arriba=más distorsionado). Ocho destinos creativos: original, robot, marciano, monstruo, gigante, helio, personaje pequeño y digital extremo. El motor cambia realmente el tono y la saturación/eq de la voz en directo o de una pista. Las etiquetas representan efectos de fantasía: NO son conversiones realistas de sexo, edad o identidad y no preservan los formantes naturales.
+
+**Continuación del editor 1.2:** selección, zoom, agarres de trim/movimiento, velocidad por clip 0,5×–2× (altera tono), unidades de segundos y eliminación reversible con Supr. El cabezal sigue las ondas, no cruza las tarjetas. El cable azul del Flow Studio vibra al compás del RMS de la pista en reproducción.
+
+**Pendientes críticos:** verificación de arrastre/selección y grabación en hardware real, artefactos de DSP, zoom de revisión con máscara visual, diseño de autosegmentación robusta, time-stretch con preservación del tono, musical key detection, verdadero routing modular, overdub y soporte de archivos enormes.
+
 ## DesignPhase 1.1 — Soft Studio / Flow musical (primera entrega)
 
 La experiencia adopta fondo blanco, tarjetas soft-3D, más jerarquía y lenguaje musical. El mezclador, la grabación, el WAV, los clips y Tune Lab conservan su motor y datos.

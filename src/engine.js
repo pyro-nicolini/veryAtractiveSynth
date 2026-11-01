@@ -71,6 +71,7 @@ function setParams(graph,track,ctx){
   // Smooth live XY moves to reduce parameter discontinuities during playback.
   graph.voice.parameters.get('strength').setTargetAtTime(disabled.tune?0:clamp(track.autotune,0,100)/100,now,.013);
   graph.voice.parameters.get('retune').setTargetAtTime(clamp(track.retune,0,100)/100,now,.013);
+  graph.voice.parameters.get('shift').setTargetAtTime(clamp(track.pitchShift||0,-12,12),now,.018);
   graph.voice.parameters.get('clean').setTargetAtTime(disabled.clean?0:clamp(track.clean,0,100)/100,now,.013);
   graph.voice.parameters.get('key').setValueAtTime(clamp(track.key,0,11),now);
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
@@ -128,7 +129,31 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   const remaining=total-offsetInClip;
   if(remaining<=0)return null;
   const src=ctx.createBufferSource(),fade=ctx.createGain(),splice=ctx.createGain(),speed=clipSpeed(track);
-  src.buffer=track.buffer;src.playbackRate.setValueAtTime(speed,contextStart);src.connect(splice);splice.connect(fade);fade.connect(graph.input);
+  src.buffer=track.buffer;src.playbackRate.setValueAtTime(speed,contextStart);
+  // Segment masks use a dedicated voice DSP before track-wide FX.
+  const regions=Array.isArray(track.pitchRegions)?track.pitchRegions.slice(0,550):[];
+  const usePitch=regions.length||Math.abs(track.pitchShift||0)>.02;
+  if(usePitch){
+    const pitchNode=new AudioWorkletNode(ctx,'vas-voice',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+    src.connect(pitchNode);pitchNode.connect(splice);
+    const shifted=pitchNode.parameters.get('shift');
+    shifted.setValueAtTime(clamp(track.pitchShift||0,-12,12),contextStart);
+    const loopRegion=validLoop(track),sourceStart=loopRegion?.from??(track.trimStart||0),sourceEnd=loopRegion?.to??(track.buffer.duration-(track.trimEnd||0));
+    const cycleDuration=sourceEnd-sourceStart,cycles=loopRegion?.repeats||1;
+    let count=0;
+    for(let cycle=0;cycle<cycles;cycle++)for(const r of regions){
+      if(count>=4500)break;
+      const lo=Math.max(sourceStart,r.from),hi=Math.min(sourceEnd,r.to);
+      if(!(hi>lo)||!Number.isFinite(r.semitones))continue;
+      const timelineLo=(cycle*cycleDuration+lo-sourceStart)/speed-offsetInClip;
+      const timelineHi=(cycle*cycleDuration+hi-sourceStart)/speed-offsetInClip;
+      if(timelineHi<=0||timelineLo>=remaining)continue;
+      shifted.setValueAtTime(clamp(r.semitones,-12,12),contextStart+Math.max(0,timelineLo));
+      shifted.setValueAtTime(0,contextStart+Math.max(0,Math.min(remaining,timelineHi)));
+      count+=2;
+    }
+  }else src.connect(splice);
+  splice.connect(fade);fade.connect(graph.input);
   splice.gain.setValueAtTime(1,contextStart);
   const v=fade.gain;v.setValueAtTime(fadeValue(track,offsetInClip,total),contextStart);
   const initial=offsetInClip;

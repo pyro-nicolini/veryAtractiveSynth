@@ -82,5 +82,5 @@ export function splitTrackClip(track,clipId,playhead,newId){
   clips.splice(index,1,left,right);return [left,right];
 }
 export function cloneTrackMetadata(track){
-  return {...track,loop:track.loop?{...track.loop}:undefined,clips:Array.isArray(track.clips)?track.clips.map(clip=>({...clip,loop:clip.loop?{...clip.loop}:undefined})):undefined};
+  return {...track,loop:track.loop?{...track.loop}:undefined,clips:Array.isArray(track.clips)?track.clips.map(clip=>({...clip,loop:clip.loop?{...clip.loop}:undefined,pitchRegions:Array.isArray(clip.pitchRegions)?clip.pitchRegions.map(r=>({...r})):undefined})):undefined};
 }

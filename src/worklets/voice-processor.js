@@ -9,7 +9,8 @@ class VoiceProcessor extends AudioWorkletProcessor {
     {name:'retune',defaultValue:.6,minValue:0,maxValue:1,automationRate:'k-rate'},
     {name:'key',defaultValue:0,minValue:0,maxValue:11,automationRate:'k-rate'},
     {name:'scale',defaultValue:0,minValue:0,maxValue:2,automationRate:'k-rate'},
-    {name:'clean',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}
+    {name:'clean',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'},
+    {name:'shift',defaultValue:0,minValue:-12,maxValue:12,automationRate:'k-rate'}
   ];}
   constructor(){
     super();this.buffers=[new Float32Array(RING_SIZE),new Float32Array(RING_SIZE)];
@@ -71,6 +72,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
   process(inputs,outputs,params){
     const input=inputs[0],output=outputs[0];if(!output||!output.length)return true;
     const strength=params.strength[0],retune=params.retune[0],key=Math.round(params.key[0]),scale=Math.round(params.scale[0]),clean=params.clean[0];
+    const shift=params.shift?.[0]||0;
     const len=output[0].length;
     for(let i=0;i<len;i++){
       const l=input?.[0]?.[i]||0,r=input?.[1]?.[i]??l;
@@ -83,15 +85,16 @@ class VoiceProcessor extends AudioWorkletProcessor {
       const gateTarget=clean<.01?1:this.envelope<threshold?.07:1;
       this.gate+=(gateTarget-this.gate)*(gateTarget>this.gate?.025:.002);
       let voiceL=l,voiceR=r;
-      if(strength>.008){
-        const ratio=this.ratio,grain=this.grain,ph=this.phase,ph2=(ph+.5)%1;
+      if(strength>.008||Math.abs(shift)>.012){
+        const ratio=this.ratio*Math.pow(2,shift/12),grain=this.grain,ph=this.phase,ph2=(ph+.5)%1;
         const base=256+Math.max(0,ratio-1)*grain;
         const d1=base+(1-ratio)*ph*grain,d2=base+(1-ratio)*ph2*grain;
         const w1=.5-.5*Math.cos(2*Math.PI*ph),w2=.5-.5*Math.cos(2*Math.PI*ph2);
         const a1=this.read(this.buffers[0],this.pos-d1),a2=this.read(this.buffers[0],this.pos-d2);
         const b1=this.read(this.buffers[1],this.pos-d1),b2=this.read(this.buffers[1],this.pos-d2);
-        voiceL=l*(1-strength)+(a1*w1+a2*w2)*strength;
-        voiceR=r*(1-strength)+(b1*w1+b2*w2)*strength;
+        const mix=Math.abs(shift)>.012?1:strength;
+        voiceL=l*(1-mix)+(a1*w1+a2*w2)*mix;
+        voiceR=r*(1-mix)+(b1*w1+b2*w2)*mix;
       }
       output[0][i]=voiceL*this.gate;
       if(output[1])output[1][i]=voiceR*this.gate;

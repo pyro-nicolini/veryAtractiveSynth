@@ -1,4 +1,5 @@
 import {TUNE_POINTS,normalizeTune,describeTune,tunePointFromManual,validSavedTune} from './tune-lab.js';
+import {VOICE_CHARACTERS} from './voice-characters.js';
 const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const percent=value=>((value+1)*50).toFixed(2)+'%';
 const vertical=value=>((1-value)*50).toFixed(2)+'%';
@@ -78,7 +79,7 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
     '<input id="labXInput" type="range" min="-100" max="100" step="1" value="'+Math.round(p.x*100)+'" data-tune-axis="x" aria-label="Natural o robótico">'+
     '<label for="labYInput">Sutil <span>↔</span> Intenso</label>'+
     '<input id="labYInput" type="range" min="-100" max="100" step="1" value="'+Math.round(p.y*100)+'" data-tune-axis="y" aria-label="Intensidad de afinación"></div>'+
-    '<div class="lab-divider"></div><div class="lab-presets-head"><strong>DESTINOS PARA EXPLORAR</strong><small>Un clic para saltar</small></div>'+
+    '<div class="lab-divider"></div><section class="character-studio" aria-label="Personajes de voz"><div class="lab-presets-head"><strong>✧ PERSONAJES · CAMBIA TU VOZ</strong><small>Experimental · sin preservar formantes</small></div>'+    '<p>Explora tonos graves, agudos y distorsiones. Son personajes sonoros, no conversiones reales de edad o identidad vocal.</p>'+    '<div class="character-pad" id="characterPad" role="group" tabindex="0" aria-label="Arrastra el punto: izquierda grave, derecha agudo, abajo limpio, arriba distorsionado"><div class="character-grid"></div><span class="char-corner char-nw">MONSTRUO</span><span class="char-corner char-ne">MARCIANO</span><span class="char-corner char-sw">GIGANTE</span><span class="char-corner char-se">HELIO</span><div id="characterNode" class="character-node" style="left:'+((Math.max(-12,Math.min(12,track.pitchShift||0))+12)/24*100)+'%;top:'+(100-Math.max(0,Math.min(100,track.drive||0)))+'%"></div></div>'+    '<div class="character-hint">← VOZ GRAVE <span id="characterReadout">Altura '+(track.pitchShift||0)+' semitonos · distorsión '+(track.drive||0)+'%</span> VOZ AGUDA →</div>'+    '<div class="character-presets">'+VOICE_CHARACTERS.map(c=>'<button type="button" class="lab-preset" data-voice-character="'+c.id+'">'+c.icon+' '+c.name+'</button>').join('')+'</div></section>'+    '<div class="lab-divider"></div><div class="lab-presets-head"><strong>DESTINOS PARA EXPLORAR</strong><small>Un clic para saltar</small></div>'+
     '<div class="lab-presets">'+chips+'</div>'+
     '<div class="lab-presets-head"><strong>TUS DESCUBRIMIENTOS</strong><small>Hasta 12 estilos locales</small></div>'+
     '<div id="labUserPresets" class="lab-presets">'+customTuneMarkup(userPresets)+'</div>'+

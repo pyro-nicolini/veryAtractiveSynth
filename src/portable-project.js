@@ -78,7 +78,9 @@ export async function importProject(file,ctx){
       const clipBuffer=loadAudio(clip.file);
       const restored={id:String(clip.id||'clip-'+tracks.length).slice(0,128),name:String(clip.name||'Toma').slice(0,80),buffer:clipBuffer,
         offset:clamp(clip.offset,0,3600),trimStart:clamp(clip.trimStart,0,clipBuffer.duration),trimEnd:clamp(clip.trimEnd,0,clipBuffer.duration),
-        fadeIn:clamp(clip.fadeIn,0,30),fadeOut:clamp(clip.fadeOut,0,30),speed:clipSpeed(clip)};
+        fadeIn:clamp(clip.fadeIn,0,30),fadeOut:clamp(clip.fadeOut,0,30),speed:clipSpeed(clip),
+        pitchShift:clamp(clip.pitchShift??0,-12,12),
+        pitchRegions:Array.isArray(clip.pitchRegions)?clip.pitchRegions.slice(0,550).filter(r=>r&&Number.isFinite(r.from)&&Number.isFinite(r.to)&&Number.isFinite(r.semitones)&&r.from>=0&&r.to<=clipBuffer.duration&&r.to>r.from).map(r=>({from:r.from,to:r.to,semitones:clamp(r.semitones,-12,12)})):[]};
       if(clip.loop){
         try{setClipLoop(restored,clip.loop.from,clip.loop.to,clip.loop.repeats);}
         catch{throw Error('El respaldo contiene un loop inválido');}
@@ -103,6 +105,7 @@ export async function importProject(file,ctx){
       bus:['music','vocals','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
       tuneX:clamp(t.tuneX??((clamp(t.retune??60,5,100)-5)/95*2-1),-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),
       tunePreset:typeof t.tunePreset==='string'&&t.tunePreset.length<42?t.tunePreset:'custom',
+      pitchShift:clamp(t.pitchShift??0,-12,12),voiceCharacter:typeof t.voiceCharacter==='string'&&t.voiceCharacter.length<60?t.voiceCharacter:null,
       preset:typeof t.preset==='string'?t.preset:'natural',voiceStyle:typeof t.voiceStyle==='string'&&t.voiceStyle.length<60?t.voiceStyle:null,buffer,
       ...(restoredClips?{clips:restoredClips}:{})
     });

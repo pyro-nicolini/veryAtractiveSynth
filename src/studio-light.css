@@ -245,3 +245,38 @@ h1 em{color:#58b78d;text-shadow:none}
 .flow-node-bottom button[data-flow-delete]{border-color:#eabdc4;color:#b45b69;background:#fff0f2;min-width:26px;font-size:15px}
 @media(max-width:1120px){.time-unit{display:none}.zoom-label input{width:45px}}
 @media(max-width:600px){.track-card{grid-template-columns:38px 100px minmax(100px,1fr) 42px;gap:7px}.track-tail{grid-template-columns:1fr}.track-number{grid-column:auto}.track-tail .mini-action{height:24px;width:25px}.clip-grip span{display:none}}
+
+/* 1.3 — singing note coach and timeline pitch masks */
+.singing-coach{padding:14px 16px;margin:13px 0;border-radius:16px;border:1px solid #bfded4;background:linear-gradient(125deg,#f3fcf7,#f7f5ff);display:grid;gap:11px}
+.singing-coach>div:first-child{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.singing-coach strong{font:800 10px 'Space Grotesk',sans-serif;letter-spacing:.8px;color:#397d66}
+.singing-coach #singingNote{font:900 32px 'Space Grotesk',sans-serif;color:#298769;min-width:76px}
+.singing-coach small{font:600 11px system-ui;color:#6a788d}
+.note-steps{display:flex;gap:5px;flex-wrap:wrap}
+.note-steps span{flex:1;min-width:34px;text-align:center;border-radius:9px;padding:8px 6px;background:#e9eff8;color:#74829c;border:1px solid #dbe4ef;font-size:11px;font-weight:800}
+.note-steps .is-active{background:#8ce3bb;color:#164f3a;border-color:#4ba985;box-shadow:0 4px 12px #54ac875b;transform:translateY(-3px)}
+.pitch-review-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:15px 0}
+.pitch-review-controls label{display:flex;flex-direction:column;gap:7px;color:#587087;font-size:11px;font-weight:740}
+.pitch-review-controls label:last-child{grid-column:1/-1}
+.pitch-review-controls input{width:100%;min-width:0;padding:9px;border:1px solid #d9e4ee;border-radius:10px;background:white;color:#293950}
+.pitch-review-controls input[type=range]{accent-color:#6d8fd5}
+.pitch-review-summary{border-radius:10px;border:1px solid #d9e5f0;background:#f3f7fc;padding:11px;font-size:11px;color:#596d85;line-height:1.6}
+.pitch-note-grid{margin:10px 0;font-size:11px;color:#537a9b}
+.pitch-note-grid p{font-size:11px;line-height:1.6}
+.pitch-auto-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0}
+.pitch-auto-buttons button{min-width:120px}
+.character-studio{background:linear-gradient(140deg,#f6f4ff,#f5fbfa);border:1px solid #e3dbf6;border-radius:17px;padding:14px;margin:12px 0}
+.character-studio>p{color:#667790;font-size:11px;line-height:1.5;margin:7px 0 13px}
+.character-pad{height:178px;position:relative;border:1px solid #b6abe7;border-radius:16px;background:radial-gradient(circle at 24% 28%,#e6d6ff,transparent 55%),radial-gradient(circle at 85% 75%,#c5f5df,transparent 65%),#f4f4ff;touch-action:none;cursor:crosshair;overflow:hidden;user-select:none}
+.character-grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(#9997cc22 1px,transparent 1px),linear-gradient(90deg,#9997cc22 1px,transparent 1px);background-size:10% 20%}
+.char-corner{position:absolute;font:850 10px 'Space Grotesk',sans-serif;color:#7774aa;letter-spacing:.5px;pointer-events:none}
+.char-nw{top:13px;left:13px}.char-ne{top:13px;right:13px}.char-sw{bottom:12px;left:13px}.char-se{bottom:12px;right:13px}
+.character-node{position:absolute;left:50%;top:50%;width:36px;height:36px;transform:translate(-50%,-50%);border-radius:13px;background:radial-gradient(circle at 25% 20%,#fff,#9cc5ff 43%,#6a8de1);border:3px solid white;box-shadow:0 5px 16px #6c87d68a,0 0 0 7px #94b3ff26;pointer-events:none}
+.character-hint{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;color:#777eaf;font:700 10px 'Space Grotesk',sans-serif;margin:10px 0}
+.character-hint #characterReadout{color:#3f6e96}
+.character-presets{display:flex;flex-wrap:wrap;gap:6px}
+.character-presets button{font-size:10px}
+.flow-wire:not(.flow-wire-off){filter:drop-shadow(0 0 4px #2996fa88);stroke-linecap:round}
+.flow-wire-off{stroke-dasharray:7 9;filter:none;opacity:.4}
+@media(max-width:480px){.pitch-review-controls{grid-template-columns:1fr}.singing-coach #singingNote{font-size:26px}.character-pad{height:146px}}
+@media(prefers-reduced-motion:reduce){.note-steps span{transform:none!important}.flow-wire{filter:none!important}}

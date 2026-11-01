@@ -16,11 +16,13 @@ import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAu
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires} from './flow-studio.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
+import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
+import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null,zoom:1};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null,zoom:1,recordNoteLast:0};
 const HELP={
   flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -591,7 +593,7 @@ function renderInspector(){
     '<div class="control-row"><label for="tuneScale">Escala</label><select data-setting="scale" id="tuneScale">'+SCALES.map((x,i)=>'<option value="'+i+'"'+(i===t.scale?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('scale')+'</div></details>'+
     '<div class="tune-mini"><div class="tune-mini-chart"><span class="tune-mini-node" style="left:'+(((Number.isFinite(t.tuneX)?t.tuneX:tunePointFromManual(t.autotune,t.retune).x)+1)*50)+'%;top:'+((1-(Number.isFinite(t.tuneY)?t.tuneY:tunePointFromManual(t.autotune,t.retune).y))*50)+'%"></span></div>'+
       '<div class="tune-mini-body"><strong>✦ TUNE LAB</strong><small>Descubre nuevos estilos moviendo un nodo</small></div></div>'+
-    '<button class="wide-button tune-launch" data-action="tune-open">✧ EXPLORAR TUNE LAB →</button>'+
+    '<button class="wide-button tune-launch" data-action="tune-open">✧ EXPLORAR TUNE LAB →</button>'+    '<button class="wide-button" data-action="pitch-review">♩ EDITAR NOTAS POR FRAGMENTOS →</button>'+
     '<button class="wide-button" data-action="effects">✦ EXPLORAR MÁS EFECTOS →</button><button class="wide-button" data-action="timing">◷ MOVER Y RECORTAR →</button>';
 }
 function updateTransport(){
@@ -922,6 +924,53 @@ function finishTuneGesture(){
   tuneGesture=null;
   if(track){tuneRefresh(track);if(state.tuneMode==='track'){renderInspector();queueAutosave();}}
 }
+
+function refreshCharacterPad(track){
+  const node=$('#characterNode'),readout=$('#characterReadout');
+  if(node){node.style.left=((Math.max(-12,Math.min(12,track.pitchShift||0))+12)/24*100)+'%';
+    node.style.top=(100-Math.max(0,Math.min(100,track.drive||0)))+'%';}
+  if(readout)readout.textContent='Altura '+Number(track.pitchShift||0).toFixed(1)+' semitonos · distorsión '+Math.round(track.drive||0)+'%';
+}
+function characterPoint(event){
+  const pad=$('#characterPad');if(!pad)return null;
+  const r=pad.getBoundingClientRect();if(!r.width||!r.height)return null;
+  return {x:clamp((event.clientX-r.left)/r.width*2-1,-1,1),
+          y:clamp((1-(event.clientY-r.top)/r.height)*2-1,-1,1)};
+}
+function changeCharacter(x,y,save=false){
+  const track=getTuneTrack();if(!track)return;
+  characterCoordinates(track,x,y);refreshCharacterPad(track);
+  if(state.tuneMode==='live')engine.updateMic(track);
+  else{engine.updateTrack(track);if(save){renderInspector();queueAutosave();}}
+}
+function setupCharacterGestures(){
+  let active=null;
+  document.addEventListener('pointerdown',event=>{
+    if(!event.target.closest('#characterPad')||event.button!==0)return;
+    const pad=$('#characterPad'),point=characterPoint(event);if(!point)return;
+    event.preventDefault();active=event.pointerId;
+    if(state.tuneMode==='track')checkpoint();
+    pad.setPointerCapture(event.pointerId);changeCharacter(point.x,point.y);
+  });
+  document.addEventListener('pointermove',event=>{
+    if(event.pointerId!==active)return;
+    const point=characterPoint(event);if(point)changeCharacter(point.x,point.y);
+  });
+  document.addEventListener('pointerup',event=>{
+    if(event.pointerId!==active)return;
+    active=null;if(state.tuneMode==='track'){renderInspector();queueAutosave();}
+  });
+  document.addEventListener('pointercancel',event=>{if(event.pointerId===active)active=null;});
+  document.addEventListener('keydown',event=>{
+    if(event.target.id!=='characterPad'||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+    event.preventDefault();if(state.tuneMode==='track')checkpoint();
+    const track=getTuneTrack();if(!track)return;
+    const speed=(track.pitchShift||0)/12,drive=(track.drive||0)/50-1,step=event.shiftKey?.2:.05;
+    changeCharacter(speed+(event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0),
+      drive+(event.key==='ArrowDown'?-step:event.key==='ArrowUp'?step:0),true);
+  });
+}
+
 function installTuneGestures(){
   document.addEventListener('pointerdown',event=>{
     const pad=event.target.closest('#tunePad');
@@ -975,7 +1024,7 @@ function tuneAction(action){
     checkpoint();
     const target=current(),source=state.liveTuneTrack;
     Object.assign(target,{tuneX:source.tuneX,tuneY:source.tuneY,autotune:source.autotune,retune:source.retune,
-      brightness:source.brightness,warmth:source.warmth,drive:source.drive,tunePreset:source.tunePreset,preset:'custom'});
+      brightness:source.brightness,warmth:source.warmth,drive:source.drive,pitchShift:source.pitchShift,voiceCharacter:source.voiceCharacter,tunePreset:source.tunePreset,preset:'custom'});
     engine.updateTrack(target);renderInspector();queueAutosave();
     toast('Configuración de Voice Playground aplicada a '+target.name);
     return;
@@ -1011,6 +1060,67 @@ function tuneAction(action){
       toast('Estilo '+saved.name+' guardado solo en este navegador.');
     }catch(error){toast(error.message);}
   }
+}
+
+
+function openPitchReview(){
+  const track=current();if(!track)return toast('Selecciona una pista vocal primero');
+  const clip=getEditableClip(track,state.selectedClip);
+  if(!clip)return toast('No hay audio para revisar');
+  state.pitchReview={trackId:track.id,clipId:clip.id};
+  const seconds=clip.buffer.duration,to=seconds.toFixed(2),regions=clip.pitchRegions||[];
+  modal('♩ Afinación por fragmentos · '+track.name,
+    '<p>Escucha y corrige partes pequeñas de la voz sin alterar el archivo original. El detector es monofónico y aproximado.</p>'+
+    '<div class="pitch-review-controls"><label>DESDE · SEGUNDOS<input id="pitchFrom" type="number" min="0" max="'+to+'" step=".05" value="0"></label>'+
+    '<label>HASTA · SEGUNDOS<input id="pitchTo" type="number" min="0" max="'+to+'" step=".05" value="'+Math.min(2,seconds).toFixed(2)+'"></label>'+
+    '<label>CAMBIAR ALTURA<input id="pitchSemitones" type="range" min="-12" max="12" step=".5" value="0"><output id="pitchShiftValue">0 semitonos</output></label></div>'+
+    '<div class="pitch-note-grid"><strong>DO · RE · MI · FA · SOL · LA · SI</strong><p>Los cambios usan desplazamiento granular de tono. El resultado puede ser robótico o artificial.</p></div>'+
+    '<div class="pitch-review-summary" id="pitchReviewSummary">'+regions.length+' regiones editadas · original intacto</div>'+
+    '<div class="pitch-auto-buttons"><button class="lab-action" data-action="pitch-scan">♬ DETECTAR NOTAS</button>'+
+      AUTO_TUNE_MODES.map(m=>'<button class="lab-action" data-action="pitch-auto-'+m.id+'">✧ AUTO AFINADO · '+m.label+'</button>').join('')+'</div>',
+    [{label:'QUITAR CORRECCIONES',type:'pitch-clear'},{label:'APLICAR CAMBIO AL SEGMENTO',type:'pitch-mask',primary:true}]);
+}
+function pitchReviewAction(action){
+  const track=state.tracks.find(t=>t.id===state.pitchReview?.trackId);
+  const clip=track&&getEditableClip(track,state.pitchReview.clipId);
+  if(!clip)return toast('Selecciona un fragmento vocal');
+  if(state.sessionRecording||state.recording)return toast('Finaliza la grabación antes de editar la voz');
+  try{
+    if(action==='pitch-scan'||action.startsWith('pitch-auto-')){
+      const regions=noteRegions(clip.buffer);
+      if(!regions.length)throw Error('No pude reconocer una nota clara. Prueba una voz aislada sin acompañamiento');
+      if(action==='pitch-scan'){
+        const found=regions.slice(0,10).map(r=>r.from.toFixed(1)+'s '+solfege(r.detected)).join(' · ');
+        $('#pitchReviewSummary').textContent=regions.length+' lecturas aproximadas: '+found;
+        toast('Notas detectadas, todavía sin aplicar cambios');
+        return;
+      }
+      const mode=action.slice('pitch-auto-'.length),preset=AUTO_TUNE_MODES.find(m=>m.id===mode);
+      if(!preset)return;
+      checkpoint();
+      autoTuneSegments(clip,regions,mode,track.key,track.scale);
+      track.autotune=preset.strength;track.retune=preset.retune;
+      track.bypassEffects=false;track.fxBypass={...track.fxBypass,tune:false};
+      state.selected=track.id;state.selectedClip=clip.id;engine.updateTrack(track);
+      $('#pitchReviewSummary').textContent=clip.pitchRegions.length+' regiones con corrección automática '+preset.label;
+      queueAutosave();restartPlayback();
+      toast('Auto afinado '+preset.label+' listo, editable por fragmentos');
+      return;
+    }
+    if(action==='pitch-clear'){
+      checkpoint();clip.pitchRegions=[];clip.autoTuneMode=null;
+      $('#pitchReviewSummary').textContent='0 regiones · audio original intacto';
+      queueAutosave();restartPlayback();toast('Correcciones del clip retiradas');return;
+    }
+    if(action==='pitch-mask'){
+      const from=Number($('#pitchFrom').value),to=Number($('#pitchTo').value),semitones=Number($('#pitchSemitones').value);
+      const draft={...clip,pitchRegions:clip.pitchRegions?.map(r=>({...r}))};
+      setNoteMask(draft,from,to,semitones);
+      checkpoint();setNoteMask(clip,from,to,semitones);
+      $('#pitchReviewSummary').textContent=clip.pitchRegions.length+' fragmentos con notas ajustadas';
+      queueAutosave();restartPlayback();toast('Fragmento corregido; el audio fuente sigue intacto');
+    }
+  }catch(error){toast(error.message);}
 }
 
 function openEffects(){
@@ -1131,6 +1241,13 @@ function drawMicPreview(){
   if(!$('#recordMeter'))return;
   const samples=new Float32Array(2048);
   if(engine.getMicMeterData(samples)){
+    if(performance.now()-state.recordNoteLast>115){
+      state.recordNoteLast=performance.now();
+      const note=estimateNote(samples,engine.ctx?.sampleRate||48000),label=$('#singingNote'),fine=$('#singingCents');
+      if(label)label.textContent=note?note.name+note.octave:'—';
+      if(fine)fine.textContent=note?(Math.abs(note.cents)<=15?'✓ Cerca de la nota':(note.cents<0?'↑ Un poco más alto':'↓ Un poco más bajo')+' · '+Math.abs(note.cents)+' cents'):'No hay nota clara';
+      for(const step of $('#noteSteps [data-note]'))step.classList.toggle('is-active',!!note&&step.dataset.note===note.name);
+    }
     const {rms,peak}=meterLevel(samples);
     const level=Math.min(100,Math.round(Math.sqrt(rms)*170));
     $('#recordMeter').style.width=level+'%';
@@ -1218,7 +1335,7 @@ async function openRecording(){
     '<p>Elige tu micrófono, pruébalo y comprueba que llega señal. Después graba sobre tu base.</p>'+
     '<div class="field"><label for="micSelect">MICRÓFONO '+buttonInfo('microphone')+'</label><select id="micSelect" class="modal-select"><option value="">Micrófono predeterminado</option></select></div>'+
     '<div id="micStatus" class="mic-status" role="status">Selecciona y prueba tu micrófono</div>'+
-    '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+
+    '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+    '<section class="singing-coach" aria-label="Entrenador de notas en vivo"><div><strong>CALENTAMIENTO VOCAL · NOTA ACTUAL</strong><span id="singingNote" aria-live="off">—</span><small id="singingCents">Canta una nota para comenzar · aproximado</small></div><div class="note-steps" id="noteSteps">'+['DO','RE','MI','FA','SOL','LA','SI','DO'].map(n=>'<span data-note="'+n+'">'+n+'</span>').join('')+'</div></section>'+
     '<div class="control-row"><label for="recordGain">GANANCIA DE ENTRADA</label><input id="recordGain" type="range" min="0" max="200" step="5" value="'+state.inputGain+'"><output id="recordGainValue">'+state.inputGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorGain">VOLUMEN DE MONITOREO</label><input id="monitorGain" type="range" min="0" max="100" step="5" value="'+state.monitorGain+'"><output id="monitorGainValue">'+state.monitorGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorToggle">Escucharme con efectos (auriculares)</label><input type="checkbox" class="toggle-switch" id="monitorToggle">'+buttonInfo('monitor')+'</div>'+
@@ -1487,6 +1604,8 @@ function handleModalAction(action){
   if(action==='tune-open'){openTuneLab('track');return;}
   if(action.startsWith('tune-')){tuneAction(action);return;}
   if(action==='effects'){openEffects();return;}
+  if(action==='pitch-review'){openPitchReview();return;}
+  if(action==='pitch-mask'||action==='pitch-clear'||action==='pitch-scan'||action.startsWith('pitch-auto-')){pitchReviewAction(action);return;}
   if(action==='toggle-bypass'){
     const t=current();if(!t)return;
     checkpoint();t.bypassEffects=!t.bypassEffects;
@@ -1638,7 +1757,7 @@ function setupClipDragging(){
 
 function wire(){
   setupMixer();setupFlow();
-  installTuneGestures();
+  installTuneGestures();setupCharacterGestures();
   setupScrubber();
   setupClipDragging();
   const bpm=$('#bpmInput'),metro=$('#metronomeBtn'),snapBtn=$('#snapBtn');
@@ -1731,6 +1850,16 @@ function wire(){
       const strong=button.querySelector('strong');if(strong)strong.textContent=off?'OFF':'ON';
       return;
     }
+    const character=e.target.closest('[data-voice-character]');
+    if(character){
+      const track=getTuneTrack();if(!track)return;
+      if(state.tuneMode==='track')checkpoint();
+      const preset=applyVoiceCharacter(track,character.dataset.voiceCharacter);
+      refreshCharacterPad(track);
+      if(state.tuneMode==='live')engine.updateMic(track);
+      else{engine.updateTrack(track);renderInspector();queueAutosave();}
+      toast('Personaje '+preset.name+' aplicado a la voz');return;
+    }
     const tunePreset=e.target.closest('[data-tune-preset]');
     if(tunePreset){
       const point=findTunePreset(tunePreset.dataset.tunePreset);
@@ -1784,6 +1913,9 @@ function wire(){
     }
     if(e.target.matches('[data-setting]'))setSetting(e.target.dataset.setting,Number(e.target.value),e.target);
     if(e.target.matches('[data-timing]'))setTiming(e.target.dataset.timing,Number(e.target.value));
+    if(e.target.id==='pitchSemitones'){
+      const out=$('#pitchShiftValue');if(out)out.textContent=Number(e.target.value).toFixed(1)+' semitonos';
+    }
     if(e.target.id==='recordGain'){
       state.inputGain=clamp(e.target.value,0,200);
       engine.setMicGain(state.inputGain);

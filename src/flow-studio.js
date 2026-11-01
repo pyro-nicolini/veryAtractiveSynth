@@ -46,9 +46,18 @@ export function flowMarkup(tracks,positions={},selectedId=null){
     '</div></div><p class="flow-footnote">Supr sobre el nodo: primera vez desconecta, segunda lo retira del mapa. La pista queda guardada en Tu mezcla.</p>';
 }
 export function wireCurve(ax,ay,bx,by,energy=0,time=0){
-  const midX=(ax+bx)/2,midY=(ay+by)/2;
-  const delta=Math.max(-42,Math.min(42,energy*44*Math.sin(time*.015+(ax*.03))));
-  return 'M '+ax.toFixed(1)+' '+ay.toFixed(1)+' Q '+midX.toFixed(1)+' '+(midY+delta).toFixed(1)+' '+bx.toFixed(1)+' '+by.toFixed(1);
+  const dx=bx-ax,dy=by-ay,length=Math.hypot(dx,dy)||1,amplitude=Math.min(55,Math.max(0,energy)*55);
+  const normalX=-dy/length,normalY=dx/length,segments=9;
+  let d='M '+ax.toFixed(1)+' '+ay.toFixed(1);
+  for(let i=0;i<segments;i++){
+    const u=(i+.5)/segments,v=(i+1)/segments;
+    const envelope=Math.sin(Math.PI*u);
+    const vibration=Math.sin(time*.032+i*1.9+ax*.012)*amplitude*envelope;
+    const cx=ax+dx*u+normalX*vibration,cy=ay+dy*u+normalY*vibration;
+    const ex=ax+dx*v,ey=ay+dy*v;
+    d+=' Q '+cx.toFixed(1)+' '+cy.toFixed(1)+' '+ex.toFixed(1)+' '+ey.toFixed(1);
+  }
+  return d;
 }
 export function updateFlowWires(root,tracks,engine,animate=true){
   const board=root?.querySelector('#flowBoard'),svg=root?.querySelector('#flowWires'),master=root?.querySelector('#flowMaster');
@@ -67,7 +76,8 @@ export function updateFlowWires(root,tracks,engine,animate=true){
     const meter=!track.muted&&animate?engine.getTrackMeter(track.id):{rms:0};
     path.setAttribute('d',wireCurve(aX,aY,mx,my,Math.min(1,Math.sqrt(meter.rms)*2.5),animate?performance.now():0));
     path.classList.toggle('flow-wire-off',!!track.muted);
-    path.style.setProperty('--flow-wire-color',track.color||'#9da9ca');
+    path.style.setProperty('--flow-wire-color',!track.muted&&animate?'#159dfb':(track.color||'#9da9ca'));
+    path.style.strokeWidth=!track.muted&&animate?(3+Math.min(5,Math.sqrt(meter.rms)*12))+'px':'3px';
     existing.delete(track.id);
     const glow=node.querySelector('.flow-source-icon');
     if(glow)glow.style.transform=animate&&meter.rms>0.001?'scale('+(1+Math.min(.19,meter.rms*.45)).toFixed(3)+')':'scale(1)';

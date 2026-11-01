@@ -70,3 +70,14 @@ Implementar por commits pequeños en DesignPhase, tests de sintaxis/unidad, QA d
 - [x] Zoom horizontal hasta 8× y unidades de segundos en regla, con scroll sincronizado.
 - [x] Cabezal dibujado delante de la onda, no detrás de las tarjetas.
 - [ ] QA real de manipulación táctil, zoom sincronizado, undo y reproducción con clips complejos.
+
+## V1.3 — Edición vocal por regiones
+- [x] Indicador de DO–SI, octava y desviación al cantar durante grabación.
+- [x] Detección monofónica de tono local y análisis por segmentos.
+- [x] Desplazamiento de tono por regiones no destructivo y exportable.
+- [x] Tres modos de Auto Afinado aproximado: Natural, Estudio y Electrónico.
+- [x] Ocho personajes creativos de voz con pitch/drive/EQ reales y XY.
+- [x] Vibración amplificada azul del cable según RMS de pista.
+- [ ] Editor visual de máscaras en la onda y un análisis automático con calidad de estudio.
+- [ ] Preservación de formantes y detección de notas robusta en grabaciones ruidosas y polifónicas.
+- [ ] QA E2E con micrófono físico, revisión de latencia y exportación browser por browser.
