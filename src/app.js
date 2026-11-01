@@ -359,6 +359,11 @@ function installTuneGestures(){
   document.addEventListener('pointerdown',event=>{
     if(event.target.matches('[data-tune-axis]'))checkpoint();
   });
+  document.addEventListener('keydown',event=>{
+    if(event.target.matches('[data-tune-axis]') &&
+      ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(event.key) &&
+      !event.repeat)checkpoint();
+  });
   document.addEventListener('change',event=>{
     if(event.target.matches('[data-tune-axis]')){renderInspector();queueAutosave();}
   });

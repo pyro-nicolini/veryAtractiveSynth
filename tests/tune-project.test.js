@@ -27,3 +27,15 @@ test('portable project keeps Tune Lab coordinates and real DSP knobs across roun
   assert.equal(restored.options.bpm,130);
   assert.ok(Math.abs(result.buffer.getChannelData(0)[1]-.4)<.00001);
 });
+
+test('v0.4 project imports preserve pitch/retune and locate XY point consistently',async()=>{
+  const ctx=makeContext(),buffer=ctx.createBuffer(1,16,8000);
+  const track={...defaults(),id:'old-voice',name:'Voz antigua',type:'voice',color:'#a5ff73',buffer,autotune:82,retune:90};
+  delete track.tuneX;delete track.tuneY;delete track.tunePreset;
+  const file=await exportProject([track],88);
+  const loaded=(await importProject(file,ctx)).tracks[0];
+  assert.equal(loaded.autotune,82);
+  assert.equal(loaded.retune,90);
+  assert.ok(Math.abs(loaded.tuneX - ((90-5)/95*2-1))<.02);
+  assert.ok(Math.abs(loaded.tuneY-.64)<.001);
+});

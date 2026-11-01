@@ -53,9 +53,10 @@ function setParams(graph,track,ctx){
   }
   set(graph.delayWet.gain,clamp(track.echo,0,100)/100*.43);
   set(graph.reverbWet.gain,clamp(track.space,0,100)/100*.65);
-  graph.voice.parameters.get('strength').setValueAtTime(clamp(track.autotune,0,100)/100,now);
-  graph.voice.parameters.get('retune').setValueAtTime(clamp(track.retune,0,100)/100,now);
-  graph.voice.parameters.get('clean').setValueAtTime(clamp(track.clean,0,100)/100,now);
+  // Smooth live XY moves to reduce parameter discontinuities during playback.
+  graph.voice.parameters.get('strength').setTargetAtTime(clamp(track.autotune,0,100)/100,now,.013);
+  graph.voice.parameters.get('retune').setTargetAtTime(clamp(track.retune,0,100)/100,now,.013);
+  graph.voice.parameters.get('clean').setTargetAtTime(clamp(track.clean,0,100)/100,now,.013);
   graph.voice.parameters.get('key').setValueAtTime(clamp(track.key,0,11),now);
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
 }
