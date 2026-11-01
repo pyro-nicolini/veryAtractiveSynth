@@ -454,7 +454,16 @@ function setupFlow(){
     if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
   });
   body.addEventListener('click',event=>{
-    if(event.target.closest('[data-flow-route-select]'))return;
+    if(event.target.closest('[data-flow-destination]'))return;
+    if(event.target.closest('[data-flow-open-deck]')){const area=$('#sampleDeck');if(area?.hidden)$('#sampleToggle')?.click();else area?.scrollIntoView({behavior:'smooth'});return;}
+    const output=event.target.closest('[data-flow-out]');
+    if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida lista · toca la entrada de otro nodo, bus o MASTER');return;}
+    const input=event.target.closest('[data-flow-in]');
+    if(input){if(state.flowArmedOutput)connectFlow(state.flowArmedOutput,input.dataset.flowIn.startsWith('bus:')||input.dataset.flowIn==='master'?input.dataset.flowIn:'track:'+input.dataset.flowIn);return;}
+    const savedDelete=event.target.closest('[data-flow-remove-sample]');
+    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado de la biblioteca?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
+    const sample=event.target.closest('[data-flow-sample]');
+    if(sample){insertFlowSample(sample.dataset.flowSample);return;}
     const tile=event.target.closest('[data-flow-palette]');
     if(tile){
       state.flowArmedEffect=state.flowArmedEffect===tile.dataset.flowPalette?null:tile.dataset.flowPalette;
@@ -474,21 +483,17 @@ function setupFlow(){
     if(node){selectFlowTrack(node.dataset.flowTrack);}
   });
   body.addEventListener('change',event=>{
-    const select=event.target.closest('[data-flow-route-select]');
+    const select=event.target.closest('[data-flow-destination]');
     if(!select)return;
-    const track=state.tracks.find(t=>t.id===select.dataset.flowRouteSelect);
-    if(!track||!BUS_IDS.includes(select.value)||track.bus===select.value)return;
-    if(state.recording||state.sessionRecording)return toast('Termina la grabación para cambiar las rutas.');
-    checkpoint();track.bus=select.value;
-    renderFlow();renderMixer();restartPlayback();queueAutosave();
-    toast('Ruta conectada: '+track.name+' → '+BUS_LABELS[select.value]);
+    connectFlow(select.dataset.flowDestination,select.value);
   });
   let dragged=null;
   function startDrag(event){
     const effect=event.target.closest('[data-flow-palette]');
+    const sample=event.target.closest('[data-flow-sample]');
     const libraryItem=event.target.closest('[data-library-item]');
     const chip=event.target.closest('[data-flow-effect]');
-    dragged=effect?{kind:'effect',id:effect.dataset.flowPalette}:
+    dragged=sample?{kind:'sample',id:sample.dataset.flowSample}:effect?{kind:'effect',id:effect.dataset.flowPalette}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
       chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
     if(dragged&&event.dataTransfer){
@@ -510,8 +515,9 @@ function setupFlow(){
     const target=event.target.closest('[data-flow-track]'),removal=event.target.closest('#flowRemoveZone');
     const item=dragged;dragged=null;
     if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
+    if(item.kind==='sample'){insertFlowSample(item.id,target?.dataset.flowTrack||null);return;}
     if(!target&&item.kind==='rhythms'){chooseLibraryItem('rhythms',item.id);return;}
-    if(!target)return toast('Suelta el efecto o estilo sobre un planeta de sonido');
+    if(!target)return toast('Suelta el efecto sobre una pista');
     const id=target.dataset.flowTrack;
     if(item.kind==='effect')applyFlowFx(id,item.id,true);
     else if(item.kind==='remove-fx')applyFlowFx(id,item.id,true);
@@ -2035,7 +2041,7 @@ function setupSamples(){
  const root=$('#sampleDeckBody');
  if(!root)return;
  const deck=new SampleDeck({
-  root,engine,onMessage:toast,
+  root,engine,onMessage:toast,onLibraryChanged:refreshFlowAssets,
   onSource:()=>{
    const track=current();
    if(!track)return null;
@@ -2054,6 +2060,8 @@ function setupSamples(){
   }
  });
  state.sampleDeck=deck;
+  deck.load().catch(error=>toast(error.message));
+  refreshFlowAssets();
  const area=$('#sampleDeck'),toggle=$('#sampleToggle');
  const open=async()=>{
   const visible=area.hidden;
