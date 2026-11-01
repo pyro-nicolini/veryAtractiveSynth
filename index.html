@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#07090d">
+  <meta name="theme-color" content="#f5f7fb">
   <meta name="description" content="Very Atractive Synth — estudio de voz y pistas por capas, privado y local.">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./src/styles.css">
   <link rel="stylesheet" href="./src/tune-lab.css">
   <link rel="stylesheet" href="./src/studio-mixer.css">
+  <link rel="stylesheet" href="./src/studio-light.css">
   <title>Very Atractive Synth | Laboratorio de sonido</title>
 </head>
 <body>
@@ -23,6 +24,7 @@
       <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
       <button type="button" class="button button-muted" id="helpBtn" aria-label="Guía del estudio">? <span class="desktop-only">GUÍA</span></button>
       <button type="button" class="button button-muted" id="voiceLabBtn" title="Jugar con autotune usando el micrófono en vivo">✦ VOICE LAB</button>
+      <button type="button" class="button button-muted" id="flowToggle" aria-expanded="true" aria-controls="flowArea">◉ <span class="desktop-only">CONEXIONES</span></button>
       <button type="button" class="button button-muted" id="mixerToggle" aria-controls="mixerArea" aria-expanded="false" aria-pressed="false"> <span aria-hidden="true">☷</span> MIXER</button>
       <button type="button" class="button button-muted" id="loadBtn">↗ <span class="desktop-only">ABRIR</span></button>
       <button type="button" class="button button-muted" id="saveBtn">▣ <span class="desktop-only">GUARDAR</span></button>
@@ -31,9 +33,9 @@
   </header>
   <main>
     <section class="intro">
-      <div><div class="eyebrow"><span class="pulse-line"></span> TU ESTUDIO CREATIVO · VERSIÓN 1.0</div>
-        <h1>Haz que suene <em>increíble.</em></h1>
-        <p>Graba tu voz, agrega una base y transforma cada sonido. Sin tecnicismos.</p>
+      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · VERSIÓN 1.1</div>
+        <h1>Tu música, <em>a tu manera.</em></h1>
+        <p>Elige un ritmo, conecta tus voces y arrastra efectos. Puedes cambiar todo sin perder el original.</p>
       </div>
       <div class="intro-decoration" aria-hidden="true"><span>/// 48K</span><span>WAVEFORM</span></div>
     </section>
@@ -45,13 +47,21 @@
         <span class="action-symbol"><span class="record-glyph"></span></span><span class="tile-copy"><strong>Grabar mi voz</strong><small>Un botón, tu micrófono</small></span><span class="tile-arrow">↗</span>
       </button>
       <button type="button" class="action-tile action-demo" id="demoBtn">
-        <span class="action-symbol">♫</span><span class="tile-copy"><strong>Probar un ritmo</strong><small>Base original para empezar</small></span><span class="tile-arrow">↗</span>
+        <span class="action-symbol">♫</span><span class="tile-copy"><strong>Explorar ritmos</strong><small>10 bases originales para probar</small></span><span class="tile-arrow">↗</span>
       </button>
+    </section>
+    <section class="sound-library" id="soundLibrary" aria-label="Biblioteca de sonidos">
+      <div class="soft-section-heading"><div><div class="section-overline">INSPIRACIÓN · 100% LOCAL</div><h2>Elige tu sonido</h2><p>Todo empieza con una idea. Toca para probar o arrastra hasta una pista.</p></div><button type="button" class="mini-action" id="libraryHelp" aria-label="Cómo utilizar la biblioteca">?</button></div>
+      <div id="libraryBody"></div>
+    </section>
+    <section class="flow-studio" id="flowArea" aria-label="Laboratorio de conexiones musicales">
+      <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Conecta tu canción</h2><p>Arrastra un efecto a un planeta de sonido. Desconecta un cable para silenciar, o vuelve a conectarlo.</p></div><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div>
+      <div id="flowBody"></div>
     </section>
     <section class="workbench">
       <div class="track-area">
         <div class="section-heading">
-          <div><div class="section-overline">01 / CAPAS DE SONIDO</div><h2>Tu mezcla <span id="trackCount" class="count">00</span></h2></div>
+          <div><div class="section-overline">TUS PISTAS</div><h2>Tu mezcla <span id="trackCount" class="count">00</span></h2></div>
           <div class="section-tools"><label class="tempo-control" for="bpmInput" title="Velocidad del metrónomo">BPM <input id="bpmInput" type="number" value="104" min="40" max="240" step="1" inputmode="numeric"></label><button class="mini-action" id="metronomeBtn" type="button" aria-pressed="false" title="Activar metrónomo" aria-label="Activar metrónomo">♩</button><button class="mini-action" id="snapBtn" type="button" aria-pressed="false" title="Ajustar al ritmo" aria-label="Ajustar clips al ritmo">⌗</button><button class="mini-action" id="undoBtn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" disabled>↶</button><button class="mini-action" id="redoBtn" title="Rehacer (Ctrl+Mayús+Z)" aria-label="Rehacer" disabled>↷</button><button class="mini-action" id="tracksInfo" aria-label="Información sobre las capas">i</button><button class="mini-action mini-add" id="addTrackBtn">+ AGREGAR</button></div>
         </div>
         <div class="timeline-ruler"><span>INICIO</span><div class="ruler-line" id="ruler" role="slider" tabindex="0" aria-label="Mover el momento actual" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0" aria-valuetext="00:00" title="Arrastra el marcador verde para adelantar o retroceder"><span class="playhead" id="playhead"></span></div><span id="endTimeLabel">00:00</span></div>
@@ -62,18 +72,18 @@
           <p>Importa una pista, graba una idea o prueba el ritmo de ejemplo.</p>
           <button class="button button-outline" id="emptyImportBtn">＋ AGREGAR PRIMER SONIDO</button>
         </div>
-        <div class="timeline-footer"><span><span class="green-dot"></span> Arrastra el control ↔ de cada capa para mover el sonido</span><button class="mini-action" id="timelineInfo">i</button></div>
+        <div class="timeline-footer"><span><span class="green-dot"></span> Arrastra ↔ para mover cada clip. La línea verde aparece dentro de cada onda.</span><button class="mini-action" id="timelineInfo">i</button></div>
       </div>
       <aside class="inspector" id="inspector" aria-label="Controles de pista">
         <div class="section-heading inspector-heading">
-          <div><div class="section-overline">02 / AJUSTES SIMPLES</div><h2>Tu sonido</h2></div>
+          <div><div class="section-overline">TU VOZ · AJUSTES</div><h2>Tu sonido</h2></div>
           <button class="mini-action" id="inspectorInfo" aria-label="Información de controles">i</button>
         </div>
         <div id="inspectorBody"><div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div></div>
       </aside>
     </section>
     <section class="studio-mixer" id="mixerArea" aria-label="Consola del mezclador" hidden>
-      <div class="studio-mixer-head"><div><div class="section-overline">03 / CONSOLA DE MEZCLA</div><h2>Studio Mixer</h2><p>Control independiente de canales, posición y buses · todo llega al master.</p></div><div><button type="button" class="mini-action" id="mixerHelp" aria-label="Ayuda de Studio Mixer">i</button> <button type="button" class="mini-action mix-close" id="mixerClose">✕ CERRAR</button></div></div>
+      <div class="studio-mixer-head"><div><div class="section-overline">MEZCLA DETALLADA</div><h2>Studio Mixer</h2><p>Control independiente de canales, posición y buses · todo llega al master.</p></div><div><button type="button" class="mini-action" id="mixerHelp" aria-label="Ayuda de Studio Mixer">i</button> <button type="button" class="mini-action mix-close" id="mixerClose">✕ CERRAR</button></div></div>
       <div id="mixerBody" class="mixer-body"></div>
     </section>
   </main>

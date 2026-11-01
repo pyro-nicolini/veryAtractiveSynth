@@ -2,10 +2,22 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 1.0.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 1.1.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 
+
+## DesignPhase 1.1 — Soft Studio / Flow musical (primera entrega)
+
+La experiencia adopta fondo blanco, tarjetas soft-3D, más jerarquía y lenguaje musical. El mezclador, la grabación, el WAV, los clips y Tune Lab conservan su motor y datos.
+
+1. **Elige tu sonido:** 10 ritmos originales generados localmente (Pop, House, Trap, Lo-Fi, Dembow, Breakbeat, Neo Soul, Dance, Ambient y Funk), 10 estilos vocales y 5 transiciones automáticas. No requieren descargar contenido. Pulsa un ritmo para agregar una pista; aplica un estilo a la pista seleccionada; selecciona un clip y aplica una transición para crear fundidos reales.
+2. **Conecta tu canción:** abre CONEXIONES. Cada planeta es una pista real y los cables llegan al master. Las curvas se mueven según los medidores reales. Arrastra un procesador a una pista o tócalo y luego selecciona el nodo. Pulsa × en un chip o arrástralo a la zona de retirar para desactivar el efecto sin perder sus parámetros. Desconectar silencia la pista sin borrar clips ni ajustes. La cabecera del planeta puede moverse; su posición se almacena en el proyecto.
+3. **Edita:** la línea verde del presente se dibuja solo dentro de cada forma de onda y la regla usa el mismo ancho que los visores. Mixer e inspector siguen disponibles.
+
+**Precisión:** el Flow Studio es una representación del ruteo actual, no un motor de módulos libre. Activar/retirar procesadores usa el bypass del DSP real, y el cable representa gain mute en la pista. Las cadenas de efectos mantienen su orden fijo y no hay buses auxiliares conectables mediante cables. El detector de tono sigue siendo experimental.
+
+**Pendiente:** enrutamiento modular con validación de ciclos, FX rack reordenable con dry/wet, loop infinito cuantizado, overdub, QA móvil y medición de latencia con micrófonos reales. Ver el plan detallado en docs/FLOW-STUDIO-1.1.md. No se modificó main.
 
 ## DesignPhase 1.0 — Loops por clip y grabación de sesión
 

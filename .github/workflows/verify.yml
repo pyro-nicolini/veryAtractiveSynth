@@ -32,6 +32,9 @@ jobs:
           node --check src/fx-rack.js
           node --check src/studio-mixer.js
           node --check src/studio-mixer-ui.js
+          node --check src/studio-library.js
+          node --check src/library-ui.js
+          node --check src/flow-studio.js
           node --check src/audio-import.js
           node --check src/timeline.js
           node --check src/portable-project.js

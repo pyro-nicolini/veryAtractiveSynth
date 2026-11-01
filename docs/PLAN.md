@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 1.0 implementado
+## 3. Estado 1.1 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,18 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 1.1 — Soft Studio / biblioteca y nodos
+
+- [x] Diseño blanco soft 3D, jerarquía musical y navegación sencilla.
+- [x] Cabezal y regla alineados con la onda en vez de atravesar las tarjetas.
+- [x] 10 ritmos originales, 10 estilos vocales, 5 transiciones sin alterar el audio.
+- [x] Flow Studio: pistas como nodos, cables dinámicos, desconexión reversible.
+- [x] Drag/drop y tap para asignar efectos; × para retirarlos sin perder ajustes.
+- [x] Posiciones de nodos persistentes en cada proyecto.
+- [ ] Enrutamiento de puertos y buses modular y FX rack reordenable.
+- [ ] QA de navegador/micrófono y drag/drop móvil.
+- [ ] Resto de pendientes detallados en docs/FLOW-STUDIO-1.1.md.
 
 ### Fase 1.0 — Clip Loop Studio y captura de sesión
 

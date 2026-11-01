@@ -12,12 +12,17 @@ import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mi
 import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
 import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrackClip,cloneTrackMetadata,clipSourceBounds,validLoop,setClipLoop,removeClipLoop,duplicateLoop} from './track-clips.js';
 import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx-rack.js';
+import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
+import {libraryMarkup} from './library-ui.js';
+import {flowMarkup,flowHeight,flowPosition,updateFlowWires} from './flow-studio.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowDrag:null};
 const HELP={
+  flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
+  library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   clipLoop:['Loops de un clip','Selecciona un fragmento del archivo fuente con inicio y final (en segundos), y elige cuántas veces debe repetirse, hasta 64. El loop solo afecta ese clip; las demás pistas conservan su tiempo normal. Puedes duplicar el patrón a la derecha en la misma pista sin crear otra copia del sonido. Para evitar clicks, corta cerca de cruces por cero.'],
   sessionRecording:['Grabar sesión en tiempo real','Captura como WAV estéreo lo que escuchas saliendo del master, incluidos loops, buses y efectos, durante la reproducción. No pide micrófono ni graba automáticamente la señal de entrada: si quieres incluir tu voz, primero grábala como pista. Máximo 10 minutos. Para exportación reproducible sin esperar, utiliza EXPORTAR WAV.'],
@@ -65,7 +70,7 @@ let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses}};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},flowOpen:state.flowOpen,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
@@ -73,6 +78,8 @@ function applyProjectOptions(options={}){
   state.recordShiftMs=Math.round(clamp(options.recordShiftMs??0,-300,300));
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
+  state.flowOpen=options.flowOpen!==false;
+  state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,540),y:clamp(p.y,12,3000)}]));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
   $('#snapBtn')?.setAttribute('aria-pressed',String(state.snap));
@@ -182,10 +189,229 @@ function render(){
     return '<article class="track-card'+(active?' selected':'')+'" style="--track-color:'+trackColor(t)+'" data-track="'+html(t.id)+'" tabindex="0" aria-label="Seleccionar capa '+html(t.name)+'">'+
       '<div class="vinyl'+(engine.playing&&!t.muted?' spinning':'')+'" aria-hidden="true"><div class="vinyl-center"></div></div>'+
       '<div class="track-info"><strong class="track-name" title="'+html(t.name)+'">'+html(t.name)+'</strong><div class="track-sub">'+(t.type==='voice'?'◉ VOZ':t.type==='demo'?'♫ BEAT':'≋ AUDIO')+' · '+(Array.isArray(t.clips)?t.clips.length+' CLIPS · ':'')+clock(effectiveDuration(t))+'</div><div class="track-buttons"><button class="small-toggle'+(t.muted?' active':'')+'" data-track-action="mute" data-id="'+html(t.id)+'" title="Silenciar" aria-label="Silenciar '+html(t.name)+'">M</button><button class="small-toggle solo'+(t.solo?' active':'')+'" data-track-action="solo" data-id="'+html(t.id)+'" title="Escuchar solo" aria-label="Escuchar solo '+html(t.name)+'">S</button></div></div>'+
-      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(clipsOf(t).some(c=>validLoop(c))?'⟳ LOOP':t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div>'+clipsOf(t).map((clip)=>'<button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(clip.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" data-drag-clip="'+html(clip.id)+'" title="'+(validLoop(clip)?'Loop x'+clip.loop.repeats+' · ':'')+'Mover clip '+html(clip.name||t.name)+'" aria-label="Mover clip '+html(clip.name||t.name)+'">↔</button>').join('')+'</div>'+
+      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-playhead" aria-hidden="true"></div><div class="wave-label">'+(clipsOf(t).some(c=>validLoop(c))?'⟳ LOOP':t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div>'+clipsOf(t).map((clip)=>'<button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(clip.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" data-drag-clip="'+html(clip.id)+'" title="'+(validLoop(clip)?'Loop x'+clip.loop.repeats+' · ':'')+'Mover clip '+html(clip.name||t.name)+'" aria-label="Mover clip '+html(clip.name||t.name)+'">↔</button>').join('')+'</div>'+
       '<div class="track-tail"><button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
-  renderInspector();renderMixer();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
+  renderInspector();renderMixer();renderFlow();requestAnimationFrame(()=>{drawWaves();alignWaveRuler();updateTransport();});updateTransport();queueAutosave();
+}
+
+function renderLibrary(){
+  if($('#libraryBody'))$('#libraryBody').innerHTML=libraryMarkup(state.libraryTab);
+}
+function renderFlow(){
+  const area=$('#flowArea'),body=$('#flowBody');
+  if(!area||!body)return;
+  area.hidden=!state.flowOpen;
+  $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
+  if(!state.flowOpen)return;
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected);
+  if(state.flowArmedEffect){
+    const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
+    tile?.classList.add('is-armed');
+  }
+  requestAnimationFrame(paintFlow);
+}
+function paintFlow(){
+  if(state.flowOpen)updateFlowWires($('#flowArea'),state.tracks,engine,engine.playing);
+}
+function selectFlowTrack(id){
+  if(state.flowArmedEffect){
+    const fx=state.flowArmedEffect;state.flowArmedEffect=null;
+    applyFlowFx(id,fx,true);return;
+  }
+  if(state.flowArmedLibrary){
+    const item=state.flowArmedLibrary;state.flowArmedLibrary=null;
+    chooseLibraryItem(item.kind,item.id,id);return;
+  }
+  const track=state.tracks.find(t=>t.id===id);
+  if(track){state.selected=id;state.selectedClip=null;renderInspector();renderFlow();}
+}
+function applyFlowFx(trackId,fx,enable){
+  if(state.recording)return toast('Finaliza la toma antes de cambiar efectos');
+  if(state.sessionRecording)return toast('Finaliza primero la captura de sesión para editar la cadena');
+  const track=state.tracks.find(t=>t.id===trackId);
+  if(!track||!FX_IDS.includes(fx))return toast('Selecciona una pista y un efecto');
+  checkpoint();
+  track.fxBypass={...track.fxBypass,[fx]:!enable};
+  if(enable){
+    track.bypassEffects=false;
+    if(fx==='tune')track.autotune=Math.max(72,track.autotune);
+    if(fx==='clean')track.clean=Math.max(50,track.clean);
+    if(fx==='eq'){track.brightness=Math.max(63,track.brightness);track.warmth=Math.max(31,track.warmth);}
+    if(fx==='drive')track.drive=Math.max(23,track.drive);
+    if(fx==='delay')track.echo=Math.max(27,track.echo);
+    if(fx==='reverb')track.space=Math.max(33,track.space);
+    if(fx==='tune'){
+      const coord=tunePointFromManual(track.autotune,track.retune);
+      track.tuneX=coord.x;track.tuneY=coord.y;
+    }
+  }
+  state.selected=track.id;
+  engine.updateTrack(track);
+  renderInspector();renderFlow();queueAutosave();
+  toast(enable?'Efecto conectado a '+track.name:'Efecto retirado sin borrar sus ajustes');
+}
+async function chooseLibraryItem(kind,id,trackId=state.selected){
+  if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de cambiar el arreglo');
+  if(kind==='rhythms'){
+    try{
+      const ctx=await engine.ready(),result=makeGroove(id,ctx.sampleRate,8),data=result.channels;
+      const buffer=ctx.createBuffer(2,data[0].length,ctx.sampleRate);
+      data.forEach((channel,index)=>buffer.copyToChannel(channel,index));
+      const wasEmpty=!state.tracks.length;
+      const track=addTrack(buffer,result.groove.name+' · '+result.groove.bpm+' BPM','demo');
+      track.volume=67;track.clean=0;track.space=0;track.echo=0;track.bus='music';
+      if(wasEmpty){state.bpm=result.groove.bpm;$('#bpmInput').value=String(state.bpm);engine.setMetronome(state.metronome,state.bpm);}
+      render();restartPlayback();toast('Ritmo '+result.groove.name+' añadido. Puedes grabar encima.');
+    }catch(error){toast('No se pudo crear el ritmo: '+error.message);}
+    return;
+  }
+  const target=state.tracks.find(t=>t.id===trackId);
+  if(!target){
+    state.flowArmedLibrary={kind,id};state.flowOpen=true;renderFlow();
+    $('#flowArea')?.scrollIntoView({behavior:'smooth',block:'start'});
+    toast('Ahora elige el planeta de sonido donde aplicar '+(kind==='voices'?'el estilo':'la transición'));
+    return;
+  }
+  if(kind==='voices'){
+    try{checkpoint();applyVoiceStyle(target,id);engine.updateTrack(target);
+      state.selected=target.id;renderInspector();renderFlow();queueAutosave();
+      const name=VOICE_STYLES.find(p=>p.id===id)?.name||'Estilo';
+      toast(name+' aplicado a '+target.name);
+    }catch(error){toast(error.message);}return;
+  }
+  if(kind==='transitions'){
+    try{
+      const clips=clipsOf(target),chosen=getEditableClip(target,state.selectedClip);
+      if(!chosen)throw Error('Esta pista aún no tiene clips');
+      // Validate style and neighboring clip before altering the project.
+      const probe={...target,clips:clips.map(c=>({...c}))};
+      applyAutoTransition(probe,chosen.id,id,state.bpm);
+      checkpoint();
+      const clip=ensureClips(target).find(c=>c.id===chosen.id);
+      applyAutoTransition(target,clip.id,id,state.bpm);
+      state.selected=target.id;state.selectedClip=clip.id;
+      render();restartPlayback();
+      toast('Transición aplicada a '+target.name);
+    }catch(error){toast(error.message);}
+  }
+}
+function toggleFlowTrackLink(id){
+  if(state.recording)return toast('Termina la toma antes de cambiar conexiones');
+  const track=state.tracks.find(t=>t.id===id);
+  if(!track)return;
+  checkpoint();track.muted=!track.muted;state.selected=track.id;
+  // Play schedules muted channels at zero gain so reconnecting is immediate.
+  engine.updateTrack(track);
+  renderInspector();renderMixer();renderFlow();queueAutosave();
+  toast(track.muted?'Pista desconectada. Sus clips siguen guardados.':'Pista reconectada a tu canción.');
+}
+function setupFlow(){
+  renderLibrary();
+  const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody');
+  $('#flowToggle').onclick=()=>{
+    state.flowOpen=!state.flowOpen;renderFlow();queueAutosave();
+    if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+  $('#flowHelp').onclick=()=>help('flowStudio');
+  $('#libraryHelp').onclick=()=>help('library');
+  library.addEventListener('click',event=>{
+    const tab=event.target.closest('[data-library-tab]');
+    if(tab){state.libraryTab=tab.dataset.libraryTab;renderLibrary();return;}
+    const item=event.target.closest('[data-library-item]');
+    if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
+  });
+  body.addEventListener('click',event=>{
+    const tile=event.target.closest('[data-flow-palette]');
+    if(tile){
+      state.flowArmedEffect=state.flowArmedEffect===tile.dataset.flowPalette?null:tile.dataset.flowPalette;
+      state.flowArmedLibrary=null;renderFlow();
+      if(state.flowArmedEffect)toast('Ahora toca el planeta donde quieres conectar el efecto');
+      return;
+    }
+    const remove=event.target.closest('[data-flow-effect]');
+    if(remove){applyFlowFx(remove.dataset.flowOwner,remove.dataset.flowEffect,false);return;}
+    const link=event.target.closest('[data-flow-link]');
+    if(link){toggleFlowTrackLink(link.dataset.flowLink);return;}
+    const focus=event.target.closest('[data-flow-focus]');
+    if(focus){selectFlowTrack(focus.dataset.flowFocus);return;}
+    const node=event.target.closest('[data-flow-track]');
+    if(node){selectFlowTrack(node.dataset.flowTrack);}
+  });
+  let dragged=null;
+  function startDrag(event){
+    const effect=event.target.closest('[data-flow-palette]');
+    const libraryItem=event.target.closest('[data-library-item]');
+    const chip=event.target.closest('[data-flow-effect]');
+    dragged=effect?{kind:'effect',id:effect.dataset.flowPalette}:
+      libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
+      chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
+    if(dragged&&event.dataTransfer){
+      event.dataTransfer.effectAllowed='copyMove';
+      event.dataTransfer.setData('text/plain','vas-flow');
+    }
+  }
+  library.addEventListener('dragstart',startDrag);
+  body.addEventListener('dragstart',startDrag);
+  body.addEventListener('dragover',event=>{
+    if(!dragged)return;
+    if(event.target.closest('[data-flow-track],#flowRemoveZone,#flowBoard')){
+      event.preventDefault();event.dataTransfer.dropEffect='copy';
+    }
+  });
+  body.addEventListener('drop',event=>{
+    if(!dragged)return;
+    event.preventDefault();
+    const target=event.target.closest('[data-flow-track]'),removal=event.target.closest('#flowRemoveZone');
+    const item=dragged;dragged=null;
+    if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
+    if(!target&&item.kind==='rhythms'){chooseLibraryItem('rhythms',item.id);return;}
+    if(!target)return toast('Suelta el efecto o estilo sobre un planeta de sonido');
+    const id=target.dataset.flowTrack;
+    if(item.kind==='effect')applyFlowFx(id,item.id,true);
+    else if(item.kind==='remove-fx')applyFlowFx(id,item.id,true);
+    else chooseLibraryItem(item.kind,item.id,id);
+  });
+  body.addEventListener('dragend',()=>{dragged=null;});
+  library.addEventListener('dragend',()=>{dragged=null;});
+  body.addEventListener('pointerdown',event=>{
+    const handle=event.target.closest('[data-flow-drag]');
+    if(!handle||event.button!==0||state.recording)return;
+    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');
+    if(!node||!board)return;
+    event.preventDefault();handle.setPointerCapture(event.pointerId);
+    const position=flowPosition({id:node.dataset.flowTrack},state.tracks.findIndex(t=>t.id===node.dataset.flowTrack),state.flowPositions);
+    state.flowDrag={id:node.dataset.flowTrack,startX:event.clientX,startY:event.clientY,x:position.x,y:position.y,node,board};
+    node.classList.add('is-dragging');
+  });
+  body.addEventListener('pointermove',event=>{
+    if(!state.flowDrag)return;
+    const drag=state.flowDrag,board=drag.board;
+    const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
+    const y=clamp(drag.y+event.clientY-drag.startY,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
+    drag.node.style.left=x+'px';drag.node.style.top=y+'px';
+    drag.next={x,y};paintFlow();
+  });
+  const finish=event=>{
+    const drag=state.flowDrag;if(!drag)return;
+    state.flowDrag=null;drag.node.classList.remove('is-dragging');
+    if(event.type!=='pointercancel'&&drag.next){
+      const prior=state.flowPositions[drag.id]||{x:drag.x,y:drag.y};
+      if(prior.x!==drag.next.x||prior.y!==drag.next.y){
+        checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();
+      }
+    }else{drag.node.style.left=drag.x+'px';drag.node.style.top=drag.y+'px';}
+    paintFlow();
+  };
+  body.addEventListener('pointerup',finish);body.addEventListener('pointercancel',finish);
+}
+
+function alignWaveRuler(){
+  const wave=$('.track-wave'),container=$('.timeline-ruler'),ruler=$('#ruler');
+  if(!container||!ruler)return;
+  if(!wave){ruler.style.left='';ruler.style.width='';return;}
+  const r=wave.getBoundingClientRect(),parent=container.getBoundingClientRect();
+  ruler.style.left=Math.max(0,r.left-parent.left)+'px';ruler.style.width=Math.max(30,r.width)+'px';
 }
 function renderMixer(){
   const area=$('#mixerArea'),body=$('#mixerBody');
@@ -325,6 +551,7 @@ function updateTransport(){
   $('#playBtn').setAttribute('aria-label',engine.playing?'Pausar':'Reproducir');
   const percent=duration>0?clamp(pos/timelineSpan(state.tracks)*100,0,100):0;
   $('#playhead').style.left=percent+'%';$('#playhead').style.opacity=state.tracks.length?1:0;
+  for(const line of $('.wave-playhead')){line.style.left=percent+'%';line.style.opacity=state.tracks.length?1:0;}
 }
 function updateMasterMeter(){
   const {peak,rms}=engine.getMasterMeter();
@@ -405,7 +632,7 @@ function runTicker(){
   cancelAnimationFrame(raf);
   const tick=()=>{
     if(engine.playing){
-      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();
+      const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();paintFlow();
       if(p>=projectDuration(state.tracks)-.015){
         if(state.sessionRecording&&!state.loop)stopSessionRecording();
         engine.stop();state.position=0;
@@ -1350,7 +1577,7 @@ function setupClipDragging(){
 }
 
 function wire(){
-  setupMixer();
+  setupMixer();setupFlow();
   installTuneGestures();
   setupScrubber();
   setupClipDragging();
@@ -1376,7 +1603,7 @@ function wire(){
     const target=state.clipImportTrack;state.clipImportTrack=null;
     await importClipIntoTrack(e.target.files?.[0],target);e.target.value='';
   };
-  $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
+  $('#demoBtn').onclick=()=>{state.libraryTab='rhythms';renderLibrary();$('#soundLibrary').scrollIntoView({behavior:'smooth',block:'start'});};$('#recordBtn').onclick=openRecording;
   $('#sessionRecordBtn').onclick=toggleSessionRecording;
   $('#voiceLabBtn').onclick=()=>openTuneLab('live');
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
@@ -1528,7 +1755,7 @@ function wire(){
     if(e.key===' '&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement?.tagName||'')&&!$('#modalBackdrop')){e.preventDefault();playPause();}
   });
   navigator.mediaDevices?.addEventListener?.('devicechange',()=>{if($('#micSelect')&&!state.recording)updateMicrophoneChoices();});
-  window.addEventListener('resize',()=>requestAnimationFrame(drawWaves));
+  window.addEventListener('resize',()=>requestAnimationFrame(()=>{drawWaves();alignWaveRuler();paintFlow();}));
   document.addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files'))e.preventDefault();});
   document.addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();importFiles(e.dataTransfer.files);}});
   window.addEventListener('beforeunload',e=>{if(state.recording){e.preventDefault();e.returnValue='';}});

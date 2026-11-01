@@ -273,7 +273,9 @@ export class AudioEngine {
     const ir=impulse(ctx);
     for(const id of BUS_IDS)this.buses.set(id,makeBus(ctx,this.output.gain,this.busSettings[id]));
     for(const track of tracks){
-      if(track.muted || (solo&&!track.solo))continue;
+      // Keep muted sources scheduled at zero channel gain so a disconnected
+      // flow node can reconnect smoothly without resetting the timeline.
+      if(solo&&!track.solo)continue;
       const segments=clipsOf(track).filter(clip=>clipDuration(clip)>=.002);
       if(!segments.length)continue;
       const graph=createGraph(ctx,track,this.buses.get(busForTrack(track)).gain,ir);

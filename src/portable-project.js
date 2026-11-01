@@ -102,7 +102,7 @@ export async function importProject(file,ctx){
       bus:['music','vocals','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
       tuneX:clamp(t.tuneX??((clamp(t.retune??60,5,100)-5)/95*2-1),-1,1),tuneY:clamp(t.tuneY??(clamp(t.autotune,0,100)/50-1),-1,1),
       tunePreset:typeof t.tunePreset==='string'&&t.tunePreset.length<42?t.tunePreset:'custom',
-      preset:typeof t.preset==='string'?t.preset:'natural',buffer,
+      preset:typeof t.preset==='string'?t.preset:'natural',voiceStyle:typeof t.voiceStyle==='string'&&t.voiceStyle.length<60?t.voiceStyle:null,buffer,
       ...(restoredClips?{clips:restoredClips}:{})
     });
   }
