@@ -19,6 +19,7 @@ jobs:
         run: |
           node --check server.js
           node --check src/app.js
+          node --check src/splash.js
           node --check src/engine.js
           node --check src/dsp.js
           node --check src/project-store.js
