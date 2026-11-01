@@ -107,6 +107,14 @@ function createGraph(ctx,track,destination,ir){
   setParams(graph,track,ctx);
   return graph;
 }
+function createDryGraph(ctx,track,destination){
+  // A genuine no-FX render. No voice worklet, pitch regions, delay or reverb.
+  const input=ctx.createGain(),pan=ctx.createStereoPanner(),gain=ctx.createGain();
+  pan.pan.value=clamp(track.pan,-100,100)/100;
+  gain.gain.value=clamp(track.volume,0,100)/100;
+  input.connect(pan);pan.connect(gain);gain.connect(destination);
+  return {input};
+}
 function disposeGraph(graph){
   if(!graph)return;
   try{graph.voice.port.onmessage=null;graph.voice.port.postMessage({type:'monitor',enabled:false});}catch{}
@@ -549,15 +557,19 @@ export class AudioEngine {
     const tail=hasReverb?1.9:hasDelay?1.1:.08;
     // Account for the effects tail so the end is not truncated.
     const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
-    if(!offline.audioWorklet)throw Error('Este navegador no permite aplicar afinación y limpieza durante la exportación. Usa Chrome o Edge actualizados.');
-    try{await offline.audioWorklet.addModule(WORKLET_URL);}
-    catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
+    if(!dry){
+      if(!offline.audioWorklet)throw Error('Este navegador no permite aplicar efectos durante la exportación. Usa Chrome o Edge actualizados.');
+      try{await offline.audioWorklet.addModule(WORKLET_URL);}
+      catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
+    }
     const output=makeMaster(offline,offline.destination,this.masterVolume);
     const ir=impulse(offline);
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
     for(const track of active){
-      const graph=createGraph(offline,dry?{...track,bypassEffects:true}:track,exportBuses.get(busForTrack(track)).gain,ir);
-      for(const clip of clipsOf(track))scheduleClip(offline,clip,graph,0,0);
+      const target=exportBuses.get(busForTrack(track)).gain;
+      const graph=dry?createDryGraph(offline,track,target):createGraph(offline,track,target,ir);
+      for(const clip of clipsOf(track))
+        scheduleClip(offline,dry?{...clip,pitchRegions:[],pitchShift:0}:clip,graph,0,0);
     }
     const rendered=await offline.startRendering();
     return encodeWav(rendered,depth);
