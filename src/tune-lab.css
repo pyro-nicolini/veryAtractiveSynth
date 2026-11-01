@@ -93,3 +93,5 @@
 .lab-live-gains label{font:700 10px monospace;display:flex;align-items:center;gap:10px;color:#acb9c7}
 .lab-live-gains input{flex:1;min-width:0;accent-color:#a5ff73}
 .lab-live-gains output{font:700 11px monospace;color:#a5ff73;text-align:right}
+
+.lab-session-record{border-color:#ca7281;background:#321a29;color:#ffc3d0}

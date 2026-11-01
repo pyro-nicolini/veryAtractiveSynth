@@ -1,4 +1,5 @@
 /** Pure local audio utilities; no dependencies or network calls. */
+import {clipDuration,clipsOf} from './track-clips.js';
 export const KEYS = ['Do','Do♯','Re','Mi♭','Mi','Fa','Fa♯','Sol','La♭','La','Si♭','Si'];
 export const SCALES = ['Mayor','Menor','Cromática'];
 export const COLORS = ['#a5ff73','#a778ff','#59caff','#ff73b7','#ffb56b','#67f6e7'];
@@ -14,10 +15,12 @@ export function defaults() {return {autotune:0,retune:60,clean:25,brightness:50,
 export function clamp(value,min,max) {return Math.min(max,Math.max(min,Number(value)||0));}
 export function clock(seconds) { const s=Math.max(0,Math.floor(seconds||0)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 export function effectiveDuration(track) {
-  if(Array.isArray(track.clips))return track.clips.reduce((sum,clip)=>sum+Math.max(0,(clip.buffer?.duration||0)-(clip.trimStart||0)-(clip.trimEnd||0)),0);
-  return Math.max(0,track.buffer.duration-(track.trimStart||0)-(track.trimEnd||0));
+  if(Array.isArray(track.clips))return track.clips.reduce((sum,clip)=>sum+clipDuration(clip),0);
+  return clipDuration(track);
 }
-export function projectDuration(tracks) {return tracks.reduce((a,t)=>Math.max(a,...(Array.isArray(t.clips)?t.clips:[t]).map(c=>(c.offset||0)+Math.max(0,(c.buffer?.duration||0)-(c.trimStart||0)-(c.trimEnd||0)))),0);}
+export function projectDuration(tracks) {
+  return tracks.reduce((end,track)=>Math.max(end,...clipsOf(track).map(c=>(c.offset||0)+clipDuration(c))),0);
+}
 export function nearestNote(midi,key=0,scale=0) {
   const allowed=scale===1?[0,2,3,5,7,8,10]:scale===2?[0,1,2,3,4,5,6,7,8,9,10,11]:[0,2,4,5,7,9,11];
   let closest=Math.round(midi),diff=Infinity;

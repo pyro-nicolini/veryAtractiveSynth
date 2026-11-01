@@ -54,7 +54,8 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
     '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview" '+(mode==='live'?'hidden':'')+'>▶ ESCUCHAR CAMBIOS</button>'+
       '<button type="button" class="lab-action" data-action="tune-apply" '+(mode==='live'&&hasTrack?'':'hidden')+'>⇢ APLICAR A PISTA</button>'+
     '<button type="button" class="lab-action" data-action="tune-ab">'+(track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL')+'</button>'+
-    '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button></div>'+
+    '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button>'+
+    '<button type="button" class="lab-action lab-session-record" data-action="session-record" aria-pressed="false">● GRABAR LO QUE ESCUCHO</button></div>'+
     '<div class="lab-top-axis"><span>↑ MÁS INTENSO</span><span>Y / FUERZA DE AFINACIÓN</span></div>'+
     '<div class="lab-pad" id="tunePad" role="group" tabindex="0" aria-label="Explorar autotune por coordenadas. Flechas izquierda y derecha cambian lo natural o robótico; arriba y abajo cambian intensidad." aria-describedby="labHint">'+
     '<div class="lab-grid"></div><div class="lab-axis-h"></div><div class="lab-axis-v"></div>'+

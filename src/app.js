@@ -10,15 +10,17 @@ import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMar
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mixer.js';
 import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
-import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrackClip,cloneTrackMetadata} from './track-clips.js';
+import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrackClip,cloneTrackMetadata,clipSourceBounds,validLoop,setClipLoop,removeClipLoop,duplicateLoop} from './track-clips.js';
 import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx-rack.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
+  clipLoop:['Loops de un clip','Selecciona un fragmento del archivo fuente con inicio y final (en segundos), y elige cuántas veces debe repetirse, hasta 64. El loop solo afecta ese clip; las demás pistas conservan su tiempo normal. Puedes duplicar el patrón a la derecha en la misma pista sin crear otra copia del sonido. Para evitar clicks, corta cerca de cruces por cero.'],
+  sessionRecording:['Grabar sesión en tiempo real','Captura como WAV estéreo lo que escuchas saliendo del master, incluidos loops, buses y efectos, durante la reproducción. No pide micrófono ni graba automáticamente la señal de entrada: si quieres incluir tu voz, primero grábala como pista. Máximo 10 minutos. Para exportación reproducible sin esperar, utiliza EXPORTAR WAV.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
   timeline:['Línea de tiempo','Cada forma de onda representa un sonido. Toca o arrastra el cabezal verde en la regla de tiempo para adelantar o retroceder. También puedes tocar una onda. Usa las flechas izquierda y derecha del teclado para avanzar o retroceder 1 segundo. En AJUSTAR TIEMPOS puedes desplazar, recortar y suavizar entradas y salidas.'],
   inspector:['Ajustes de la capa','Los tres controles principales son volumen, afinación y limpieza. Prueba un estilo predefinido si no sabes por dónde empezar. Los efectos adicionales se encuentran en MÁS EFECTOS.'],
@@ -180,8 +182,8 @@ function render(){
     return '<article class="track-card'+(active?' selected':'')+'" style="--track-color:'+trackColor(t)+'" data-track="'+html(t.id)+'" tabindex="0" aria-label="Seleccionar capa '+html(t.name)+'">'+
       '<div class="vinyl'+(engine.playing&&!t.muted?' spinning':'')+'" aria-hidden="true"><div class="vinyl-center"></div></div>'+
       '<div class="track-info"><strong class="track-name" title="'+html(t.name)+'">'+html(t.name)+'</strong><div class="track-sub">'+(t.type==='voice'?'◉ VOZ':t.type==='demo'?'♫ BEAT':'≋ AUDIO')+' · '+(Array.isArray(t.clips)?t.clips.length+' CLIPS · ':'')+clock(effectiveDuration(t))+'</div><div class="track-buttons"><button class="small-toggle'+(t.muted?' active':'')+'" data-track-action="mute" data-id="'+html(t.id)+'" title="Silenciar" aria-label="Silenciar '+html(t.name)+'">M</button><button class="small-toggle solo'+(t.solo?' active':'')+'" data-track-action="solo" data-id="'+html(t.id)+'" title="Escuchar solo" aria-label="Escuchar solo '+html(t.name)+'">S</button></div></div>'+
-      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div>'+clipsOf(t).map((clip)=>'<button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(clip.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" data-drag-clip="'+html(clip.id)+'" title="Mover clip '+html(clip.name||t.name)+'" aria-label="Mover clip '+html(clip.name||t.name)+'">↔</button>').join('')+'</div>'+
-      '<div class="track-tail"><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
+      '<div class="track-wave" data-wave="'+html(t.id)+'" title="Toca para moverte en la mezcla"><canvas data-canvas="'+html(t.id)+'" aria-label="Forma de onda"></canvas><div class="wave-label">'+(clipsOf(t).some(c=>validLoop(c))?'⟳ LOOP':t.offset>0?'+'+t.offset.toFixed(1)+'s':'WAV')+'</div>'+clipsOf(t).map((clip)=>'<button class="clip-move" type="button" style="left:'+Math.max(0,Math.min(95,(clip.offset||0)/span*100))+'%" data-drag-offset="'+html(t.id)+'" data-drag-clip="'+html(clip.id)+'" title="'+(validLoop(clip)?'Loop x'+clip.loop.repeats+' · ':'')+'Mover clip '+html(clip.name||t.name)+'" aria-label="Mover clip '+html(clip.name||t.name)+'">↔</button>').join('')+'</div>'+
+      '<div class="track-tail"><button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
   renderInspector();renderMixer();requestAnimationFrame(drawWaves);updateTransport();queueAutosave();
 }
@@ -270,11 +272,15 @@ function drawWaves(){
       const len=clipDuration(clip);if(len<=0)continue;
       const left=Math.floor((clip.offset/full)*w),width=Math.max(1,Math.round((len/full)*w));
       context.fillStyle=trackColor(t)+'14';context.fillRect(left,0,width,h);
-      const channel=clip.buffer.getChannelData(0),trimStart=Math.floor((clip.trimStart||0)*clip.buffer.sampleRate);
-      const usable=Math.floor(len*clip.buffer.sampleRate),samplesPerX=usable/width;
+      const channel=clip.buffer.getChannelData(0),rate=clip.buffer.sampleRate,loop=validLoop(clip);
+      const trimStart=(loop?.from??clip.trimStart??0)*rate;
+      const segmentFrames=loop?Math.floor((loop.to-loop.from)*rate):0;
+      const usable=Math.floor(len*rate),samplesPerX=usable/width;
       context.fillStyle=trackColor(t);
       for(let x=0;x<width;x+=2){
-        const from=trimStart+Math.floor(x*samplesPerX),to=Math.min(channel.length,from+Math.max(1,Math.floor(samplesPerX*2)));
+        const local=loop?(Math.floor(x*samplesPerX)%Math.max(1,segmentFrames)):Math.floor(x*samplesPerX);
+        const from=Math.floor(trimStart)+local,to=Math.min(channel.length,loop?Math.floor(loop.to*rate):channel.length,
+          from+Math.max(1,Math.floor(samplesPerX*2)));
         let peak=0;
         for(let j=from;j<to;j+=Math.max(1,Math.floor((to-from)/12)))peak=Math.max(peak,Math.abs(channel[j]||0));
         const amplitude=Math.max(1,Math.min(.98,peak)*h*.44);
@@ -282,6 +288,15 @@ function drawWaves(){
         context.fillRect(left+x,h/2-amplitude,Math.max(1,1.6*dpr),amplitude*2);
       }
       context.globalAlpha=1;
+      if(loop){
+        const segmentWidth=(loop.to-loop.from)/full*w;
+        context.strokeStyle='#f5d675a6';context.lineWidth=Math.max(1,dpr);
+        for(let n=1;n<loop.repeats;n++){
+          const px=left+Math.floor(segmentWidth*n);
+          if(px>left+width)break;
+          context.beginPath();context.moveTo(px,0);context.lineTo(px,h);context.stroke();
+        }
+      }
     }
   });
 }
@@ -317,12 +332,81 @@ function updateMasterMeter(){
   if(fill)fill.style.height=Math.round(Math.min(1,Math.sqrt(rms)*1.8)*100)+'%';
   if(label){label.textContent=peak>.94?'ALTO':Math.round(peak*100)+'%';label.classList.toggle('clip-warning',peak>.94);}
 }
+/** Capture the actual audible MASTER in real time, stereo local PCM.
+ * The audio can include the live Voice Playground microphone if monitoring
+ * has been explicitly enabled; otherwise it captures the prepared tracks. */
+function sessionButton(){
+  const btn=$('#sessionRecordBtn');
+  if(!btn)return;
+  const active=!!state.sessionRecording;
+  btn.classList.toggle('is-recording',active);
+  btn.textContent=active?'■ DETENER SESIÓN':'● GRABAR SESIÓN';
+  btn.setAttribute('aria-pressed',String(active));
+  const secondary=$('[data-action="session-record"]');
+  if(secondary){
+    secondary.textContent=active?'■ DETENER Y GUARDAR WAV':'● GRABAR LO QUE ESCUCHO';
+    secondary.setAttribute('aria-pressed',String(active));
+  }
+}
+function finishSessionBuffer(session,buffer){
+  if(state.sessionRecording!==session)return;
+  state.sessionRecording=null;
+  sessionButton();
+  try{
+    downloadBlob(encodeWav(buffer,24),
+      'veryAtractiveSynth-sesion-'+new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')+'.wav');
+    toast('Sesión estéreo WAV grabada y guardada en este dispositivo.');
+  }catch(error){toast('No se pudo descargar la sesión: '+error.message);}
+}
+async function startSessionRecording(){
+  if(state.sessionRecording)return;
+  if(state.recording)return toast('Finaliza la toma del micrófono antes de capturar la mezcla');
+  if(!state.tracks.length&&!state.liveMicActive)return toast('Agrega pistas o activa tu voz en Voice Lab');
+  try{
+    if(!engine.playing&&state.tracks.length){
+      if(state.position>=projectDuration(state.tracks)-.02)state.position=0;
+      await engine.play(state.tracks,state.position);
+      runTicker();updateTransport();
+    }
+    const captured=await engine.startSessionCapture();
+    const session={startedAt:captured.startedAt,finishing:false};
+    state.sessionRecording=session;
+    sessionButton();
+    captured.completion.then(buffer=>{
+      if(!session.finishing)finishSessionBuffer(session,buffer);
+    }).catch(error=>{
+      if(state.sessionRecording===session){
+        state.sessionRecording=null;sessionButton();toast('Captura interrumpida: '+error.message);
+      }
+    });
+    toast('◉ Grabando salida master en tiempo real · máximo 10 minutos');
+  }catch(error){toast('No se pudo iniciar la sesión: '+error.message);}
+}
+async function stopSessionRecording(){
+  const session=state.sessionRecording;
+  if(!session||session.finishing)return;
+  session.finishing=true;
+  try{
+    const buffer=await engine.stopSessionCapture();
+    if(buffer)finishSessionBuffer(session,buffer);
+  }catch(error){
+    if(state.sessionRecording===session){
+      state.sessionRecording=null;sessionButton();toast('Error guardando la sesión: '+error.message);
+    }
+  }
+}
+function toggleSessionRecording(){
+  if(state.sessionRecording)stopSessionRecording();
+  else startSessionRecording();
+}
+
 function runTicker(){
   cancelAnimationFrame(raf);
   const tick=()=>{
     if(engine.playing){
       const p=engine.position();state.position=p;updateTransport();updateMasterMeter();paintMixerMeters();
       if(p>=projectDuration(state.tracks)-.015){
+        if(state.sessionRecording&&!state.loop)stopSessionRecording();
         engine.stop();state.position=0;
         if(state.loop&&state.tracks.length){
           engine.play(state.tracks,0).then(()=>{render();runTicker();}).catch(error=>toast(error.message));
@@ -336,17 +420,21 @@ function runTicker(){
 }
 async function playPause(){
   if(!state.tracks.length)return toast('Agrega un sonido para comenzar');
-  if(engine.playing){state.position=engine.pause();render();return;}
+  if(engine.playing){if(state.sessionRecording)await stopSessionRecording();state.position=engine.pause();render();return;}
   try{await engine.play(state.tracks,state.position);render();runTicker();}
   catch(error){toast('No se pudo reproducir: '+error.message);}
 }
 async function restartPlayback(){
   if(!engine.playing)return;
+  if(state.sessionRecording){toast('No se puede reconstruir la mezcla mientras se graba la sesión');return;}
   const p=engine.position();
   try{await engine.play(state.tracks,p);runTicker();}
   catch(error){toast(error.message);}
 }
-function stop(){engine.stop();state.position=0;cancelAnimationFrame(raf);render();updateMasterMeter();}
+function stop(){
+  if(state.sessionRecording)stopSessionRecording();
+  engine.stop();state.position=0;cancelAnimationFrame(raf);render();updateMasterMeter();
+}
 async function importFiles(files){
   if(!files?.length)return;
   toast('Preparando sonidos del teléfono o computador...');
@@ -672,13 +760,67 @@ function openTiming(){
     '<p class="hint" style="margin-top:15px">Duración audible: '+clock(effectiveDuration(t))+' · Original: '+clock(t.buffer.duration)+'</p>',
     [{label:'LISTO',type:'close',primary:true}]);
 }
+/* Independent per-clip segment repeats and zero-copy pattern duplication. */
+function openClipLoop(trackId=state.selected){
+  const track=state.tracks.find(t=>t.id===trackId);
+  if(!track)return toast('Selecciona primero una pista');
+  const clip=getEditableClip(track,state.selectedClip);
+  if(!clip)return toast('No hay un clip para repetir');
+  state.selected=track.id;state.selectedClip=clip.id;
+  state.loopEdit={trackId:track.id,clipId:clip.id};
+  const bounds=clipSourceBounds(clip),loop=validLoop(clip);
+  const duration=(loop?loop.to-loop.from:bounds.end-bounds.start).toFixed(2);
+  modal('⟳ Loop · '+(clip.name||track.name),
+    '<p>Repite solo un fragmento de esta pista. Las otras pistas seguirán su propio tiempo.</p>'+
+    '<div class="loop-editor-preview"><span>FUENTE ORIGINAL · '+(clip.buffer.duration).toFixed(2)+'s</span>'+
+    '<strong>'+html(clip.name||track.name)+'</strong><small>Fragmento actual: '+duration+'s</small></div>'+
+    '<div class="loop-editor-grid">'+
+      '<label for="clipLoopFrom">DESDE (segundos)<input id="clipLoopFrom" type="number" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.from??bounds.start).toFixed(2)+'"></label>'+
+      '<label for="clipLoopTo">HASTA (segundos)<input id="clipLoopTo" type="number" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.to??bounds.end).toFixed(2)+'"></label>'+
+      '<label for="clipLoopRepeats">REPETICIONES<input id="clipLoopRepeats" type="number" min="1" max="64" step="1" value="'+(loop?.repeats||4)+'"></label>'+
+      '<label for="clipLoopCopies">DUPLICAR PATRÓN<input id="clipLoopCopies" type="number" min="1" max="16" step="1" value="1"></label>'+
+    '</div>'+
+    '<p class="hint">Ejemplo: un fragmento de 2 segundos × 8 = 16 segundos de loop. Elige cortes cercanos a cruces por cero para evitar clics.</p>',
+    [{label:'QUITAR LOOP',type:'loop-remove'},{label:'DUPLICAR →',type:'loop-duplicate'},{label:'APLICAR LOOP',type:'loop-apply',primary:true}]);
+}
+function editLoop(action){
+  if(state.sessionRecording)return toast('Finaliza la grabación de sesión antes de modificar loops');
+  const track=state.tracks.find(t=>t.id===state.loopEdit?.trackId);
+  if(!track)return toast('No se encontró la pista');
+  const clip=getEditableClip(track,state.loopEdit.clipId);
+  if(!clip)return toast('No se encontró el clip');
+  try{
+    const removing=action==='loop-remove',duplicating=action==='loop-duplicate';
+    if(duplicating&&!validLoop(clip))return toast('Primero pulsa APLICAR LOOP');
+    const from=Number($('#clipLoopFrom')?.value),to=Number($('#clipLoopTo')?.value),
+      repeats=Number($('#clipLoopRepeats')?.value),copies=Number($('#clipLoopCopies')?.value);
+    if(!removing&&!duplicating){
+      const probe={...clip};setClipLoop(probe,from,to,repeats);
+    }
+    if(duplicating&&(copies<1||copies>16||!Number.isInteger(copies)||clipsOf(track).length+copies>128))
+      throw Error('Elige 1–16 copias, máximo 128 clips por pista');
+    checkpoint();
+    ensureClips(track);
+    const source=getEditableClip(track,state.loopEdit.clipId);
+    if(removing)removeClipLoop(source);
+    else if(duplicating){
+      const added=duplicateLoop(track,source.id,copies,i=>
+        globalThis.crypto?.randomUUID?.()||'loop-copy-'+Date.now()+'-'+i);
+      state.selectedClip=added.at(-1).id;
+    }else setClipLoop(source,from,to,repeats);
+    modalStack.length=0;$('#modalRoot').innerHTML='';
+    render();restartPlayback();
+    toast(removing?'Loop desactivado':duplicating?'Loops duplicados a la derecha':'Loop aplicado; las demás pistas conservan su ritmo');
+  }catch(error){toast(error.message);}
+}
+
 function openTrackActions(id){
   state.selected=id;render();
   const t=current();
   modal('Opciones de la capa',
     '<div class="field"><label>Nombre de la capa</label><input type="text" id="renameInput" maxlength="80" value="'+html(t.name)+'" style="background:#1b222b;border:1px solid #495362;border-radius:7px;padding:11px;color:white"></div>'+
     '<p style="margin-top:14px">Un canal puede contener varias tomas. DIVIDIR corta el clip seleccionado, sin crear otro canal.</p>',
-    [{label:'ELIMINAR',type:'delete-track'},{label:'✂ DIVIDIR CLIP',type:'split-track'},{label:'＋ AÑADIR CLIP',type:'add-clip'},{label:'DUPLICAR CANAL',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
+    [{label:'ELIMINAR',type:'delete-track'},{label:'⟳ LOOP DEL CLIP',type:'loop-editor'},{label:'✂ DIVIDIR CLIP',type:'split-track'},{label:'＋ AÑADIR CLIP',type:'add-clip'},{label:'DUPLICAR CANAL',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
 }
 
 async function listMicrophones(){
@@ -1039,6 +1181,7 @@ async function setTiming(key,value){
 function handleTrackAction(action,id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(action==='edit'){openTrackActions(id);return;}
+  if(action==='clip-loop'){openClipLoop(id);return;}
   if(action==='add-clip'){state.clipImportTrack=id;$('#clipFileInput').click();return;}
   if(action==='mute'||action==='solo'){
     checkpoint();t[action==='mute'?'muted':'solo']=!t[action==='mute'?'muted':'solo'];
@@ -1047,6 +1190,7 @@ function handleTrackAction(action,id){
 }
 function handleModalAction(action){
   if(action==='close-modal'||action==='close'){closeModal();return;}
+  if(action==='session-record'){toggleSessionRecording();return;}
   if(action==='tune-open'){openTuneLab('track');return;}
   if(action.startsWith('tune-')){tuneAction(action);return;}
   if(action==='effects'){openEffects();return;}
@@ -1057,6 +1201,8 @@ function handleModalAction(action){
     toast(t.bypassEffects?'Escuchando audio original':'Escuchando efectos de esta capa');return;
   }
   if(action==='timing'){openTiming();return;}
+  if(['loop-apply','loop-remove','loop-duplicate'].includes(action)){editLoop(action);return;}
+  if(action==='loop-editor'){openClipLoop();return;}
   if(action==='add-clip'){const t=current();if(t){state.clipImportTrack=t.id;closeModal();$('#clipFileInput').click();}return;}
   if(action==='save-named'){saveNewNamed();return;}
   if(action==='confirm-save-named'){confirmSaveNamed();return;}
@@ -1224,6 +1370,7 @@ function wire(){
     await importClipIntoTrack(e.target.files?.[0],target);e.target.value='';
   };
   $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
+  $('#sessionRecordBtn').onclick=toggleSessionRecording;
   $('#voiceLabBtn').onclick=()=>openTuneLab('live');
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};

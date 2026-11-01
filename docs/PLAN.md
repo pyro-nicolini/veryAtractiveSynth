@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.9 implementado
+## 3. Estado 1.0 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,22 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 1.0 — Clip Loop Studio y captura de sesión
+
+- [x] Loops por segmento de clip: inicio, fin, repetición 1–64, sin alterar archivos.
+- [x] Loops independientes: no reinician ni sincronizan a la fuerza los demás canales.
+- [x] Duplicar patrones zero-copy dentro de un canal, posicionados sucesivamente.
+- [x] Dibujo de onda con repeticiones y opciones accesibles ⟳ en pista.
+- [x] Programar loop por reloj de AudioBufferSourceNode en escucha y render offline.
+- [x] Guardado de loops en IndexedDB y proyectos portables v2, con validación de límites.
+- [x] Captura master estéreo 24-bit WAV en tiempo real, incluyendo Voice Lab si está monitorizando.
+- [x] Cap de 10 minutos para proteger RAM, parada manual y finalización al llegar al final de mezcla.
+- [x] Tests de funciones puras, fuentes compartidas, WAV estéreo y procesador AudioWorklet.
+- [ ] QA de escucha y latencia real en navegadores/auriculares distintos.
+- [ ] Crossfade antipop entre iteraciones y cuantización de loops por BPM.
+- [ ] Overdub, comping, loop infinito de interpretación, grabación de stems por separado y automatización de gestos XY.
+- [ ] Protección adicional contra interrupciones, suspensión de navegador y memoria agotada.
 
 ### Fase 0.9 — Voice Playground y FX independientes
 

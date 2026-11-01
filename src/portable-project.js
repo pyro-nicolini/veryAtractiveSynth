@@ -1,5 +1,6 @@
 import {encodeWav,defaults,clamp,COLORS} from './dsp.js';
 import {zipStore,unzipStore} from './zip-store.js';
+import {setClipLoop} from './track-clips.js';
 
 const textEncoder=new TextEncoder(),textDecoder=new TextDecoder();
 
@@ -74,9 +75,14 @@ export async function importProject(file,ctx){
       if(typeof clip.file!=='string'||!/^audio\/\d{3}\.wav$/.test(clip.file)||!entries.has(clip.file))
         throw Error('Falta un clip de audio en el respaldo');
       const clipBuffer=loadAudio(clip.file);
-      return {id:String(clip.id||'clip-'+tracks.length).slice(0,128),name:String(clip.name||'Toma').slice(0,80),buffer:clipBuffer,
+      const restored={id:String(clip.id||'clip-'+tracks.length).slice(0,128),name:String(clip.name||'Toma').slice(0,80),buffer:clipBuffer,
         offset:clamp(clip.offset,0,3600),trimStart:clamp(clip.trimStart,0,clipBuffer.duration),trimEnd:clamp(clip.trimEnd,0,clipBuffer.duration),
         fadeIn:clamp(clip.fadeIn,0,30),fadeOut:clamp(clip.fadeOut,0,30)};
+      if(clip.loop){
+        try{setClipLoop(restored,clip.loop.from,clip.loop.to,clip.loop.repeats);}
+        catch{throw Error('El respaldo contiene un loop inválido');}
+      }
+      return restored;
     }):null;
     if(restoredClips&&restoredClips.length>128)throw Error('Demasiados clips en una pista');
     tracks.push({...defaults(),

@@ -2,10 +2,12 @@ import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
-import {clipsOf,clipDuration} from './track-clips.js';
+import {clipsOf,clipDuration,validLoop} from './track-clips.js';
+import {assembleSessionStereo} from './session-recording.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
+const SESSION_URL = new URL('./worklets/session-processor.js',import.meta.url);
 
 function saturationCurve(amount){
   const samples=2048,curve=new Float32Array(samples),k=Math.max(0,amount)*.085;
@@ -133,17 +135,31 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   const fadeOutStart=total-fadeOut;
   if(fadeOut>0 && fadeOutStart>initial)v.setValueAtTime(fadeValue(track,fadeOutStart,total),contextStart+(fadeOutStart-initial));
   if(fadeOut>0&&total>initial)v.linearRampToValueAtTime(0,contextStart+(total-initial));
-  src.start(contextStart,(track.trimStart||0)+offsetInClip,remaining);
+  const loop=validLoop(track);
+  if(loop){
+    // Repeat a source fragment with sample-accurate AudioBufferSource loop points.
+    // Stop at the exact timeline end. Other tracks keep their own independent clock.
+    const segment=loop.to-loop.from;
+    src.loop=true;
+    src.loopStart=loop.from;
+    src.loopEnd=loop.to;
+    const sourcePosition=loop.from+(offsetInClip%segment);
+    src.start(contextStart,sourcePosition);
+    src.stop(contextStart+remaining);
+  }else{
+    src.start(contextStart,(track.trimStart||0)+offsetInClip,remaining);
+  }
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
       if(!context.audioWorklet)throw Error('El navegador no admite procesamiento de audio de baja latencia');
       await context.audioWorklet.addModule(WORKLET_URL);
       await context.audioWorklet.addModule(CAPTURE_URL);
+      await context.audioWorklet.addModule(SESSION_URL);
       this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume);
     }
     if(this.ctx.state==='suspended')await this.ctx.resume();
@@ -410,6 +426,56 @@ export class AudioEngine {
     disposeGraph(this.live.graph);
     this.live=null;
   }
+
+  /** Record post-limiter master stereo in local PCM, never a microphone recording.
+      Maximum ten minutes protects memory on phones and desktops. */
+  async startSessionCapture(){
+    await this.ready();
+    if(this.sessionCapture)throw Error('Ya se está grabando una sesión');
+    if(!this.playing&&!this.mic?.monitorGraph)throw Error('Reproduce una pista o activa el micrófono de Voice Lab');
+    const ctx=this.ctx,node=new AudioWorkletNode(ctx,'vas-session-capture',{
+      numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],
+      processorOptions:{limitFrames:Math.floor(ctx.sampleRate*600)}
+    });
+    const silent=ctx.createGain();silent.gain.value=0;
+    const captured=[];
+    let resolver,rejecter;
+    const completion=new Promise((resolve,reject)=>{resolver=resolve;rejecter=reject;});
+    node.port.onmessage=event=>{
+      const message=event.data;
+      if(message?.type==='chunk')captured.push({left:message.left,right:message.right});
+      if(message?.type==='complete'){
+        try{resolver(assembleSessionStereo(ctx,captured,message.frames));}
+        catch(error){rejecter(error);}
+        finally{
+          try{this.output.meter.disconnect(node);node.disconnect();silent.disconnect();}catch{}
+          if(this.sessionCapture?.node===node)this.sessionCapture=null;
+        }
+      }
+    };
+    node.onprocessorerror=()=>rejecter(Error('Se interrumpió la captura de la sesión'));
+    node.connect(silent);silent.connect(ctx.destination);
+    this.output.meter.connect(node);
+    this.sessionCapture={node,silent,completion,startedAt:ctx.currentTime};
+    return {completion,startedAt:ctx.currentTime};
+  }
+  async stopSessionCapture(){
+    if(!this.sessionCapture)return null;
+    const session=this.sessionCapture;
+    session.node.port.postMessage({type:'stop'});
+    let timer;
+    try{
+      return await Promise.race([
+        session.completion,
+        new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('No se pudo finalizar la grabación en tiempo real')),3500);})
+      ]);
+    }finally{
+      clearTimeout(timer);
+      try{this.output.meter.disconnect(session.node);session.node.disconnect();session.silent.disconnect();}catch{}
+      if(this.sessionCapture===session)this.sessionCapture=null;
+    }
+  }
+
   async exportMix(tracks,{depth=24,rate=48000,onlyId=null}={}){
     if(!tracks.length)throw Error('Primero agrega sonidos');
     const included=onlyId?tracks.filter(t=>t.id===onlyId):tracks;

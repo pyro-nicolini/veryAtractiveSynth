@@ -3,14 +3,53 @@
  * Each clip references an AudioBuffer; effects and routing belong to the track.
  */
 const seconds=value=>Math.max(0,Number.isFinite(Number(value))?Number(value):0);
+export const MAX_LOOP_REPEATS=64;
+export function clipSourceBounds(clip){
+  const duration=clip.buffer?.duration||0;
+  const start=Math.min(duration,seconds(clip.trimStart));
+  return {start,end:Math.max(start,duration-seconds(clip.trimEnd))};
+}
+export function validLoop(clip){
+  const bounds=clipSourceBounds(clip),loop=clip.loop;
+  if(!loop||!Number.isFinite(loop.from)||!Number.isFinite(loop.to)||
+     !Number.isInteger(loop.repeats)||loop.repeats<1||loop.repeats>MAX_LOOP_REPEATS||
+     loop.from<bounds.start||loop.to>bounds.end||loop.to-loop.from<.02)return null;
+  return loop;
+}
 export function clipDuration(clip){
-  return Math.max(0,(clip.buffer?.duration||0)-seconds(clip.trimStart)-seconds(clip.trimEnd));
+  const loop=validLoop(clip);
+  return loop?(loop.to-loop.from)*loop.repeats:
+    Math.max(0,(clip.buffer?.duration||0)-seconds(clip.trimStart)-seconds(clip.trimEnd));
+}
+export function setClipLoop(clip,from,to,repeats){
+  const bounds=clipSourceBounds(clip);
+  const config={from:Number(from),to:Number(to),repeats:Number(repeats)};
+  if(!Number.isFinite(config.from)||!Number.isFinite(config.to)||
+     config.from<bounds.start||config.to>bounds.end||
+     config.to-config.from<.02||!Number.isInteger(config.repeats)||
+     config.repeats<1||config.repeats>MAX_LOOP_REPEATS)
+    throw Error('Selecciona un fragmento válido (mínimo 0,02 s) y de 1 a 64 repeticiones');
+  clip.loop=config;return config;
+}
+export function removeClipLoop(clip){delete clip.loop;}
+/** Clone the pattern to the right on the same mixer track, zero-copy PCM. */
+export function duplicateLoop(track,clipId,count,makeId){
+  const clips=ensureClips(track),original=clips.find(c=>c.id===clipId);
+  if(!original)throw Error('No se encontró el clip');
+  if(!validLoop(original))throw Error('Primero crea un loop en el clip');
+  const n=Number(count);
+  if(!Number.isInteger(n)||n<1||n>16||clips.length+n>128)
+    throw Error('Puedes duplicar entre 1 y 16 loops, con máximo de 128 clips en el canal');
+  const copies=[],length=clipDuration(original);
+  for(let i=0;i<n;i++)copies.push({...original,id:makeId(i),name:(original.name||'Loop')+' · copia '+(i+1),
+    offset:seconds(original.offset)+length*(i+1),loop:{...original.loop}});
+  clips.push(...copies);return copies;
 }
 export function clipsOf(track){
   if(Array.isArray(track.clips))return track.clips;
   return track.buffer?[{id:track.id+':original',name:track.name,buffer:track.buffer,
     offset:seconds(track.offset),trimStart:seconds(track.trimStart),trimEnd:seconds(track.trimEnd),
-    fadeIn:seconds(track.fadeIn),fadeOut:seconds(track.fadeOut)}]:[];
+    fadeIn:seconds(track.fadeIn),fadeOut:seconds(track.fadeOut),...(track.loop?{loop:{...track.loop}}:{})}]:[];
 }
 export function ensureClips(track){
   if(!Array.isArray(track.clips))track.clips=clipsOf(track);
@@ -42,5 +81,5 @@ export function splitTrackClip(track,clipId,playhead,newId){
   clips.splice(index,1,left,right);return [left,right];
 }
 export function cloneTrackMetadata(track){
-  return {...track,clips:Array.isArray(track.clips)?track.clips.map(clip=>({...clip})):undefined};
+  return {...track,loop:track.loop?{...track.loop}:undefined,clips:Array.isArray(track.clips)?track.clips.map(clip=>({...clip,loop:clip.loop?{...clip.loop}:undefined})):undefined};
 }

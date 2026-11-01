@@ -2,10 +2,24 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.9.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 1.0.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 
+
+## DesignPhase 1.0 — Loops por clip y grabación de sesión
+
+**LOOP INDEPENDIENTE POR CLIP.** Pulsa **⟳** en el canal y selecciona un clip. Indica **DESDE**, **HASTA** (segundos de su archivo original) y cuántas **REPETICIONES** (1–64). Al aplicar, solo se repite ese fragmento: todas las demás pistas conservan sus tiempos, efectos, volumen y secuencia normal. Las repeticiones están programadas con el reloj de Web Audio, no con un temporizador de interfaz. El patrón no modifica las muestras de audio originales.
+
+**DUPLICAR PATRÓN →** crea de 1 a 16 clips adicionales inmediatamente después del loop, en la **misma pista**, reutilizando el mismo AudioBuffer (no aumenta el tamaño de los audios originales). Las nuevas copias pueden moverse mediante ↔. El dibujo de onda incluye líneas divisorias para ver cada repetición. Editar un loop en plena reproducción puede requerir reconstruir la secuencia y provocar un pequeño salto; prepara los loops antes de empezar a grabar una sesión.
+
+**GRABAR SESIÓN.** En la barra de transporte pulsa **● GRABAR SESIÓN**. Si hay pistas listas, comienza a reproducir desde el cabezal y a capturar localmente el master en **WAV estéreo 24-bit**, con los efectos, buses y loops que suenan. Presiona **■ DETENER SESIÓN** para finalizar y descargar el WAV. Si activas el monitoreo en **VOICE LAB → MI VOZ EN VIVO**, el master incluye también esa voz procesada: dentro del laboratorio hay un botón **● GRABAR LO QUE ESCUCHO**. Para capturar únicamente el micrófono, el laboratorio puede funcionar sin otras pistas.
+
+La captura utiliza un AudioWorklet y no requiere enviar audio a servidores ni permisos de micrófono si solo reproduces pistas. Tiene un límite de **10 minutos** por sesión para proteger la RAM, además de parada manual. No es un sistema de grabación multipista aislada: se guarda el resultado estéreo del master y NO cambia las pistas de origen. No se graban automáticamente movimientos XY como automatizaciones editables; los gestos que haces durante la sesión quedan incorporados al WAV capturado.
+
+**EXPORTAR → Toda la mezcla WAV** renderiza los mismos loops de manera offline, sin esperar a escucharlos. **EXPORTAR → Proyecto editable** conserva fragmentos, cantidades de repeticiones y copias para reabrir el arreglo. La nueva información también se conserva en IndexedDB.
+
+**Límites todavía importantes:** loops con puntos de corte bruscos pueden producir clics (elige límites cerca de cruces por cero). Falta crossfade configurable por repetición, grabación separada de pistas procesadas, monitoraje profesional y medición de latencia. Las nuevas funciones necesitan QA auditivo en navegador real (Chrome, Edge, Safari móvil); que CI pase no demuestra calidad de audio.
 
 ## DesignPhase 0.9 — Voice Playground + Rack FX
 
