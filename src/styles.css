@@ -77,3 +77,15 @@
 @keyframes session-pulse{50%{box-shadow:0 0 17px #ff637766}}
 @media(max-width:550px){.loop-editor-grid{grid-template-columns:1fr}.session-record-btn{font-size:10px;padding:8px}}
 @media(prefers-reduced-motion:reduce){.session-record-btn.is-recording{animation:none}}
+
+.loop-visual-range{background:#111a20;border:1px solid #59644e;border-radius:10px;padding:13px 14px;margin:12px 0;display:grid;gap:8px}
+.loop-visual-range>span{font:800 10px 'Space Grotesk',sans-serif;color:#dfd3ab;letter-spacing:.5px}
+.loop-visual-range>input{width:100%;min-width:0;accent-color:#f3d87c;touch-action:pan-y}
+.loop-visual-track{position:relative;height:11px;background:#354452;border-radius:7px;overflow:hidden;border:1px solid #556574}
+.loop-visual-selected{position:absolute;height:100%;left:0;width:100%;background:linear-gradient(90deg,#9ccf8b,#f5d675);box-shadow:0 0 15px #ebc36d6b}
+@media(max-width:820px){
+ .session-record-btn{width:35px;min-width:35px;padding:4px;font-size:0;overflow:hidden}
+ .session-record-btn:before{content:"●";font-size:18px}
+ .session-record-btn.is-recording:before{content:"■"}
+ .transport-center{gap:5px}
+}

@@ -342,6 +342,7 @@ function sessionButton(){
   btn.classList.toggle('is-recording',active);
   btn.textContent=active?'■ DETENER SESIÓN':'● GRABAR SESIÓN';
   btn.setAttribute('aria-pressed',String(active));
+  btn.setAttribute('aria-label',active?'Detener y guardar grabación de sesión':'Grabar sesión en tiempo real');
   const secondary=$('[data-action="session-record"]');
   if(secondary){
     secondary.textContent=active?'■ DETENER Y GUARDAR WAV':'● GRABAR LO QUE ESCUCHO';
@@ -369,7 +370,7 @@ async function startSessionRecording(){
       runTicker();updateTransport();
     }
     const captured=await engine.startSessionCapture();
-    const session={startedAt:captured.startedAt,finishing:false};
+    const session={startedAt:captured.startedAt,finishing:false,completion:captured.completion};
     state.sessionRecording=session;
     sessionButton();
     captured.completion.then(buffer=>{
@@ -387,7 +388,7 @@ async function stopSessionRecording(){
   if(!session||session.finishing)return;
   session.finishing=true;
   try{
-    const buffer=await engine.stopSessionCapture();
+    const buffer=await (engine.sessionCapture?engine.stopSessionCapture():session.completion);
     if(buffer)finishSessionBuffer(session,buffer);
   }catch(error){
     if(state.sessionRecording===session){
@@ -612,6 +613,7 @@ function switchTuneSource(mode){
   const currentSource=getTuneTrack();if(!currentSource)return;
   const lab=$('#tuneLab');
   if(lab)lab.outerHTML=tuneLabMarkup(currentSource,loadUserTunes(),mode,!!current());
+  sessionButton();
   $('.focus-panel')?.classList.add('tune-focus');
   updateTuneLabView($('#tuneLab'),currentSource);
   if(mode==='live')populateLiveInputs();
@@ -631,6 +633,7 @@ function openTuneLab(mode='track'){
     [{label:'LISTO / VOLVER A MI MEZCLA',type:'tune-done',primary:true}]);
   $('.focus-panel')?.classList.add('tune-focus');
   updateTuneLabView($('#tuneLab'),track);
+  sessionButton();
   if(state.tuneMode==='track')engine.watchPitch(track.id,onTunePitch);
   else{engine.watchPitch(null,null);populateLiveInputs();}
 }
@@ -774,6 +777,10 @@ function openClipLoop(trackId=state.selected){
     '<p>Repite solo un fragmento de esta pista. Las otras pistas seguirán su propio tiempo.</p>'+
     '<div class="loop-editor-preview"><span>FUENTE ORIGINAL · '+(clip.buffer.duration).toFixed(2)+'s</span>'+
     '<strong>'+html(clip.name||track.name)+'</strong><small>Fragmento actual: '+duration+'s</small></div>'+
+    '<div class="loop-visual-range" aria-label="Selecciona el segmento de audio">'+
+      '<span>COMIENZO DEL SEGMENTO</span><input type="range" id="loopFromSlider" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.from??bounds.start)+'" aria-label="Deslizar inicio del loop">'+
+      '<span>FIN DEL SEGMENTO</span><input type="range" id="loopToSlider" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.to??bounds.end)+'" aria-label="Deslizar final del loop">'+
+      '<div class="loop-visual-track"><div class="loop-visual-selected" id="loopRangeVisual" style="left:'+(((loop?.from??bounds.start)-bounds.start)/Math.max(.01,bounds.end-bounds.start)*100)+'%;width:'+(((loop?.to??bounds.end)-(loop?.from??bounds.start))/Math.max(.01,bounds.end-bounds.start)*100)+'%"></div></div></div>'+
     '<div class="loop-editor-grid">'+
       '<label for="clipLoopFrom">DESDE (segundos)<input id="clipLoopFrom" type="number" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.from??bounds.start).toFixed(2)+'"></label>'+
       '<label for="clipLoopTo">HASTA (segundos)<input id="clipLoopTo" type="number" min="'+bounds.start+'" max="'+bounds.end+'" step="0.01" value="'+(loop?.to??bounds.end).toFixed(2)+'"></label>'+
@@ -1445,6 +1452,22 @@ function wire(){
     if(e.target.id==='modalBackdrop')closeModal();
   });
   document.addEventListener('input',e=>{
+    if(['clipLoopFrom','clipLoopTo','loopFromSlider','loopToSlider'].includes(e.target.id)){
+      const from=$('#clipLoopFrom'),to=$('#clipLoopTo'),slideFrom=$('#loopFromSlider'),slideTo=$('#loopToSlider');
+      if(from&&to&&slideFrom&&slideTo){
+        if(e.target===slideFrom)from.value=slideFrom.value;
+        if(e.target===slideTo)to.value=slideTo.value;
+        if(e.target===from)slideFrom.value=from.value;
+        if(e.target===to)slideTo.value=to.value;
+        const a=Number(from.value),b=Number(to.value),min=Number(slideFrom.min),max=Number(slideFrom.max);
+        const fill=$('#loopRangeVisual');
+        if(fill&&Number.isFinite(a)&&Number.isFinite(b)&&max>min){
+          const left=Math.max(0,Math.min(100,(a-min)/(max-min)*100));
+          const right=Math.max(left,Math.min(100,(b-min)/(max-min)*100));
+          fill.style.left=left+'%';fill.style.width=(right-left)+'%';
+        }
+      }
+    }
     if(e.target.id==='labLiveInputGain'){
       engine.setMicGain(clamp(e.target.value,0,150));
       const out=$('#labLiveInputValue');if(out)out.textContent=e.target.value+'%';
