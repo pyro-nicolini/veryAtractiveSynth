@@ -545,17 +545,17 @@ function renderInspector(){
   const t=current();if(!t){$('#inspectorBody').innerHTML='<div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div>';return;}
   const presets=Object.keys(PRESETS).map(id=>'<button class="preset-chip'+(t.preset===id?' active':'')+'" data-preset="'+id+'">'+PRESETS[id].label+'</button>').join('');
   $('#inspectorBody').innerHTML='<div class="selected-head" style="--track-color:'+trackColor(t)+'"><strong>'+html(t.name)+'</strong><span class="track-color-pill"></span></div>'+
-    '<div class="hint" style="margin:7px 0 14px">Cada cambio afecta solo esta capa.</div>'+
-    '<div class="control-heading"><strong>ESTILOS RÁPIDOS</strong>'+buttonInfo('presets')+'</div><div class="preset-list">'+presets+'</div>'+
+    '<div class="hint" style="margin:7px 0 14px">Prueba un estilo, escucha el cambio y ajústalo a tu gusto. Siempre conservas el audio original.</div>'+
+    '<div class="control-heading"><strong>01 · ELIGE UN ESTILO</strong>'+buttonInfo('presets')+'</div><div class="preset-list">'+presets+'</div>'+
     '<button class="wide-button" data-action="toggle-bypass" aria-pressed="'+!!t.bypassEffects+'">'+(t.bypassEffects?'▶ VOLVER A MIS EFECTOS':'◉ ESCUCHAR ORIGINAL / COMPARAR')+'</button>'+
-    '<div class="inspector-divider"></div><div class="control-heading"><strong>TUS 3 CONTROLES</strong>'+buttonInfo('inspector')+'</div>'+
-    '<div class="control-grid">'+dial('Volumen','volume',t.volume)+dial('Afinación','autotune',t.autotune,'var(--purple)')+dial('Limpieza','clean',t.clean,'var(--blue)')+'</div>'+
-    '<div class="control-row"><label for="tuneKey">Tono</label><select data-setting="key" id="tuneKey">'+KEYS.map((x,i)=>'<option value="'+i+'"'+(i===t.key?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('key')+'</div>'+
-    '<div class="control-row"><label for="tuneScale">Escala</label><select data-setting="scale" id="tuneScale">'+SCALES.map((x,i)=>'<option value="'+i+'"'+(i===t.scale?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('scale')+'</div>'+
+    '<div class="inspector-divider"></div><div class="control-heading"><strong>02 · AJUSTA COMO QUIERAS</strong>'+buttonInfo('inspector')+'</div>'+
+    '<div class="control-grid">'+dial('Volumen','volume',t.volume)+dial('Afinar','autotune',t.autotune,'var(--purple)')+dial('Limpiar','clean',t.clean,'var(--blue)')+'</div>'+
+    '<details class="inspector-more"><summary>✦ Opciones musicales avanzadas</summary><div class="control-row"><label for="tuneKey">Tono</label><select data-setting="key" id="tuneKey">'+KEYS.map((x,i)=>'<option value="'+i+'"'+(i===t.key?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('key')+'</div>'+
+    '<div class="control-row"><label for="tuneScale">Escala</label><select data-setting="scale" id="tuneScale">'+SCALES.map((x,i)=>'<option value="'+i+'"'+(i===t.scale?' selected':'')+'>'+x+'</option>').join('')+'</select>'+buttonInfo('scale')+'</div></details>'+
     '<div class="tune-mini"><div class="tune-mini-chart"><span class="tune-mini-node" style="left:'+(((Number.isFinite(t.tuneX)?t.tuneX:tunePointFromManual(t.autotune,t.retune).x)+1)*50)+'%;top:'+((1-(Number.isFinite(t.tuneY)?t.tuneY:tunePointFromManual(t.autotune,t.retune).y))*50)+'%"></span></div>'+
       '<div class="tune-mini-body"><strong>✦ TUNE LAB</strong><small>Descubre nuevos estilos moviendo un nodo</small></div></div>'+
     '<button class="wide-button tune-launch" data-action="tune-open">✧ EXPLORAR TUNE LAB →</button>'+
-    '<button class="wide-button" data-action="effects">✦ MÁS EFECTOS →</button><button class="wide-button" data-action="timing">◷ AJUSTAR TIEMPOS →</button>';
+    '<button class="wide-button" data-action="effects">✦ EXPLORAR MÁS EFECTOS →</button><button class="wide-button" data-action="timing">◷ MOVER Y RECORTAR →</button>';
 }
 function updateTransport(){
   const duration=projectDuration(state.tracks),pos=engine.playing?engine.position():state.position;

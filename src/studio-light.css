@@ -203,3 +203,11 @@ h1 em{color:#58b78d;text-shadow:none}
 .lab-live-controls>p{color:#6a8093!important}
 .lab-pitch-monitor{background:linear-gradient(125deg,#f1f6ff,#f5f5ff);border-color:#d9e3ed}
 .lab-pitch-main strong{color:#378b6c}.lab-pitch-labels{color:#71859c}.lab-pitch-cents{color:#637894}
+
+/* The easy inspector shows musical choices; key/scale stay discoverable on demand. */
+.inspector-more{margin:13px 0;padding:10px 11px;border-radius:12px;background:#f7f9fd;border:1px solid #e3e9f1}
+.inspector-more summary{font:750 11px 'Space Grotesk',system-ui,sans-serif;color:#66768c;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.inspector-more summary::-webkit-details-marker{display:none}
+.inspector-more summary:after{content:"⌄";font-size:16px;color:#8290a7;transform:rotate(0);transition:transform .17s}
+.inspector-more[open] summary:after{transform:rotate(180deg)}
+.inspector-more .control-row{margin-top:12px}

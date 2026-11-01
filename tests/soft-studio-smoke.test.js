@@ -20,3 +20,11 @@ test('flow connection mute and effect bypass use real channel DSP',()=>{
  assert.match(engine,/if\(solo&&!track\.solo\)continue/);
  assert.match(engine,/set\(graph\.volume\.gain,track\.muted\?0/);
 });
+
+test('simple inspector keeps technical key and scale accessible on demand',()=>{
+ const code=read('src/app.js'),style=read('src/studio-light.css');
+ assert.match(code,/Opciones musicales avanzadas/);
+ assert.match(code,/dial\('Afinar'/);
+ assert.match(code,/dial\('Limpiar'/);
+ assert.match(style,/\.inspector-more/);
+});
