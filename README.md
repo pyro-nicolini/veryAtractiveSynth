@@ -2,10 +2,20 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.8.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.9.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 
+
+## DesignPhase 0.9 — Voice Playground + Rack FX
+
+**Nuevo: Voice Playground / Tune Lab de dos fuentes.** En la cabecera del estudio pulsa **✦ VOICE LAB** y elige **MI VOZ EN VIVO**. Después selecciona un micrófono y pulsa **ACTIVAR MI VOZ**. Con **auriculares conectados**, canta y mueve el nodo XY mientras escuchas el autotune experimental y el color en tiempo real. Las coordenadas cambian la velocidad/cantidad de corrección y el brillo/drive del procesador. Puedes usar los seis presets, SORPRÉNDEME o comparación A/B. Los medidores muestran la señal del micrófono y la nota estimada (lectura experimental). Hay controles independientes de **ENTRADA** (ganancia) y **MONITOR** (escucha). **DETENER MICRÓFONO** o cerrar el panel libera el dispositivo.
+
+**Modo ♫ PISTA:** selecciona un canal y abre su Tune Lab para modificarlo mientras se reproduce la canción, con el mismo gráfico. Puedes cambiar entre **PISTA** y **MI VOZ EN VIVO**. Probar un punto con la voz en vivo **no modifica el canal seleccionado** hasta pulsar **APLICAR A PISTA**. Los presets personalizados se guardan localmente. La voz en directo se escucha **pero no se graba automáticamente**: para conservar una toma usa GRABAR MI VOZ (captura PCM seca) y después procesa su pista con Tune Lab. **No se exporta ni guarda un audio procesado en directo por este control**.
+
+**Rack de efectos:** en el inspector abre **MÁS EFECTOS** y activa/desactiva individualmente afinación, limpieza, ecualizador, saturación, compresión, eco y reverberación. Sus parámetros se conservan al cambiar bypass y al guardar la sesión o el proyecto .vasproject. El rack **todavía tiene orden fijo**: no permite arrastrar efectos, sends ni sidechain.
+
+**Seguridad de uso:** utiliza auriculares cableados, comienza con el monitor bajo y ten cuidado con los acoples. El monitor en navegador puede tener latencia audible, especialmente con Bluetooth. El autotune sigue siendo experimental; no se ha medido latencia real de hardware ni verificado calidad de estudio. Los sonidos no salen de tu equipo.
 
 ## DesignPhase 0.8 — Múltiples clips en una pista
 

@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {tuneLabMarkup} from '../src/tune-lab-ui.js';
+import {defaults} from '../src/dsp.js';
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+test('Voice Playground has independent live and track targets with explicit microphone controls',()=>{
+ const live=tuneLabMarkup(defaults(),[],'live',false);
+ assert.match(live,/data-action="tune-source-live"/);
+ assert.match(live,/data-action="tune-source-track"/);
+ assert.match(live,/data-action="tune-live-start"/);
+ assert.match(live,/data-action="tune-live-stop"/);
+ assert.match(live,/id="labMicSelect"/);
+ assert.match(live,/id="labLiveInputGain"/);
+ assert.match(live,/id="labLiveMonitor"/);
+ assert.match(live,/id="labLiveMeter"/);
+ assert.match(live,/no se graba nada automáticamente/i);
+ const track=tuneLabMarkup(defaults(),[],'track',true);
+ assert.match(track,/data-action="tune-preview"/);
+ assert.match(track,/data-action="tune-apply"/);
+ assert.match(track,/data-tune-axis="x"/);
+ assert.match(track,/data-tune-axis="y"/);
+});
+test('mic monitor voice uses same DSP graph and transmits pitch only on opt-in',()=>{
+ const source=read('src/engine.js');
+ assert.match(source,/async prepareMic\(stream,settings,monitor=false\)/);
+ assert.match(source,/watchMicPitch\(callback\)/);
+ assert.match(source,/this\.mic\?\.monitorGraph\?\.voice/);
+ assert.match(source,/this\.mic\.monitorGraph/);
+ assert.match(source,/this\.watchMicPitch\(null\)/);
+ const app=read('src/app.js');
+ assert.match(app,/async function startLiveTuneMic\(\)/);
+ assert.match(app,/function stopLiveTuneMic\(\)/);
+ assert.match(app,/request!==state\.liveMicToken/);
+ assert.match(app,/engine\.updateMic\(track\)/);
+ assert.match(app,/engine\.watchMicPitch\(onTunePitch\)/);
+ assert.match(app,/voiceLabBtn/);
+});

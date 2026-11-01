@@ -25,7 +25,7 @@ export function customTuneMarkup(presets){
   if(!presets.length)return '<span class="lab-empty-presets">Aquí aparecerán tus estilos guardados.</span>';
   return presets.map((p,i)=>'<button type="button" class="lab-preset lab-user-preset" data-user-tune="'+i+'" title="Cargar '+escapeHTML(p.name)+'">✧ '+escapeHTML(p.name)+'</button>').join('');
 }
-export function tuneLabMarkup(track,userPresets=[]){
+export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
   const p=Number.isFinite(track.tuneX)&&Number.isFinite(track.tuneY)?
     normalizeTune(track.tuneX,track.tuneY):
     tunePointFromManual(track.autotune,track.retune);
@@ -35,9 +35,24 @@ export function tuneLabMarkup(track,userPresets=[]){
   const chips=TUNE_POINTS.map(point=>'<button type="button" class="lab-preset" data-tune-preset="'+point.id+'">'+point.emoji+' '+escapeHTML(point.name)+'</button>').join('');
   return '<section class="tune-lab" id="tuneLab">'+
     '<div class="lab-intro"><div><div class="section-overline">EXPERIMENTAL / LOCAL AUDIO</div>'+
-    '<p>Arrastra el punto. No necesitas saber música para explorar. Si tu pista está sonando, escucharás el cambio en vivo.</p></div>'+
+    '<p>Juega con el nodo en vivo: canta con un micrófono y auriculares, o transforma una pista mientras suena.</p></div>'+
     '<button type="button" class="mini-action" data-info="tuneLab" aria-label="Información sobre Tune Lab">i</button></div>'+
-    '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview">▶ ESCUCHAR CAMBIOS</button>'+
+    '<div class="lab-mode-switch" role="group" aria-label="Fuente del Voice Playground">'+
+      '<button type="button" class="lab-mode '+(mode==='track'?'active':'')+'" data-action="tune-source-track" aria-pressed="'+(mode==='track')+'" '+(!hasTrack?'disabled':'')+'>♫ PISTA</button>'+
+      '<button type="button" class="lab-mode '+(mode==='live'?'active':'')+'" data-action="tune-source-live" aria-pressed="'+(mode==='live')+'">◉ MI VOZ EN VIVO</button>'+
+    '</div>'+
+    '<div class="lab-live-controls" id="labLiveControls" '+(mode==='live'?'':'hidden')+'>'+
+      '<label for="labMicSelect">ENTRADA DE MICRÓFONO</label>'+
+      '<select id="labMicSelect" aria-label="Elegir micrófono para Voice Playground"><option value="">Micrófono predeterminado</option></select>'+
+      '<button type="button" class="lab-action lab-play" data-action="tune-live-start">◉ ACTIVAR MI VOZ</button>'+
+      '<button type="button" class="lab-action" data-action="tune-live-stop">■ DETENER MICRÓFONO</button>'+
+      '<div class="lab-live-gains"><label>ENTRADA <input id="labLiveInputGain" type="range" min="0" max="150" step="5" value="100" aria-label="Ganancia de entrada"></label><output id="labLiveInputValue">100%</output>'+
+      '<label>MONITOR <input id="labLiveMonitor" type="range" min="0" max="80" step="5" value="'+Math.min(80,track.volume??60)+'" aria-label="Volumen de escucha en vivo"></label><output id="labLiveMonitorValue">'+Math.min(80,track.volume??60)+'%</output></div>'+
+      '<div class="lab-live-meter"><span id="labLiveMeter"></span></div>'+
+      '<p id="labLiveStatus" role="status">Usa auriculares. Presiona activar para escuchar tu voz procesada; no se graba nada automáticamente.</p>'+
+    '</div>'+
+    '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview" '+(mode==='live'?'hidden':'')+'>▶ ESCUCHAR CAMBIOS</button>'+
+      '<button type="button" class="lab-action" data-action="tune-apply" '+(mode==='live'&&hasTrack?'':'hidden')+'>⇢ APLICAR A PISTA</button>'+
     '<button type="button" class="lab-action" data-action="tune-ab">'+(track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL')+'</button>'+
     '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button></div>'+
     '<div class="lab-top-axis"><span>↑ MÁS INTENSO</span><span>Y / FUERZA DE AFINACIÓN</span></div>'+

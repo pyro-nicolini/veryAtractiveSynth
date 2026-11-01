@@ -27,6 +27,7 @@ jobs:
           node --check src/tune-lab-ui.js
           node --check src/pitch-display.js
           node --check src/track-clips.js
+          node --check src/fx-rack.js
           node --check src/studio-mixer.js
           node --check src/studio-mixer-ui.js
           node --check src/audio-import.js

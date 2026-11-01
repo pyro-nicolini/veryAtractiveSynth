@@ -53,3 +53,12 @@
 .named-project small{font-family:monospace;font-size:10px;color:#9da9af}
 .project-name-input{width:100%;border:1px solid #536153;border-radius:8px;padding:12px;background:#0c1114;color:#e5ffd7;font-size:14px}
 #recordShiftValue{font:700 10px monospace;color:var(--green);min-width:86px;text-align:right}
+
+
+/* Fixed-order FX rack: independent bypass without losing settings */
+.fx-rack-switches{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin:12px 0}
+.fx-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid #527a59;border-radius:9px;background:#1b2b25;color:#d3f9d3;font:700 11px 'Space Grotesk',sans-serif;cursor:pointer;text-align:left}
+.fx-toggle strong{padding:4px 5px;border-radius:4px;background:#a5ff7330;color:#b2ffa1;font:800 10px monospace}
+.fx-toggle.fx-disabled{border-color:#435161;background:#1c222c;color:#a1aab6}
+.fx-toggle.fx-disabled strong{background:#323b47;color:#97a4b2}
+.fx-toggle:focus-visible{outline:2px solid #a5ff73;outline-offset:3px}

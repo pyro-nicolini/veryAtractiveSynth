@@ -11,11 +11,12 @@ import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mixer.js';
 import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
 import {clipsOf,ensureClips,clipDuration,addTrackClip,getEditableClip,splitTrackClip,cloneTrackMetadata} from './track-clips.js';
+import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx-rack.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false};
 const HELP={
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   tracks:['Capas de sonido','Cada capa es independiente. Puedes combinar voz, batería, música y efectos. Toca una para modificarla. M silencia, S deja escuchar solo esa capa. La flecha abre las acciones de la capa.'],
@@ -52,6 +53,7 @@ const HELP={
   loop:['Repetir mezcla','Al llegar al final, vuelve a comenzar automáticamente. Útil para probar cambios y efectos sin detenerte.'],
   countIn:['Cuenta de entrada','Antes de comenzar una nueva grabación, escucharás cuatro pulsos a los BPM elegidos. Canta después del último pulso. La base empieza junto con la grabación; los clics de preparación no quedan dentro del archivo digital. Usa auriculares para evitar que el micrófono recoja los clics.'],
   pitchReading:['Analizador de voz','Cuando reproduces una capa con Tune Lab abierto, el motor estima la frecuencia fundamental y la nota musical más cercana. El indicador de cents señala la desviación antes de la corrección. Si ves SIN NOTA CLARA, no es necesariamente un error: el sonido puede ser silencio, ruido, música con varias notas o una voz difícil de analizar. La medición es orientativa y todavía experimental.'],
+  liveVoice:['Voice Playground en vivo','Activa el micrófono únicamente cuando quieras practicar con tus auriculares conectados. Mueve el nodo para modificar la afinación experimental y el color en tiempo real. La escucha puede tener retardo y causar acoples con altavoces. No graba ni cambia la pista seleccionada salvo que pulses APLICAR A PISTA. Cierra o detén el modo para liberar el micrófono.'],
   tuneLab:['TUNE LAB — experimento musical','Mueve el nodo en el plano: izquierda = transiciones naturales, derecha = cambios robóticos rápidos; abajo = poca afinación, arriba = mucha afinación. También modifica ligeramente brillo y saturación para descubrir colores. El sonido cambia mientras reproduces. Usa los botones de destinos y guarda los que te gusten. No es todavía un autotune profesional.'],
   alignment:['Ajustar la sincronía','Si al escuchar tu grabación queda después del ritmo, mueve el control hacia Adelantar (valores negativos). Si quedó demasiado temprano, muévelo hacia Retrasar (positivos). El ajuste queda guardado en este dispositivo. No sustituye una calibración automática del hardware.'],
   original:['Comparar sonido original','Alterna entre el audio sin efectos y el audio procesado. El volumen y la dirección se mantienen. Es una comparación A/B no destructiva: los efectos siguen guardados aunque escuches el original.']
@@ -142,10 +144,12 @@ function modal(title,content,actions=[]){
   $('.focus-panel')?.focus();
 }
 function closeModal(){
+  const leavingTune=!!$('#tuneLab');
   if(state.countingIn){state.countingIn.cancelled=true;state.countingIn=null;}
   finishTuneGesture();
-  if(modalStack.length){$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();if($('#tuneLab'))$('.focus-panel')?.classList.add('tune-focus');else engine.watchPitch(null,null);return;}
+  if(modalStack.length){if(leavingTune&&state.tuneMode==='live')stopLiveTuneMic();$('#modalRoot').innerHTML=modalStack.pop();$('.focus-panel')?.focus();if(state.preview)drawMicPreview();if($('#tuneLab'))$('.focus-panel')?.classList.add('tune-focus');else engine.watchPitch(null,null);return;}
   if(state.recording){toast('Detén la grabación antes de cerrar');return;}
+  if(leavingTune)stopLiveTuneMic();
   cancelAnimationFrame(state.meterFrame);
   state.preview=null;
   engine.stopMic();
@@ -386,20 +390,24 @@ async function demo(){
 }
 
 /* TUNE LAB — XY controls actual AudioWorklet and WebAudio parameters. */
+function getTuneTrack(){
+  return state.tuneMode==='live'?state.liveTuneTrack:current();
+}
 function tuneRefresh(track){
   if(tuneFrame)return;
   tuneFrame=requestAnimationFrame(()=>{
     tuneFrame=0;
-    engine.updateTrack(track);
+    if(state.tuneMode==='live')engine.updateMic(track);
+    else engine.updateTrack(track);
     updateTuneLabView($('#tuneLab'),track);
   });
 }
 function tuneChange(x,y,preset='custom',store=false){
-  const track=current();if(!track)return;
+  const track=getTuneTrack();if(!track)return;
   const p=normalizeTune(x,y);
   applyTunePoint(track,p.x,p.y,preset);
   tuneRefresh(track);
-  if(store){renderInspector();queueAutosave();}
+  if(store&&state.tuneMode==='track'){renderInspector();queueAutosave();}
 }
 function tuneFromPad(event){
   const pad=$('#tunePad');if(!pad)return null;
@@ -418,32 +426,139 @@ function onTunePitch(message){
   put('#labPitchStatus',info.status);
   const needle=root.querySelector('#labPitchNeedle');if(needle)needle.style.left=info.position+'%';
 }
-function openTuneLab(){
-  const track=current();if(!track)return toast('Selecciona un sonido antes de explorar');
+
+function stopLiveTuneMic(){
+  state.liveMicToken++;
+  state.liveMicActive=false;
+  cancelAnimationFrame(state.liveMeterFrame);
+  state.liveMeterFrame=0;
+  engine.watchMicPitch(null);
+  if(!state.recording)engine.stopMic();
+  const meter=$('#labLiveMeter');if(meter)meter.style.width='0%';
+  const status=$('#labLiveStatus');
+  if(status)status.textContent='MICRÓFONO DETENIDO · NO SE ESTÁ GRABANDO';
+}
+function runLiveTuneMeter(){
+  cancelAnimationFrame(state.liveMeterFrame);
+  const samples=new Float32Array(2048);
+  const tick=()=>{
+    if(!state.liveMicActive||state.tuneMode!=='live'||!$('#labLiveMeter'))return;
+    if(engine.getMicMeterData(samples)){
+      const {rms,peak}=meterLevel(samples);
+      const bar=$('#labLiveMeter');
+      bar.style.width=Math.min(100,Math.round(Math.sqrt(rms)*165))+'%';
+      bar.style.background=peak>.9?'var(--pink)':'var(--green)';
+      if(peak>.9){const label=$('#labLiveStatus');if(label)label.textContent='ENTRADA ALTA · BAJA LA GANANCIA PARA EVITAR SATURACIÓN';}
+    }
+    state.liveMeterFrame=requestAnimationFrame(tick);
+  };
+  state.liveMeterFrame=requestAnimationFrame(tick);
+}
+async function populateLiveInputs(){
+  const select=$('#labMicSelect');if(!select)return;
+  try{
+    const devices=await listMicrophones();
+    if(!$('#labMicSelect'))return;
+    select.innerHTML='<option value="">Micrófono predeterminado</option>'+
+      devices.filter(d=>d.deviceId&&d.deviceId!=='default')
+      .map((d,i)=>'<option value="'+html(d.deviceId)+'">'+html(d.label||'Entrada '+(i+1))+'</option>').join('');
+    if([...select.options].some(o=>o.value===state.preferredInput))select.value=state.preferredInput;
+  }catch{}
+}
+async function startLiveTuneMic(){
+  if(state.liveMicBusy||state.liveMicActive||state.tuneMode!=='live'||!$('#tuneLab'))return;
+  if(state.recording||state.preview)return toast('Termina y cierra la grabación para usar Voice Playground');
+  if(!navigator.mediaDevices?.getUserMedia)return toast('Se necesita localhost o HTTPS y permiso de micrófono');
+  const request=++state.liveMicToken;
+  state.liveMicBusy=true;
+  const status=$('#labLiveStatus');if(status)status.textContent='SOLICITANDO ACCESO AL MICRÓFONO...';
+  const chosen=$('#labMicSelect')?.value||'';
+  let stream;
+  try{
+    await engine.ready();
+    stream=await navigator.mediaDevices.getUserMedia({audio:{
+      ...(chosen?{deviceId:{exact:chosen}}:{}),
+      echoCancellation:false,noiseSuppression:false,autoGainControl:false
+    },video:false});
+    if(request!==state.liveMicToken||state.tuneMode!=='live'||!$('#tuneLab')){
+      stream.getTracks().forEach(t=>t.stop());return;
+    }
+    state.preferredInput=chosen;
+    const track=state.liveTuneTrack;
+    track.volume=clamp($('#labLiveMonitor')?.value??60,0,80);
+    await engine.prepareMic(stream,track,true);
+    if(request!==state.liveMicToken||state.tuneMode!=='live'||!$('#tuneLab')){
+      engine.stopMic();return;
+    }
+    engine.setMicGain(clamp($('#labLiveInputGain')?.value??state.inputGain,0,150));
+    state.liveMicActive=true;
+    stream.getAudioTracks()[0]?.addEventListener('ended',()=>{
+      if(state.liveMicActive){stopLiveTuneMic();toast('El micrófono fue desconectado');}
+    },{once:true});
+    engine.watchMicPitch(onTunePitch);
+    runLiveTuneMeter();
+    const label=$('#labLiveStatus');
+    if(label)label.textContent='◉ VOZ EN VIVO · AURICULARES RECOMENDADOS · SIN GRABACIÓN';
+    await populateLiveInputs();
+  }catch(error){
+    stream?.getTracks().forEach(t=>t.stop());
+    const msg=error.name==='NotAllowedError'?'Permiso de micrófono denegado':error.name==='NotFoundError'?'No hay micrófono disponible':error.message;
+    if($('#labLiveStatus'))$('#labLiveStatus').textContent=msg;
+    toast(msg);
+  }finally{state.liveMicBusy=false;}
+}
+function switchTuneSource(mode){
+  if(!['live','track'].includes(mode))return;
+  if(mode==='track'&&!current())return toast('Primero selecciona o graba una pista');
+  if(mode!==state.tuneMode)stopLiveTuneMic();
+  state.tuneMode=mode;
+  if(mode==='live'&&!state.liveTuneTrack){
+    state.liveTuneTrack={...defaults(),volume:60,space:0,echo:0,bypassEffects:false};
+    const from=current();
+    if(from)Object.assign(state.liveTuneTrack,{
+      tuneX:from.tuneX,tuneY:from.tuneY,autotune:from.autotune,retune:from.retune,
+      key:from.key,scale:from.scale,brightness:from.brightness,warmth:from.warmth,drive:from.drive
+    });
+  }
+  engine.watchPitch(mode==='track'?(current()?.id??null):null,mode==='track'?onTunePitch:null);
+  const currentSource=getTuneTrack();if(!currentSource)return;
+  const lab=$('#tuneLab');
+  if(lab)lab.outerHTML=tuneLabMarkup(currentSource,loadUserTunes(),mode,!!current());
+  $('.focus-panel')?.classList.add('tune-focus');
+  updateTuneLabView($('#tuneLab'),currentSource);
+  if(mode==='live')populateLiveInputs();
+}
+
+function openTuneLab(mode='track'){
+  if(state.recording)return toast('Detén la grabación antes de abrir Voice Playground');
+  state.tuneMode=mode==='live'?'live':'track';
+  if(state.tuneMode==='live'&&!state.liveTuneTrack)state.liveTuneTrack={...defaults(),volume:60,space:0,echo:0,bypassEffects:false};
+  const track=getTuneTrack();if(!track)return toast('Selecciona un sonido o utiliza MI VOZ EN VIVO');
   if(!Number.isFinite(track.tuneX)||!Number.isFinite(track.tuneY)){
     const point=tunePointFromManual(track.autotune,track.retune);
     track.tuneX=point.x;track.tuneY=point.y;
     track.tunePreset='custom';
   }
-  modal('Tune Lab · Explora tu voz',tuneLabMarkup(track,loadUserTunes()),
+  modal('Voice Playground · Tune Lab',tuneLabMarkup(track,loadUserTunes(),state.tuneMode,!!current()),
     [{label:'LISTO / VOLVER A MI MEZCLA',type:'tune-done',primary:true}]);
   $('.focus-panel')?.classList.add('tune-focus');
   updateTuneLabView($('#tuneLab'),track);
-  engine.watchPitch(track.id,onTunePitch);
+  if(state.tuneMode==='track')engine.watchPitch(track.id,onTunePitch);
+  else{engine.watchPitch(null,null);populateLiveInputs();}
 }
 function finishTuneGesture(){
   if(!tuneGesture)return;
-  const track=current();
+  const track=getTuneTrack();
   tuneGesture=null;
-  if(track){tuneRefresh(track);renderInspector();queueAutosave();}
+  if(track){tuneRefresh(track);if(state.tuneMode==='track'){renderInspector();queueAutosave();}}
 }
 function installTuneGestures(){
   document.addEventListener('pointerdown',event=>{
     const pad=event.target.closest('#tunePad');
     if(!pad||event.target.closest('[data-tune-preset]')||event.button!==0)return;
-    const track=current();if(!track)return;
+    const track=getTuneTrack();if(!track)return;
     event.preventDefault();
-    checkpoint();
+    if(state.tuneMode==='track')checkpoint();
     tuneGesture={pointerId:event.pointerId};
     pad.setPointerCapture(event.pointerId);
     const p=tuneFromPad(event);if(p)tuneChange(p.x,p.y);
@@ -460,44 +575,59 @@ function installTuneGestures(){
   });
   document.addEventListener('keydown',event=>{
     if(event.target.id!=='tunePad'||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(event.key))return;
-    const track=current();if(!track)return;
-    event.preventDefault();checkpoint();
+    const track=getTuneTrack();if(!track)return;
+    event.preventDefault();if(state.tuneMode==='track')checkpoint();
     const p=normalizeTune(track.tuneX,track.tuneY),step=event.shiftKey?.15:.04;
     const x=event.key==='Home'?0:p.x+(event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0);
     const y=event.key==='Home'?0:p.y+(event.key==='ArrowUp'?step:event.key==='ArrowDown'?-step:0);
     tuneChange(x,y,'custom',true);
   });
   document.addEventListener('pointerdown',event=>{
-    if(event.target.matches('[data-tune-axis]'))checkpoint();
+    if(event.target.matches('[data-tune-axis]')&&state.tuneMode==='track')checkpoint();
   });
   document.addEventListener('keydown',event=>{
     if(event.target.matches('[data-tune-axis]') &&
       ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(event.key) &&
-      !event.repeat)checkpoint();
+      !event.repeat&&state.tuneMode==='track')checkpoint();
   });
   document.addEventListener('change',event=>{
-    if(event.target.matches('[data-tune-axis]')){renderInspector();queueAutosave();}
+    if(event.target.matches('[data-tune-axis]')){if(state.tuneMode==='track'){renderInspector();queueAutosave();}}
   });
 }
 function tuneAction(action){
-  const track=current();if(!track)return;
+  const track=getTuneTrack();if(!track)return;
+  if(action==='tune-source-live'){switchTuneSource('live');return;}
+  if(action==='tune-source-track'){switchTuneSource('track');return;}
+  if(action==='tune-live-start'){startLiveTuneMic();return;}
+  if(action==='tune-live-stop'){stopLiveTuneMic();return;}
+  if(action==='tune-apply'){
+    if(state.tuneMode!=='live'||!current())return toast('Selecciona una pista antes de aplicar');
+    checkpoint();
+    const target=current(),source=state.liveTuneTrack;
+    Object.assign(target,{tuneX:source.tuneX,tuneY:source.tuneY,autotune:source.autotune,retune:source.retune,
+      brightness:source.brightness,warmth:source.warmth,drive:source.drive,tunePreset:source.tunePreset,preset:'custom'});
+    engine.updateTrack(target);renderInspector();queueAutosave();
+    toast('Configuración de Voice Playground aplicada a '+target.name);
+    return;
+  }
   if(action==='tune-done'){finishTuneGesture();closeModal();renderInspector();return;}
   if(action==='tune-preview'){
+    if(state.tuneMode==='live')return toast('Pulsa ACTIVAR MI VOZ para escuchar el micrófono');
     if(!state.tracks.length)return toast('Agrega audio para escuchar');
     if(engine.playing){toast('La mezcla ya está sonando. Mueve el nodo.');return;}
     if(state.position>=projectDuration(state.tracks)-.02)state.position=0;
     playPause();return;
   }
   if(action==='tune-ab'){
-    checkpoint();track.bypassEffects=!track.bypassEffects;
-    tuneRefresh(track);renderInspector();queueAutosave();return;
+    if(state.tuneMode==='track')checkpoint();track.bypassEffects=!track.bypassEffects;
+    tuneRefresh(track);if(state.tuneMode==='track'){renderInspector();queueAutosave();}return;
   }
   if(action==='tune-surprise'){
-    checkpoint();
+    if(state.tuneMode==='track')checkpoint();
     tuneChange(Math.random()*2-1,Math.random()*2-1,'custom',true);return;
   }
   if(action==='tune-reset'){
-    checkpoint();tuneChange(-.75,-1,'natural',true);return;
+    if(state.tuneMode==='track')checkpoint();tuneChange(-.75,-1,'natural',true);return;
   }
   if(action==='tune-save'){
     try{
@@ -505,7 +635,8 @@ function tuneAction(action){
       const saved=saveUserTune(name,track.tuneX,track.tuneY);
       const list=$('#labUserPresets');
       if(list)list.innerHTML=customTuneMarkup(loadUserTunes());
-      track.tunePreset='user:'+saved.name;queueAutosave();renderInspector();
+      track.tunePreset='user:'+saved.name;
+      if(state.tuneMode==='track'){queueAutosave();renderInspector();}
       const input=$('#labPresetName');if(input)input.value='';
       toast('Estilo '+saved.name+' guardado solo en este navegador.');
     }catch(error){toast(error.message);}
@@ -518,6 +649,8 @@ function openEffects(){
     '<p>Experimenta sin perder el sonido original. Cada efecto se aplica solo a esta capa.</p>'+
     '<div class="control-grid">'+dial('Velocidad','retune',t.retune,'var(--purple)')+dial('Brillo','brightness',t.brightness,'var(--blue)')+dial('Calidez','warmth',t.warmth,'var(--orange)')+'</div>'+
     '<div class="inspector-divider"></div><div class="control-grid">'+dial('Eco','echo',t.echo,'var(--pink)')+dial('Espacio','space',t.space,'var(--purple)')+dial('Distorsión','drive',t.drive,'var(--orange)')+'</div>'+
+    '<div class="inspector-divider"></div><div class="control-heading"><strong>PROCESADORES ACTIVOS</strong></div>'+
+    '<div class="fx-rack-switches">'+FX_CHAIN.map(effect=>'<button type="button" class="fx-toggle '+(isFxBypassed(t,effect.id)?'fx-disabled':'')+'" data-fx-toggle="'+effect.id+'" aria-pressed="'+String(!isFxBypassed(t,effect.id))+'" title="'+html(effect.hint)+'"><span>'+html(effect.label)+'</span><strong>'+(isFxBypassed(t,effect.id)?'OFF':'ON')+'</strong></button>').join('')+'</div>'+
     '<div class="inspector-divider"></div><div class="control-grid">'+dial('Dirección','pan',t.pan,'var(--blue)',-100,100)+'</div>',
     [{label:'LISTO',type:'close',primary:true}]);
 }
@@ -914,7 +1047,7 @@ function handleTrackAction(action,id){
 }
 function handleModalAction(action){
   if(action==='close-modal'||action==='close'){closeModal();return;}
-  if(action==='tune-open'){openTuneLab();return;}
+  if(action==='tune-open'){openTuneLab('track');return;}
   if(action.startsWith('tune-')){tuneAction(action);return;}
   if(action==='effects'){openEffects();return;}
   if(action==='toggle-bypass'){
@@ -1091,6 +1224,7 @@ function wire(){
     await importClipIntoTrack(e.target.files?.[0],target);e.target.value='';
   };
   $('#demoBtn').onclick=demo;$('#recordBtn').onclick=openRecording;
+  $('#voiceLabBtn').onclick=()=>openTuneLab('live');
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
   $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=openProjectMenu;
@@ -1121,11 +1255,29 @@ function wire(){
     const card=e.target.closest('[data-track]');if(card){state.selected=card.dataset.track;state.selectedClip=null;render();}
   });
   $('#tracks').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.track-card')){e.preventDefault();state.selected=e.target.dataset.track;state.selectedClip=null;render();}});
+  document.addEventListener('change',event=>{
+    if(event.target.id==='labMicSelect'&&state.liveMicActive){
+      stopLiveTuneMic();startLiveTuneMic();
+    }
+  });
   document.addEventListener('click',e=>{
     const opening=e.target.closest('[data-project-open]');if(opening){openNamed(opening.dataset.projectOpen);return;}
     const deletion=e.target.closest('[data-project-delete]');if(deletion){removeNamed(deletion.dataset.projectDelete);return;}
     const info=e.target.closest('[data-info]');if(info){help(info.dataset.info);return;}
     const action=e.target.closest('[data-action]');if(action){handleModalAction(action.dataset.action);return;}
+    const effectButton=e.target.closest('[data-fx-toggle]');
+    if(effectButton){
+      const track=current();if(!track)return;
+      if(!FX_IDS.includes(effectButton.dataset.fxToggle))return;
+      checkpoint();toggleTrackFx(track,effectButton.dataset.fxToggle);engine.updateTrack(track);
+      queueAutosave();
+      const button=effectButton;
+      const off=isFxBypassed(track,effectButton.dataset.fxToggle);
+      button.classList.toggle('fx-disabled',off);
+      button.setAttribute('aria-pressed',String(!off));
+      const strong=button.querySelector('strong');if(strong)strong.textContent=off?'OFF':'ON';
+      return;
+    }
     const tunePreset=e.target.closest('[data-tune-preset]');
     if(tunePreset){
       const point=findTunePreset(tunePreset.dataset.tunePreset);
@@ -1146,6 +1298,14 @@ function wire(){
     if(e.target.id==='modalBackdrop')closeModal();
   });
   document.addEventListener('input',e=>{
+    if(e.target.id==='labLiveInputGain'){
+      engine.setMicGain(clamp(e.target.value,0,150));
+      const out=$('#labLiveInputValue');if(out)out.textContent=e.target.value+'%';
+    }
+    if(e.target.id==='labLiveMonitor'){
+      if(state.liveTuneTrack){state.liveTuneTrack.volume=clamp(e.target.value,0,80);engine.updateMic(state.liveTuneTrack);}
+      const out=$('#labLiveMonitorValue');if(out)out.textContent=e.target.value+'%';
+    }
     if(e.target.matches('[data-tune-axis]')){
       const t=current();if(t){
         const x=e.target.dataset.tuneAxis==='x'?Number(e.target.value)/100:t.tuneX;

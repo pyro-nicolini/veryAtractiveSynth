@@ -50,21 +50,24 @@ function setParams(graph,track,ctx){
   set(graph.processedBus.gain,track.bypassEffects?0:1);
   set(graph.bypassBus.gain,track.bypassEffects?1:0);
   set(graph.pan.pan,clamp(track.pan,-100,100)/100);
-  set(graph.hp.frequency,65+clamp(track.clean,0,100)*.55);
-  set(graph.lp.frequency,19000-clamp(track.clean,0,100)*23);
-  set(graph.low.gain,(clamp(track.warmth,0,100)-20)*.09);
-  set(graph.high.gain,(clamp(track.brightness,0,100)-50)*.14);
-  const driveAmount=clamp(track.drive,0,100);
+  const disabled=track.fxBypass||{};
+  set(graph.hp.frequency,disabled.clean?20:65+clamp(track.clean,0,100)*.55);
+  set(graph.lp.frequency,disabled.clean?Math.min(ctx.sampleRate*.48,20000):19000-clamp(track.clean,0,100)*23);
+  set(graph.low.gain,disabled.eq?0:(clamp(track.warmth,0,100)-20)*.09);
+  set(graph.high.gain,disabled.eq?0:(clamp(track.brightness,0,100)-50)*.14);
+  set(graph.compressor.ratio,disabled.compressor?1:3.2);
+  set(graph.compressor.threshold,disabled.compressor?0:-21);
+  const driveAmount=disabled.drive?0:clamp(track.drive,0,100);
   if(graph.lastDriveAmount!==driveAmount){
     graph.drive.curve=saturationCurve(driveAmount);
     graph.lastDriveAmount=driveAmount;
   }
-  set(graph.delayWet.gain,clamp(track.echo,0,100)/100*.43);
-  set(graph.reverbWet.gain,clamp(track.space,0,100)/100*.65);
+  set(graph.delayWet.gain,disabled.delay?0:clamp(track.echo,0,100)/100*.43);
+  set(graph.reverbWet.gain,disabled.reverb?0:clamp(track.space,0,100)/100*.65);
   // Smooth live XY moves to reduce parameter discontinuities during playback.
-  graph.voice.parameters.get('strength').setTargetAtTime(clamp(track.autotune,0,100)/100,now,.013);
+  graph.voice.parameters.get('strength').setTargetAtTime(disabled.tune?0:clamp(track.autotune,0,100)/100,now,.013);
   graph.voice.parameters.get('retune').setTargetAtTime(clamp(track.retune,0,100)/100,now,.013);
-  graph.voice.parameters.get('clean').setTargetAtTime(clamp(track.clean,0,100)/100,now,.013);
+  graph.voice.parameters.get('clean').setTargetAtTime(disabled.clean?0:clamp(track.clean,0,100)/100,now,.013);
   graph.voice.parameters.get('key').setValueAtTime(clamp(track.key,0,11),now);
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
 }
@@ -319,7 +322,21 @@ export class AudioEngine {
       inputGain.connect(monitorGraph.input);
     }
     this.mic={stream,source,inputGain,analyser,meterSilent,monitorGraph};
+    this.syncMicPitchTelemetry();
     return analyser;
+  }
+  watchMicPitch(callback){
+    this.micPitchListener=typeof callback==='function'?callback:null;
+    this.syncMicPitchTelemetry();
+  }
+  syncMicPitchTelemetry(){
+    const voice=this.mic?.monitorGraph?.voice;
+    if(!voice)return;
+    const active=!!this.micPitchListener;
+    voice.port.onmessage=active?event=>{
+      if(event.data?.type==='pitch')this.micPitchListener?.(event.data);
+    }:null;
+    voice.port.postMessage({type:'monitor',enabled:active});
   }
   setMicGain(percent){
     if(this.mic?.inputGain)this.mic.inputGain.gain.setTargetAtTime(clamp(percent,0,200)/100,this.ctx.currentTime,.012);
@@ -372,6 +389,7 @@ export class AudioEngine {
   stopMic(){
     if(this.capture)return; // do not cut a recording in progress
     if(!this.mic)return;
+    this.watchMicPitch(null);
     const {source,inputGain,analyser,meterSilent,monitorGraph,stream}=this.mic;
     try{source.disconnect();inputGain.disconnect();analyser.disconnect();meterSilent.disconnect();}catch{}
     disposeGraph(monitorGraph);

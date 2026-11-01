@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.8 implementado
+## 3. Estado 0.9 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -40,6 +40,19 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 5. Fases propuestas
 
+
+### Fase 0.9 — Voice Playground y FX independientes
+
+- [x] Tune Lab con dos fuentes: archivo/pista reproducida o micrófono en directo con consentimiento.
+- [x] Entrada configurable, ganancia y volumen de monitoreo independiente, con señal visual.
+- [x] Arrastre XY y presets mientras suena la voz en vivo, usando AudioWorklet existente.
+- [x] Indicador de tono en vivo, A/B y transferencia explícita de ajustes desde ensayo a pista.
+- [x] Detención del micrófono al salir, desconexión de nodos y cancelación segura de permisos pendientes.
+- [x] Siete interruptores de bypass individual sin perder ajustes, persistentes en proyectos.
+- [x] Tests de UI/controles, módulos, bypass y proyecto portable.
+- [ ] Ensayos reales con micrófono, auriculares, permisos y latencia en PC/Android/iPhone.
+- [ ] Grabación de monitor procesado, automatización de coordenadas y FX rack reordenable.
+- [ ] Afinación profesional con preservación de formantes y denoise avanzado.
 
 ### Fase 0.8 — Track & Clip Engine (primera iteración)
 
