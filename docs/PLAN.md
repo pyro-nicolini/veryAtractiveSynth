@@ -18,7 +18,7 @@ Un creador de canciones **sin curva de aprendizaje técnica**. El usuario abre l
 - **Responsive:** sobre todo en teléfono; la interfaz no depende del hover.
 - **Identidad:** negro profundo, líneas finas de neón verde/violeta/azul/rosado y números estilo laboratorio gamer.
 
-## 3. Estado 0.1 implementado
+## 3. Estado 0.2 implementado
 
 Frontend estático sin dependencias, audio local-first, importación, grabación, monitoreo opcional, composición multicapas, AudioWorklet de pitch/gate experimental, WebAudio EQ/compresión/drive/eco/reverb/pan, presets, timeline y fades, exportación WAV offline, IndexedDB, cache de aplicación y pruebas puras de WAV/notas/duración.
 
@@ -26,7 +26,7 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 ## 4. Arquitectura
 
-**I/O:** File API, AudioContext.decodeAudioData, getUserMedia/MediaRecorder.
+**I/O:** File API, AudioContext.decodeAudioData, getUserMedia + PCM AudioWorklet; diagnóstico de archivos importados sin códec.
 
 **DSP:** AudioWorklet separado del hilo UI, parámetros escalables; WebAudio nodes dedicados para cada capa.
 
@@ -80,7 +80,8 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 
 - [ ] Metrónomo, tempo/BPM y grilla musical.
 - [ ] Clips múltiples por pista, zoom de timeline y crossfade.
-- [ ] Undo/redo y autosave en background no bloqueante.
+- [x] Undo/redo básico en memoria (25 cambios).
+- [ ] Autosave incremental en background no bloqueante.
 - [ ] Proyecto portable (audio + parámetros) y exportación de stems.
 - [ ] Packs de presets y ajuste A/B; control de panorámica estéreo avanzada.
 - [ ] Pruebas visuales, QA automatizado y benchmark de exportaciones largas.

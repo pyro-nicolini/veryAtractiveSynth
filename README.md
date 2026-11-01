@@ -2,7 +2,7 @@
 
 **Un estudio de audio para crear canciones sin aprender producción musical.**
 
-> **Estado actual: DesignPhase · MVP 0.1.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
+> **Estado actual: DesignPhase · MVP 0.2.** Implementación local-first con interfaz neón, grabación, capas y efectos. La corrección de tono es experimental; aún no es un autotune de calidad comercial.
 
 
 ## ACTUALIZACIÓN DesignPhase 0.2: grabar y recuperar pistas
@@ -49,7 +49,7 @@ No abras el HTML directamente por doble clic: el proyecto utiliza módulos y Aud
 
 1. **PROBAR UN RITMO** carga una batería original de ocho compases (generada en tu equipo, sin descargar muestras).
 2. **AGREGAR SONIDO** importa uno o varios MP3, WAV, M4A y otros archivos compatibles con el navegador. También puedes arrastrarlos sobre la ventana. Límite individual: 350 MB.
-3. **GRABAR MI VOZ** pide permiso de micrófono. Reproduce tu base con auriculares y presiona COMENZAR A GRABAR; DETENER Y AGREGAR incorpora una nueva capa. Opcionalmente puedes escucharte con afinación mientras grabas.
+3. **GRABAR MI VOZ** pide permiso de micrófono. Reproduce tu base con auriculares, prueba la entrada y presiona ● GRABAR; DETENER Y AGREGAR incorpora una nueva capa. Opcionalmente puedes escucharte con afinación mientras grabas.
 4. **SELECCIONA UNA CAPA** para aplicar tres ajustes esenciales: Volumen, Afinación y Limpieza.
 5. **ESTILOS RÁPIDOS** cambia varios ajustes de golpe: Natural, Voz limpia, Pop brillante, Robot pop, Sueño espacial y Radio vintage.
 6. **TONO / ESCALA** elige Do, Re, Mi, etc., y Mayor, Menor o Cromática. La afinación funciona mejor cuando la escala coincide con la base musical.
@@ -66,7 +66,7 @@ Los íconos **i** de cada función explican el control con palabras sencillas. F
 | Función | Estado | Nota |
 |---|---|---|
 | Audio multipista, importar, arrastrar | ✅ | Decodificación depende del navegador |
-| Grabar micrófono y cantar sobre una base | ✅ | MediaRecorder, permiso explícito |
+| Grabar micrófono y cantar sobre una base | ✅ | PCM en AudioWorklet, permiso explícito y medidor de entrada |
 | Escucha opcional con efectos | ✅ | Recomendados auriculares cableados |
 | Mezclar capas, mute, solo, duplicar | ✅ | Volumen independiente y paneo |
 | Autotune por tono/escala | 🧪 Experimental | Pitch detection y pitch shifting granular en AudioWorklet |
@@ -77,7 +77,8 @@ Los íconos **i** de cada función explican el control con palabras sencillas. F
 | Guardar y recuperar proyecto | ✅ | IndexedDB del navegador; sin servidor |
 | PWA con cache local | ✅ / sujeto a origen | Instalación en HTTPS/localhost; cachea solo código |
 | Autotune comercial, separación de ruido por IA | ❌ | Para fases siguientes |
-| Undo/redo y metrónomo | ❌ | Pendientes |
+| Undo/redo de cambios recientes | ✅ | 25 pasos en memoria |
+| Metrónomo y grilla por compases | ❌ | Pendientes |
 
 ## Calidad del sonido: límites importantes
 
@@ -85,7 +86,7 @@ Los íconos **i** de cada función explican el control con palabras sencillas. F
 
 El algoritmo de afinación del MVP **es experimental**. Utiliza detección monofónica aproximada y síntesis granular, que pueden introducir artefactos, latencia y saltos en voces difíciles o material polifónico. Para producto comercial debe sustituirse o complementarse con un motor DSP probado (WASM, pitch tracking mejorado, validaciones auditivas).
 
-Grabación: el audio se guarda original, sin procesamiento destructivo. MediaRecorder y el hardware pueden introducir retraso; usa AJUSTAR TIEMPOS para alinear una toma con la base. El modo de monitoreo puede generar acoples si no usas auriculares. Bluetooth suele aumentar mucho la latencia.
+Grabación: el audio se captura como PCM y se guarda original, sin procesamiento destructivo. El hardware puede introducir retraso; usa AJUSTAR TIEMPOS para alinear una toma con la base. El modo de monitoreo puede generar acoples si no usas auriculares. Bluetooth suele aumentar mucho la latencia.
 
 **Los datos se quedan en tu dispositivo.** El audio nunca se envía a servidores ni se almacena en la nube. IndexedDB guarda una sesión, no un backup garantizado; si borras los datos del sitio, pierdes la sesión. Exporta los WAV importantes. La exportación se limita conservadoramente a 20 minutos por mezcla y a la memoria que permita el dispositivo.
 
@@ -106,6 +107,11 @@ src/dsp.js                    cuantización de notas, demo, export WAV y tests
 src/worklets/voice-processor.js
                               afinación/gate en el hilo de audio
 src/project-store.js          persistencia local de sesión IndexedDB
+src/recording-utils.js         utilidad de captura PCM y diagnóstico de archivos
+src/worklets/capture-processor.js
+                              captura mono PCM en hilo de audio
+src/portable-project.js        respaldo portable con pistas originales
+src/zip-store.js               creador/lector local ZIP sin compresión
 server.js                     servidor sin dependencias, solo localhost
 sw.js                         cache de aplicación estática, no audio
 tests/dsp.test.js             test automatizados PCM y WAV
