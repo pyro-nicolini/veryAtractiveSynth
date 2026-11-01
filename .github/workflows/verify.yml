@@ -1,0 +1,53 @@
+name: Verify DesignPhase
+on:
+  push:
+    branches: [DesignPhase]
+  pull_request:
+    branches: [main, DesignPhase]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          node --check src/app.js
+          node --check src/engine.js
+          node --check src/dsp.js
+          node --check src/project-store.js
+          node --check src/recording-utils.js
+          node --check src/tune-lab.js
+          node --check src/tune-lab-ui.js
+          node --check src/pitch-display.js
+          node --check src/track-clips.js
+          node --check src/session-recording.js
+          node --check src/worklets/session-processor.js
+          node --check src/fx-rack.js
+          node --check src/studio-mixer.js
+          node --check src/studio-mixer-ui.js
+          node --check src/sample-bank.js
+          node --check src/sample-pad-store.js
+          node --check src/sample-deck.js
+          node --check src/studio-library.js
+          node --check src/library-ui.js
+          node --check src/flow-studio.js
+          node --check src/loop-guard.js
+          node --check src/clip-edit.js
+          node --check src/pitch-coach.js
+          node --check src/voice-characters.js
+          node --check src/pitch-review-ui.js
+          node --check src/audio-import.js
+          node --check src/timeline.js
+          node --check src/portable-project.js
+          node --check src/zip-store.js
+          node --check src/worklets/capture-processor.js
+          node --check src/worklets/voice-processor.js
+      - name: Run DSP unit tests
+        run: npm test
