@@ -399,6 +399,7 @@ async function stopRecording(){
   try{
     const buffer=await engine.stopCapture();
     if(!buffer||buffer.duration<.05)throw Error('La toma es demasiado corta o quedó vacía');
+    state.recording=null; // capture is finished; allow undo of the newly created take
     const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',recording.offset);
     Object.assign(track,{autotune:recording.tune,clean:recording.clean,retune:70,space:12,preset:'custom'});
     toast('¡Toma grabada! La capa de voz ya aparece en tu mezcla.');
