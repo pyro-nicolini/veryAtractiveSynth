@@ -48,6 +48,18 @@ h1 em,.brand-text>span{color:#ffa166;text-shadow:0 5px 28px #f88b6035}
 .library-card{background:linear-gradient(145deg,#303a45,#212832);border:1px solid #4b5765;color:#eaf0f5}
 .library-copy strong{color:#edf4fc}.library-copy small{color:#aab7c7}
 .library-icon{background:linear-gradient(145deg,#7e9baf,#3b5367);color:#eef9ff}
+.patch-preset-list{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;margin-top:10px}
+.patch-preset-row,.patch-sample-row{display:flex;align-items:center;gap:4px;min-width:0}
+.patch-preset-row>button:first-child{flex:1;min-width:0;display:flex;gap:8px;align-items:center;text-align:left;padding:8px;background:#303944;border:1px solid #596673;border-radius:9px;color:#eaf2f9;font-size:11px;cursor:grab}
+.patch-preset-row>button:first-child:hover{border-color:#f6a26f}
+.patch-preset-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.patch-preset-row span{color:#ec8cbf}
+.patch-preset-row>button:last-child,.patch-remove{flex:none;width:26px;height:28px;border-radius:7px;border:1px solid #4b5762;background:#2b3642;color:#b8c7d3;cursor:pointer}
+.patch-preset-row>button:last-child:hover,.patch-remove:hover{border-color:#e5777e;color:#ffc5bc}
+.patch-sample-row .patch-sample{flex:1;min-width:0}
+.patch-port{touch-action:none}
+.patch-wire-preview{stroke:#ffb375!important;stroke-dasharray:7 5;stroke-width:3px!important;filter:drop-shadow(0 0 6px #ffac79bb)!important}
+
 /* Workbench: modular patchbay with library mounted on the left. */
 .flow-studio{padding:20px;overflow:hidden}
 .patch-workspace{display:grid;grid-template-columns:216px minmax(0,1fr);gap:14px;margin-top:14px}
