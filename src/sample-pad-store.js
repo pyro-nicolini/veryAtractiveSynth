@@ -1,8 +1,8 @@
 /** Twelve reusable local-only samples. Independent IndexedDB from sessions. */
 const DB='vas-personal-samples',STORE='pads';
-export function storageRecord(buffer,name,from=0,to=buffer.duration){
+export function storageRecord(buffer,name,from=0,to=buffer.duration,fx='original'){
  if(!buffer||buffer.numberOfChannels<1||buffer.numberOfChannels>2||buffer.duration>30)throw Error('Sample demasiado largo');
- return {name:String(name||'Sample').slice(0,36),from,to,sampleRate:buffer.sampleRate,length:buffer.length,
+ return {name:String(name||'Sample').slice(0,36),from,to,fx:String(fx||'original').slice(0,20),sampleRate:buffer.sampleRate,length:buffer.length,
   channels:Array.from({length:buffer.numberOfChannels},(_,c)=>buffer.getChannelData(c).slice())};
 }
 export function reviveSample(record){
@@ -14,7 +14,7 @@ export function reviveSample(record){
   if(record.channels[i].length!==record.length)throw Error('Sample incompleto');
   audio.copyToChannel(record.channels[i],i);
  }
- return {name:String(record.name||'Sample').slice(0,36),buffer:audio,
+ return {name:String(record.name||'Sample').slice(0,36),fx:String(record.fx||'original').slice(0,20),buffer:audio,
   from:Math.max(0,Math.min(audio.duration,record.from||0)),
   to:Math.min(audio.duration,record.to||audio.duration)};
 }
@@ -32,7 +32,7 @@ export async function savePad(index,pad){
  const db=await open();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
-  if(pad)store.put(storageRecord(pad.buffer,pad.name,pad.from,pad.to),index);
+  if(pad)store.put(storageRecord(pad.buffer,pad.name,pad.from,pad.to,pad.fx),index);
   else store.delete(index);
   tx.oncomplete=()=>{db.close();resolve();};
   tx.onerror=()=>{db.close();reject(tx.error||Error('Error de almacenamiento'))};
