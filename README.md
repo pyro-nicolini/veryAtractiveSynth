@@ -25,6 +25,8 @@
 
 Los tests automatizados de rutas, Master FX, subnodos, persistencia y sintaxis pasan en GitHub Actions. La escucha comparativa, el arrastre táctil y la comprobación visual final en Chrome/Edge siguen siendo QA manual antes de fusionar o desplegar.
 
+Checklist de aceptación y handoff para continuar con Codex: [docs/QA-SIGNAL-FLOW-V2.md](docs/QA-SIGNAL-FLOW-V2.md).
+
 ## 🚀 Instalar y ejecutar
 
 Necesitas **Node.js 20 o superior**, **Git** y un navegador moderno. No necesitas base de datos ni instalar paquetes adicionales.
