@@ -202,3 +202,10 @@ body.sample-desk-open{overflow:hidden}
 @media(max-width:620px){.flow-onboarding{gap:8px 13px;font-size:9px}}
 
 .master-fx-head-actions{display:flex;align-items:center;gap:8px}.master-fx-head-actions>button{width:23px;height:23px;border:1px solid #71818c;border-radius:50%;background:#35434e;color:#fff;font-weight:800}
+
+.flow-mini-transport{display:flex;align-items:center;gap:5px;flex:none}
+.flow-mini-transport>button{width:29px;height:29px;border:1px solid #667684;border-radius:8px;background:#34424e;color:#fff;font-size:13px}
+.flow-mini-transport>button:first-child{background:linear-gradient(145deg,#ffc18c,#ef8d58);border-color:#ffc18c;color:#202832}
+.flow-mini-transport label{display:flex;align-items:center;gap:6px;padding:0 5px;color:#e6edf3;font-size:8px;font-weight:800}
+.flow-mini-transport input{width:75px;accent-color:#ff9a60}
+@media(max-width:620px){.flow-mini-transport{order:2}.patch-toolbar{gap:8px}.flow-mini-transport input{width:58px}}
