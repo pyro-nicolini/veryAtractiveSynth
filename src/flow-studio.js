@@ -150,7 +150,7 @@ export function updateFlowWires(root,tracks,engine,animate=true,time=0){
  const layout=getFlowGeometry(board,svg),byId=new Map(tracks.map(t=>[t.id,t]));
  for(const entry of layout.entries){
   const track=byId.get(entry.owner),busId=entry.busId;
-  const meter=animate?(busId?engine.getBusMeter?.(busId):engine.getTrackMeter?.(track?.id)):null;
+  const meter=animate&&(!track||!track.muted)?(busId?engine.getBusMeter?.(busId):engine.getTrackMeter?.(track?.id)):null;
   const rms=Number(meter?.rms)||0,target=animate?Math.min(1,Math.sqrt(Math.max(0,rms))*3):0;
   entry.level+=(target-entry.level)*(target>entry.level?.35:.16);
   entry.path.setAttribute('d',wireCurve(entry.from.x,entry.from.y,entry.to.x,entry.to.y,entry.level,animate?time:0));
@@ -159,7 +159,7 @@ export function updateFlowWires(root,tracks,engine,animate=true,time=0){
   entry.path.style.strokeWidth=(2.4+entry.level*3.5).toFixed(2)+'px';
  }
  for(const card of board.querySelectorAll('[data-flow-track]')){
-  const track=byId.get(card.dataset.flowTrack),meter=animate?engine.getTrackMeter?.(track?.id):null,rms=Number(meter?.rms)||0;
+  const track=byId.get(card.dataset.flowTrack),meter=animate&&!track?.muted?engine.getTrackMeter?.(track?.id):null,rms=Number(meter?.rms)||0;
   const active=!!animate&&!track?.muted&&rms>.002;
   card.classList.toggle('is-playing',active);
   card.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));
