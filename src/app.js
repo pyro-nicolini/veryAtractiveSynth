@@ -729,8 +729,10 @@ function setupFlow(){
   document.addEventListener('pointerup',finishCable);
   document.addEventListener('pointercancel',finishCable);
   document.addEventListener('keydown',event=>{
-    if(event.key==='Escape'&&state.flowFullscreen){setFlowFullscreen(false);event.preventDefault();}
-    if(event.key==='Escape'&&$('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();}
+    if(event.key!=='Escape')return;
+    if($('#modalBackdrop')){closeModal();event.preventDefault();return;}
+    if($('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();return;}
+    if(state.flowFullscreen){setFlowFullscreen(false);event.preventDefault();}
   });
 }
 
