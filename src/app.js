@@ -16,9 +16,10 @@ import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAu
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
 import {canConnect,chainLane} from './flow-routing.js';
-import {listLibrarySamples,loadLibrarySample,deleteLibrarySample} from './sample-library.js';
+import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
 import {listPatchPresets,savePatchPreset,deletePatchPreset,applyPatchPreset} from './patch-presets.js';
+import {MASTER_FX_DEFAULTS,sanitiseMasterFx} from './master-fx.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
@@ -29,9 +30,9 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
 const HELP={
-  flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
+  flowStudio:['Signal Flow','Cada tarjeta es una pista real. Arrastra su cabecera para moverla y conecta el puerto derecho con una entrada compatible. Abre FX dentro de una pista para activar sus efectos; esos efectos solo modifican esa pista. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia, o arrastra un sample hacia una pista, un bus o MASTER.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   clipLoop:['Loops de un clip','Selecciona un fragmento del archivo fuente con inicio y final (en segundos), y elige cuántas veces debe repetirse, hasta 64. El loop solo afecta ese clip; las demás pistas conservan su tiempo normal. Puedes duplicar el patrón a la derecha en la misma pista sin crear otra copia del sonido. Para evitar clicks, corta cerca de cruces por cero.'],
@@ -80,7 +81,7 @@ let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},flowOpen:state.flowOpen,zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},masterFx:{...state.masterFx},flowOpen:state.flowOpen,flowExpandedFx:[...state.flowExpandedFx],zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
@@ -88,7 +89,8 @@ function applyProjectOptions(options={}){
   state.recordShiftMs=Math.round(clamp(options.recordShiftMs??0,-300,300));
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
-  state.flowOpen=options.flowOpen!==false;state.zoom=clamp(Number(options.zoom)||1,1,8);
+  state.masterFx=sanitiseMasterFx(options.masterFx);engine.setMasterFx(state.masterFx);
+  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(0,80):[];state.zoom=clamp(Number(options.zoom)||1,1,8);
   state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,5000),y:clamp(p.y,12,3000)}]));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
@@ -181,9 +183,9 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
   const readout=key==='pan'?(value<0?'IZQ '+Math.abs(value):value>0?'DER '+value:'CENTRO'):Math.round(value)+'%';
   return '<div class="dial-wrap" style="--dial-color:'+color+'">'+buttonInfo(key)+'<div class="dial" style="--fill:'+Math.round(pct*.78)+'%"><div class="dial-inner"><span>'+readout+'</span><small>AJUSTE</small></div></div><label for="dial-'+key+'">'+label+'</label><input id="dial-'+key+'" type="range" data-setting="'+key+'" min="'+min+'" max="'+max+'" value="'+value+'" aria-label="'+label+'"></div>';
 }
-function addTrack(buffer,name,type='audio',offset=0){
+function addTrack(buffer,name,type='audio',offset=0,bus=null){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
-  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:type==='voice'?'vocals':'music'};
+  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:bus||(type==='voice'?'vocals':'music')};
   checkpoint();
   const previous=state.tracks.filter(x=>!x.flowHidden&&busForTrack(x)===t.bus).at(-1);
   t.flowTo='bus:'+t.bus;
@@ -228,11 +230,10 @@ function renderFlow(){
   area.hidden=!state.flowOpen;
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
-  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets());
-  if(state.flowArmedEffect){
-    const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
-    tile?.classList.add('is-armed');
-  }
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx);
+  area.classList.toggle('is-fullscreen',state.flowFullscreen);
+  $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
+  $('#flowFullscreen')?.setAttribute('aria-label',state.flowFullscreen?'Salir de pantalla completa':'Pantalla completa');
   // Keep the audio-reactive cable loop independent from timeline/transport UI.
   if(engine.playing)startFlowMotion();
   else paintFlow(false);
