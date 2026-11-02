@@ -261,6 +261,17 @@ function fitFlowCanvas(){
   state.flowCanvasZoom=fitFlowZoom(board.offsetWidth,board.offsetHeight,scroller.clientWidth,scroller.clientHeight);
   applyFlowViewport();scroller.scrollLeft=0;scroller.scrollTop=0;state.flowPan={left:0,top:0};queueAutosave();
 }
+function clampFloatingFxWindows(){
+  const layer=$('#flowFxLayer');if(!layer)return;
+  for(const win of layer.querySelectorAll('[data-flow-fx-window]')){
+    if(win.classList.contains('is-maximized'))continue;
+    const id=win.dataset.flowFxWindow;
+    const x=clamp(win.offsetLeft,0,Math.max(0,layer.clientWidth-win.offsetWidth));
+    const y=clamp(win.offsetTop,0,Math.max(0,layer.clientHeight-Math.min(win.offsetHeight,70)));
+    win.style.left=x+'px';win.style.top=y+'px';
+    state.flowFxWindows[id]={x,y};
+  }
+}
 function renderFlow(){
   const area=$('#flowArea'),body=$('#flowBody');
   if(!area||!body)return;
@@ -272,6 +283,7 @@ function renderFlow(){
   body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx,state.master,state.flowFxWindows,state.flowFxMaximized);
   syncFlowTransport();
   area.classList.toggle('is-fullscreen',state.flowFullscreen);
+  clampFloatingFxWindows();
   $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
   $('#flowFullscreen')?.setAttribute('aria-label',state.flowFullscreen?'Salir de pantalla completa':'Pantalla completa');
   applyFlowViewport();
@@ -598,7 +610,13 @@ function setupFlow(){
     if(expand){
       const id=expand.dataset.flowExpandFx;
       if(state.flowExpandedFx.includes(id)){state.flowExpandedFx=[];state.flowFxMaximized=null;}
-      else {state.flowExpandedFx=[id];state.flowFxMaximized=null;}
+      else {
+        state.flowExpandedFx=[id];state.flowFxMaximized=null;
+        if(!state.flowFxWindows[id]){
+          const layer=$('#flowFxLayer'),parent=layer?.parentElement;
+          state.flowFxWindows[id]={x:Math.max(12,(parent?.clientWidth||900)-550),y:60};
+        }
+      }
       renderFlow();queueAutosave();return;
     }
     const effectToggle=event.target.closest('[data-flow-effect-toggle]');
