@@ -592,6 +592,9 @@ function setupFlow(){
     setFlowFullscreen(!state.flowFullscreen);
   };
   $('#flowFullscreen').onclick=()=>setFlowFullscreen();
+  body.addEventListener('scroll',event=>{
+    if(event.target?.id==='flowCanvasScroller')state.flowPan={left:event.target.scrollLeft,top:event.target.scrollTop};
+  },true);
   body.addEventListener('wheel',event=>{
     if(!event.ctrlKey&&!event.metaKey)return;
     if(!event.target.closest('#flowCanvasScroller'))return;
@@ -832,7 +835,7 @@ function setupFlow(){
       }
     }
     const scroller=$('#flowCanvasScroller'),board=$('#flowBoard');
-    if(scroller&&board&&event.button===0&&event.target.closest('#flowCanvasScroller')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
+    if(scroller&&board&&event.button===0&&event.pointerType!=='touch'&&event.target.closest('#flowCanvasScroller')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
       panDrag={pointer:event.pointerId,startX:event.clientX,startY:event.clientY,left:scroller.scrollLeft,top:scroller.scrollTop,scroller};
       event.target.setPointerCapture?.(event.pointerId);
       scroller.classList.add('is-panning');event.preventDefault();return;
