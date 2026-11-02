@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="./src/studio-mixer.css">
   <link rel="stylesheet" href="./src/studio-light.css">
   <link rel="stylesheet" href="./src/studio-console.css">
+  <link rel="stylesheet" href="./src/signal-flow-v2.css">
   <title>Very Atractive Synth | Laboratorio de sonido</title>
 </head>
 <body>
@@ -26,11 +27,10 @@
       <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
       <button type="button" class="button button-muted" id="helpBtn" aria-label="Guía del estudio">? <span class="desktop-only">GUÍA</span></button>
       <button type="button" class="button button-muted" id="voiceLabBtn" title="Jugar con autotune usando el micrófono en vivo">✦ VOICE LAB</button>
-      <button type="button" class="button button-muted" id="sampleToggle" aria-controls="sampleDeck" aria-expanded="false">◫ SAMPLES</button>
-      <button type="button" class="button button-muted" id="flowToggle" aria-expanded="true" aria-controls="flowArea">◉ <span class="desktop-only">CONEXIONES</span></button>
+      <button type="button" class="button button-muted" id="sampleToggle" aria-controls="sampleDeck" aria-expanded="false" title="Abrir la mesa de samples">▦ SAMPLE DESK</button>
+      <button type="button" class="button button-muted" id="flowToggle" aria-expanded="true" aria-controls="flowArea">⌘ <span class="desktop-only">FLOW</span></button>
       <button type="button" class="button button-muted" id="mixerToggle" aria-controls="mixerArea" aria-expanded="false" aria-pressed="false"> <span aria-hidden="true">☷</span> MIXER</button>
-      <button type="button" class="button button-muted" id="loadBtn">↗ <span class="desktop-only">ABRIR</span></button>
-      <button type="button" class="button button-muted" id="saveBtn">▣ <span class="desktop-only">GUARDAR</span></button>
+      <button type="button" class="button button-muted" id="projectBtn" title="Abrir, guardar o cambiar de proyecto">▣ <span class="desktop-only">PROYECTO</span></button>
       <button type="button" class="button button-primary" id="exportBtn">↓ EXPORTAR</button>
     </div>
   </header>
@@ -38,7 +38,7 @@
     <section class="intro">
       <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · SIGNAL CONSOLE 2.0</div>
         <h1>Tu música, <em>a tu manera.</em></h1>
-        <p>Elige un ritmo, conecta tus voces y arrastra efectos. Puedes cambiar todo sin perder el original.</p>
+        <p>Construye tu sonido conectando pistas, abre sus efectos cuando los necesites y guarda tus mejores samples.</p>
       </div>
       <div class="intro-decoration" aria-hidden="true"><span>/// 48K</span><span>WAVEFORM</span></div>
     </section>
@@ -54,7 +54,7 @@
       </button>
     </section>
     <section class="flow-studio" id="flowArea" aria-label="Laboratorio de conexiones musicales">
-      <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Signal Flow</h2><p>Dos flujos en paralelo — voz y pistas. Conecta la salida de un nodo a la entrada del siguiente, inserta efectos y combina tus samples.</p></div><div class="flow-heading-actions"><button type="button" class="mini-action" id="flowChain" title="Encadenar automáticamente pistas de voz y música hasta sus buses">⇢ ENCADENAR</button><button type="button" class="mini-action" id="flowArrange" title="Reorganizar los nodos sin alterar el audio">⊞ ORDENAR</button><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div></div>
+      <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Signal Flow</h2><p>Conecta voces y pistas. Cada sonido tiene sus propios FX; MASTER FX procesa toda la mezcla. Guarda o reutiliza samples desde una mesa independiente.</p></div><div class="flow-heading-actions"><button type="button" class="mini-action" id="flowChain" title="Conectar en serie las pistas de cada tipo hasta su bus">⇢ AUTO CONECTAR</button><button type="button" class="mini-action" id="flowArrange" title="Ordenar los nodos sin cambiar el sonido">⊞ ORDENAR</button><button type="button" class="mini-action" id="flowFullscreen" aria-pressed="false" title="Usar el canvas a pantalla completa">⛶ PANTALLA COMPLETA</button><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div></div>
       <div id="flowBody"></div>
     </section>
     <section class="sample-deck" id="sampleDeck" hidden aria-label="Banco de 12 samples personalizados"><div id="sampleDeckBody"></div></section>

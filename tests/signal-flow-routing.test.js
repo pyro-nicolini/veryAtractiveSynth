@@ -5,10 +5,11 @@ import {patchValues,applyPatchPreset} from '../src/patch-presets.js';
 import {readFileSync} from 'node:fs';
 const track=(id,bus='music',flowTo)=>({id,type:bus==='vocals'?'voice':'audio',bus,flowTo});
 test('legacy project audio retains direct-to-bus routing',()=>{
- const tracks=[track('first','vocals'),track('second','vocals'),track('beat','music')];
+ const tracks=[track('first','vocals'),track('second','vocals'),track('beat','music'),track('one-shot','samples')];
  assert.equal(routeFor(tracks[0],tracks),'bus:vocals');
  assert.equal(routeFor(tracks[2],tracks),'bus:music');
- assert.equal(routeMap(tracks).size,3);
+ assert.equal(routeFor(tracks[3],tracks),'bus:samples');
+ assert.equal(routeMap(tracks).size,4);
 });
 test('real serial connections support same-lane links and block cycles and cross-lane paths',()=>{
  const tracks=[track('voice1','vocals','track:voice2'),track('voice2','vocals','bus:vocals'),track('drums','music','bus:music')];
@@ -25,7 +26,7 @@ test('track DSP output physically connects into next track input before entering
  const tracks=[track('a','vocals','track:b'),track('b','vocals','bus:vocals'),track('c','music')];
  const mk=()=>({destinations:[],disconnect(){this.destinations=[];},connect(n){this.destinations.push(n);}});
  const graphs=new Map(tracks.map(t=>[t.id,{input:mk(),meter:mk()}]));
- const buses=new Map([['vocals',{gain:mk()}],['music',{gain:mk()}]]);
+ const buses=new Map([['vocals',{gain:mk()}],['music',{gain:mk()}],['samples',{gain:mk()}],['fx',{gain:mk()}]]);
  const master=mk();
  wireAudioGraphs(tracks,graphs,buses,master);
  assert.deepEqual(graphs.get('a').meter.destinations,[graphs.get('b').input]);

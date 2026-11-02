@@ -16,9 +16,10 @@ import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAu
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
 import {canConnect,chainLane} from './flow-routing.js';
-import {listLibrarySamples,loadLibrarySample,deleteLibrarySample} from './sample-library.js';
+import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
 import {listPatchPresets,savePatchPreset,deletePatchPreset,applyPatchPreset} from './patch-presets.js';
+import {MASTER_FX_DEFAULTS,sanitiseMasterFx} from './master-fx.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
@@ -29,9 +30,10 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
 const HELP={
-  flowStudio:['Conexiones de sonido','Cada planeta representa una pista real de tu canción. Arrastra un efecto desde la paleta hasta el nodo o tócalo y luego elige una pista. Retirar un efecto lo desactiva sin perder sus parámetros. Desconectar un cable silencia esa pista sin borrar sus clips ni ajustes; puedes volver a conectarla. Los cables vibran con el nivel audible real. Arrastra la parte superior del planeta para moverlo.'],
+  flowStudio:['Signal Flow','Cada tarjeta es una pista real. Arrastra su cabecera para moverla y conecta el puerto derecho con una entrada compatible. Abre FX dentro de una pista para activar sus efectos; esos efectos solo modifican esa pista. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
+  masterFx:['Efectos globales','Estos controles se aplican después de sumar las voces, pistas y samples. LOW y HIGH ajustan el tono general; DRIVE añade saturación; COMP controla la dinámica; DELAY y REVERB añaden espacio. BYPASS desactiva estos efectos sin borrar sus ajustes. El limitador de seguridad permanece activo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
   clipLoop:['Loops de un clip','Selecciona un fragmento del archivo fuente con inicio y final (en segundos), y elige cuántas veces debe repetirse, hasta 64. El loop solo afecta ese clip; las demás pistas conservan su tiempo normal. Puedes duplicar el patrón a la derecha en la misma pista sin crear otra copia del sonido. Para evitar clicks, corta cerca de cruces por cero.'],
@@ -80,7 +82,7 @@ let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},flowOpen:state.flowOpen,zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},masterFx:{...state.masterFx},flowOpen:state.flowOpen,flowExpandedFx:[...state.flowExpandedFx],zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
@@ -88,7 +90,8 @@ function applyProjectOptions(options={}){
   state.recordShiftMs=Math.round(clamp(options.recordShiftMs??0,-300,300));
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
-  state.flowOpen=options.flowOpen!==false;state.zoom=clamp(Number(options.zoom)||1,1,8);
+  state.masterFx=sanitiseMasterFx(options.masterFx);engine.setMasterFx(state.masterFx);
+  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(0,80):[];state.zoom=clamp(Number(options.zoom)||1,1,8);
   state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,5000),y:clamp(p.y,12,3000)}]));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
@@ -181,14 +184,14 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
   const readout=key==='pan'?(value<0?'IZQ '+Math.abs(value):value>0?'DER '+value:'CENTRO'):Math.round(value)+'%';
   return '<div class="dial-wrap" style="--dial-color:'+color+'">'+buttonInfo(key)+'<div class="dial" style="--fill:'+Math.round(pct*.78)+'%"><div class="dial-inner"><span>'+readout+'</span><small>AJUSTE</small></div></div><label for="dial-'+key+'">'+label+'</label><input id="dial-'+key+'" type="range" data-setting="'+key+'" min="'+min+'" max="'+max+'" value="'+value+'" aria-label="'+label+'"></div>';
 }
-function addTrack(buffer,name,type='audio',offset=0){
+function addTrack(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
-  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:type==='voice'?'vocals':'music'};
+  const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:bus||(type==='voice'?'vocals':'music')};
   checkpoint();
-  const previous=state.tracks.filter(x=>!x.flowHidden&&busForTrack(x)===t.bus).at(-1);
+  const previous=chain?state.tracks.filter(x=>!x.flowHidden&&busForTrack(x)===t.bus).at(-1):null;
   t.flowTo='bus:'+t.bus;
   if(previous&&(!previous.flowTo||previous.flowTo==='bus:'+t.bus))previous.flowTo='track:'+id;
-  state.tracks.push(t);state.selected=id;state.selectedClip=null;render();if(engine.playing)restartPlayback();
+  state.tracks.push(t);state.selected=id;state.selectedClip=null;if(!deferRender){render();if(engine.playing)restartPlayback();}
   return t;
 }
 function render(){
@@ -222,27 +225,82 @@ function render(){
 function renderLibrary(){
   if($('#libraryBody'))$('#libraryBody').innerHTML=libraryMarkup(state.libraryTab);
 }
+function syncFlowTransport(){
+  const button=$('[data-flow-play]');if(!button)return;
+  button.textContent=engine.playing?'Ⅱ':'▶';
+  button.setAttribute('aria-label',engine.playing?'Pausar reproducción':'Reproducir mezcla');
+}
 function renderFlow(){
   const area=$('#flowArea'),body=$('#flowBody');
   if(!area||!body)return;
   area.hidden=!state.flowOpen;
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
-  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets());
-  if(state.flowArmedEffect){
-    const tile=Array.from(body.querySelectorAll('[data-flow-palette]')).find(el=>el.dataset.flowPalette===state.flowArmedEffect);
-    tile?.classList.add('is-armed');
-  }
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx,state.master);
+  syncFlowTransport();
+  area.classList.toggle('is-fullscreen',state.flowFullscreen);
+  $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
+  $('#flowFullscreen')?.setAttribute('aria-label',state.flowFullscreen?'Salir de pantalla completa':'Pantalla completa');
   // Keep the audio-reactive cable loop independent from timeline/transport UI.
   if(engine.playing)startFlowMotion();
   else paintFlow(false);
 }
+
+function setFlowFullscreen(force){
+  state.flowFullscreen=typeof force==='boolean'?force:!state.flowFullscreen;
+  const area=$('#flowArea');
+  area?.classList.toggle('is-fullscreen',state.flowFullscreen);
+  document.body.classList.toggle('flow-fullscreen-open',state.flowFullscreen);
+  $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
+  const button=$('#flowFullscreen');if(button)button.textContent=state.flowFullscreen?'↙ VOLVER':'⛶ PANTALLA COMPLETA';
+  requestAnimationFrame(()=>{invalidateFlowWireGeometry(area);paintFlow(engine.playing);});
+}
+async function openSampleDesk(){
+  const area=$('#sampleDeck');if(!area)return;
+  stopFlowMotion();
+  area.hidden=false;area.classList.add('is-fullscreen');document.body.classList.add('sample-desk-open');
+  $('#sampleToggle')?.setAttribute('aria-expanded','true');
+  await state.sampleDeck?.load();
+}
+function closeSampleDesk(){
+  const area=$('#sampleDeck');if(!area)return;
+  area.classList.remove('is-fullscreen');area.hidden=true;document.body.classList.remove('sample-desk-open');
+  $('#sampleToggle')?.setAttribute('aria-expanded','false');
+  if(engine.playing)startFlowMotion();
+}
+function openTrackSampleDialog(trackId){
+  const track=state.tracks.find(item=>item.id===trackId);
+  if(!track?.buffer)return toast('No se encontró el audio de esta pista');
+  if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de guardar un sample');
+  state.pendingSampleTrackId=trackId;
+  modal('Guardar en Sample Desk',
+    '<p>Crearás una copia reutilizable. La pista original y su posición no cambiarán.</p>'+
+    '<div class="field"><label for="sampleExportName">Nombre del sample</label><input id="sampleExportName" maxlength="60" value="'+html(track.name)+'"></div>'+
+    '<div class="note">CON FX incluye los efectos de esta pista y MASTER. ORIGINAL guarda el sonido sin procesar.</div>',
+    [{label:'GUARDAR ORIGINAL',type:'save-sample-original'},{label:'GUARDAR CON FX',type:'save-sample-processed',primary:true}]);
+}
+async function saveTrackAsSample(trackId,processed,name){
+  if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de guardar un sample');
+  const track=state.tracks.find(item=>item.id===trackId);if(!track?.buffer)return toast('No se encontró el audio de esta pista');
+  const sampleName=String(name||'').trim().slice(0,60);if(!sampleName)return toast('El sample necesita un nombre');
+  try{
+    const source={...track,offset:0,muted:false,solo:false};
+    const wav=await engine.exportMix([source],{depth:32,rate:48000,dry:!processed});
+    const buffer=await engine.decode(new File([wav],safeFilename(sampleName)+'.wav',{type:'audio/wav'}));
+    const saved=await saveLibrarySample({buffer,from:0,to:buffer.duration,name:sampleName,fx:processed?'rendered':'original'});
+    state.pendingSampleTrackId=null;modalStack.length=0;$('#modalRoot').innerHTML='';
+    await state.sampleDeck?.refreshAssets?.();await refreshFlowAssets();
+    toast('Guardado en SAMPLE DESK: '+saved.name);
+  }catch(error){toast('No se pudo guardar el sample: '+error.message);}
+}
+
 let flowMotionFrame=0;
 let flowMotionLast=0;
 let flowInViewport=true;
 const FLOW_FRAME_MS=1000/60;
 function flowMotionAllowed(){
-  return state.flowOpen&&engine.playing&&!document.hidden&&flowInViewport&&
+  const sampleDeskOpen=$('#sampleDeck')?.classList.contains('is-fullscreen');
+  return state.flowOpen&&!sampleDeskOpen&&engine.playing&&!document.hidden&&flowInViewport&&
     !!$('#flowBoard')&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 function paintFlow(animate=flowMotionAllowed(),time=performance.now()){
@@ -358,7 +416,12 @@ function deleteFlowNode(id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   checkpoint();
   if(!t.muted){t.muted=true;engine.updateTrack(t);toast('Conexión cortada. Supr de nuevo retira el nodo.');}
-  else{t.flowHidden=true;toast('Nodo retirado. La pista se conserva en Tu mezcla, puedes restaurarla con ↗.');}
+  else{
+    const fallback='bus:'+busForTrack(t);
+    for(const source of state.tracks)if(source.id!==t.id&&source.flowTo==='track:'+t.id){source.flowTo=fallback;engine.updateTrack(source);}
+    t.flowHidden=true;state.flowExpandedFx=state.flowExpandedFx.filter(id=>id!==t.id);
+    toast('Nodo retirado del mapa. Las pistas conectadas continúan hacia su bus; el audio original sigue en Tu mezcla.');
+  }
   render();
   if(!t.flowHidden){
     requestAnimationFrame(()=>{
@@ -371,7 +434,7 @@ function deleteTrack(id){
   if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de borrar');
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(!window.confirm('¿Eliminar la pista "'+t.name+'"? Puedes deshacer con Ctrl+Z.'))return;
-  checkpoint();state.tracks=state.tracks.filter(x=>x.id!==id);delete state.flowPositions[id];
+  checkpoint();for(const source of state.tracks)if(source.id!==id&&source.flowTo==='track:'+id){source.flowTo='bus:'+busForTrack(t);engine.updateTrack(source);}state.tracks=state.tracks.filter(x=>x.id!==id);delete state.flowPositions[id];state.flowExpandedFx=state.flowExpandedFx.filter(key=>key!==id);
   state.selected=state.tracks[0]?.id||null;state.selectedClip=null;
   if(engine.playing){engine.stop();state.position=0;cancelAnimationFrame(raf);}
   modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Pista eliminada. Puedes deshacer.');
@@ -392,7 +455,7 @@ async function refreshFlowAssets(){
   try{state.sampleAssets=await listLibrarySamples();renderFlow();}
   catch(error){toast('Biblioteca no disponible: '+error.message);}
 }
-async function insertFlowSample(ref,targetId=null){
+async function insertFlowSample(ref,targetId=null,targetRoute=null){
   if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de añadir audio');
   try{
     await state.sampleDeck?.load();
@@ -400,10 +463,14 @@ async function insertFlowSample(ref,targetId=null){
     if(!pad)throw Error('No se encontró el sample guardado');
     const ctx=await engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
     const dest=state.tracks.find(t=>t.id===targetId);
-    const track=addTrack(buffer,pad.name,dest?.type==='voice'?'voice':'audio',state.position);
+    const bus=dest?busForTrack(dest):targetRoute?.startsWith('bus:')?targetRoute.slice(4):'samples';
+    const track=addTrack(buffer,pad.name,'audio',state.position,BUS_IDS.includes(bus)?bus:'samples',false,true);
+    track.sourceKind='sample';
     if(dest){track.bus=busForTrack(dest);track.flowTo='track:'+dest.id;}
-    Object.assign(track,sampleEffect(pad.fx).settings);render();restartPlayback();
-    toast('Sample insertado como nodo: '+pad.name);
+    else track.flowTo=targetRoute==='master'?'master':'bus:'+(BUS_IDS.includes(bus)?bus:'samples');
+    Object.assign(track,sampleEffect(pad.fx).settings);
+    engine.updateTrack(track);render();restartPlayback();queueAutosave();
+    toast('Sample añadido a '+(dest?dest.name:targetRoute==='master'?'MASTER':BUS_LABELS[bus]||'SAMPLE BUS'));
   }catch(error){toast('No se pudo insertar el sample: '+error.message);}
 }
 function useFlowPreset(presetId,trackId){
@@ -441,23 +508,25 @@ function setupFlow(){
     if(document.hidden)stopFlowMotion();else startFlowMotion();
   });
   $('#flowToggle').onclick=()=>{
+    if(state.flowOpen&&state.flowFullscreen)setFlowFullscreen(false);
     state.flowOpen=!state.flowOpen;if(!state.flowOpen)stopFlowMotion();renderFlow();queueAutosave();
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
+  $('#flowFullscreen').onclick=()=>setFlowFullscreen();
   $('#flowHelp').onclick=()=>help('flowStudio');
   $('#flowChain').onclick=()=>{
     if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de conectar');
     checkpoint();
-    for(const bus of ['vocals','music']){
+    for(const bus of ['vocals','music','fx']){
       const links=chainLane(state.tracks,bus);
       for(const track of state.tracks)if(links.has(track.id))track.flowTo=links.get(track.id);
     }
     state.flowArmedOutput=null;state.flowPositions={};
-    renderFlow();restartPlayback();queueAutosave();toast('Voz y pistas encadenadas en dos líneas.');
+    renderFlow();restartPlayback();queueAutosave();toast('Cadenas organizadas por tipo de sonido.');
   };
   $('#flowArrange').onclick=()=>{
     checkpoint();state.flowPositions={};renderFlow();queueAutosave();
-    toast('Rutas ordenadas en líneas de voz, instrumentos y efectos.');
+    toast('Nodos ordenados por líneas de voz y pistas.');
   };
   $('#libraryHelp').onclick=()=>help('library');
   library.addEventListener('click',event=>{
@@ -467,43 +536,51 @@ function setupFlow(){
     if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
   });
   body.addEventListener('click',event=>{
+    if(event.target.closest('[data-flow-play]')){Promise.resolve(playPause()).finally(syncFlowTransport);return;}
+    if(event.target.closest('[data-flow-stop]')){stop();syncFlowTransport();return;}
     if(event.target.closest('[data-flow-destination]'))return;
-    if(event.target.closest('[data-flow-open-deck]')){const area=$('#sampleDeck');if(area?.hidden)$('#sampleToggle')?.click();else area?.scrollIntoView({behavior:'smooth'});return;}
+    const dock=event.target.closest('[data-flow-sample-dock]');
+    if(dock){openSampleDesk();return;}
+    if(event.target.closest('[data-flow-add-voice]')){$('#recordBtn')?.click();return;}
+    if(event.target.closest('[data-flow-add-track]')){$('#importBtn')?.click();return;}
     const output=event.target.closest('[data-flow-out]');
-    if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida lista · toca la entrada de otro nodo, bus o MASTER');return;}
+    if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida seleccionada · ahora elige una entrada compatible');return;}
     const input=event.target.closest('[data-flow-in]');
     if(input){if(state.flowArmedOutput)connectFlow(state.flowArmedOutput,input.dataset.flowIn.startsWith('bus:')||input.dataset.flowIn==='master'?input.dataset.flowIn:'track:'+input.dataset.flowIn);return;}
+    const expand=event.target.closest('[data-flow-expand-fx]');
+    if(expand){
+      const id=expand.dataset.flowExpandFx,items=new Set(state.flowExpandedFx);
+      if(items.has(id))items.delete(id);else items.add(id);
+      state.flowExpandedFx=[...items];renderFlow();queueAutosave();return;
+    }
+    const effectToggle=event.target.closest('[data-flow-effect-toggle]');
+    if(effectToggle){
+      const active=effectToggle.getAttribute('aria-pressed')==='true';
+      applyFlowFx(effectToggle.dataset.flowOwner,effectToggle.dataset.flowEffectToggle,!active);return;
+    }
+    if(event.target.closest('[data-flow-master-help]')){help('masterFx');return;}
+    const masterBypass=event.target.closest('[data-master-fx-bypass]');
+    if(masterBypass){
+      checkpoint();state.masterFx=sanitiseMasterFx({...state.masterFx,bypass:masterBypass.checked});
+      engine.setMasterFx(state.masterFx);renderFlow();queueAutosave();return;
+    }
     const fxSave=event.target.closest('[data-flow-save-fx]');
     if(fxSave){
       const track=state.tracks.find(t=>t.id===fxSave.dataset.flowSaveFx);if(!track)return;
-      const name=prompt('Nombre del preset de efectos:',track.name+' · FX');
-      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Cadena FX guardada en Mis efectos');}
+      const name=prompt('Nombre para esta cadena de efectos:',track.name+' · FX');
+      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Preset guardado en este equipo.');}
       catch(error){toast(error.message);}return;
     }
     const fxDelete=event.target.closest('[data-flow-delete-preset]');
-    if(fxDelete){
-      if(confirm('¿Eliminar este preset FX guardado?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}
-      return;
-    }
+    if(fxDelete){if(confirm('¿Eliminar este preset?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}return;}
     const fxPreset=event.target.closest('[data-flow-preset]');
-    if(fxPreset){
-      if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);
-      else{state.flowArmedPreset=fxPreset.dataset.flowPreset;toast('Selecciona una pista para aplicar este preset');}
-      return;
-    }
+    if(fxPreset){if(fxPreset.dataset.flowOwner||state.selected)useFlowPreset(fxPreset.dataset.flowPreset,fxPreset.dataset.flowOwner||state.selected);else toast('Selecciona primero una pista.');return;}
+    const sampleSave=event.target.closest('[data-flow-export-sample]');
+    if(sampleSave){openTrackSampleDialog(sampleSave.dataset.flowExportSample);return;}
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
-    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado de la biblioteca?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
+    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
     const sample=event.target.closest('[data-flow-sample]');
     if(sample){insertFlowSample(sample.dataset.flowSample);return;}
-    const tile=event.target.closest('[data-flow-palette]');
-    if(tile){
-      state.flowArmedEffect=state.flowArmedEffect===tile.dataset.flowPalette?null:tile.dataset.flowPalette;
-      state.flowArmedLibrary=null;renderFlow();
-      if(state.flowArmedEffect)toast('Ahora toca el planeta donde quieres conectar el efecto');
-      return;
-    }
-    const remove=event.target.closest('[data-flow-effect]');
-    if(remove){applyFlowFx(remove.dataset.flowOwner,remove.dataset.flowEffect,false);return;}
     const deletion=event.target.closest('[data-flow-delete]');
     if(deletion){deleteFlowNode(deletion.dataset.flowDelete);return;}
     const link=event.target.closest('[data-flow-link]');
@@ -513,19 +590,43 @@ function setupFlow(){
     const node=event.target.closest('[data-flow-track]');
     if(node){selectFlowTrack(node.dataset.flowTrack);}
   });
+  body.addEventListener('input',event=>{
+    const masterVolume=event.target.closest('[data-flow-master-volume]');
+    if(masterVolume){
+      state.master=Number(masterVolume.value);engine.setMaster(state.master);
+      $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
+      queueAutosave();return;
+    }
+    const control=event.target.closest('[data-master-fx]');
+    if(!control)return;
+    const key=control.dataset.masterFx;
+    state.masterFx=sanitiseMasterFx({...state.masterFx,[key]:Number(control.value)});
+    engine.setMasterFx(state.masterFx);
+    const output=Array.from(body.querySelectorAll('[data-master-fx-value]')).find(el=>el.dataset.masterFxValue===key);
+    if(output)output.textContent=control.value+(key==='low'||key==='high'?' dB':'%');
+    queueAutosave();
+  });
   body.addEventListener('change',event=>{
     const select=event.target.closest('[data-flow-destination]');
-    if(!select)return;
-    connectFlow(select.dataset.flowDestination,select.value);
+    if(select){connectFlow(select.dataset.flowDestination,select.value);return;}
+    const control=event.target.closest('[data-master-fx]');
+    if(control){queueAutosave();return;}
+  });
+  body.addEventListener('pointerdown',event=>{
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume]'))checkpoint();
+  });
+  body.addEventListener('keydown',event=>{
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume]')&&
+       ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)&&!event.repeat)checkpoint();
   });
   let dragged=null;
   function startDrag(event){
-    const effect=event.target.closest('[data-flow-palette]');
-    const sample=event.target.closest('[data-flow-sample]');
+    const sampleSave=event.target.closest('[data-flow-export-sample]');
     const fxPreset=event.target.closest('[data-flow-preset]');
     const libraryItem=event.target.closest('[data-library-item]');
     const chip=event.target.closest('[data-flow-effect]');
-    dragged=fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:sample?{kind:'sample',id:sample.dataset.flowSample}:effect?{kind:'effect',id:effect.dataset.flowPalette}:
+    dragged=sampleSave?{kind:'track',id:sampleSave.dataset.flowExportSample}:
+      fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
       chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
     if(dragged&&event.dataTransfer){
@@ -537,24 +638,30 @@ function setupFlow(){
   body.addEventListener('dragstart',startDrag);
   body.addEventListener('dragover',event=>{
     if(!dragged)return;
-    if(event.target.closest('[data-flow-track],#flowRemoveZone,#flowBoard')){
+    if(event.target.closest('[data-flow-track],[data-flow-in],[data-flow-sample-dock],#flowBoard')){
       event.preventDefault();event.dataTransfer.dropEffect='copy';
     }
   });
   body.addEventListener('drop',event=>{
     if(!dragged)return;
-    event.preventDefault();
-    const target=event.target.closest('[data-flow-track]'),removal=event.target.closest('#flowRemoveZone');
-    const item=dragged;dragged=null;
+    const item=dragged;dragged=null;event.preventDefault();
+    const dock=event.target.closest('[data-flow-sample-dock]');
+    const target=event.target.closest('[data-flow-track]');
+    const input=event.target.closest('[data-flow-in]');
+    const route=input?.dataset.flowIn||null;
+    const removal=event.target.closest('#flowRemoveZone');
+    if(dock&&item.kind==='track'){openTrackSampleDialog(item.id);return;}
     if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
-    if(item.kind==='sample'){insertFlowSample(item.id,target?.dataset.flowTrack||null);return;}
-    if(item.kind==='preset'){if(target)useFlowPreset(item.id,target.dataset.flowTrack);else toast('Suelta el preset sobre una pista');return;}
+    if(item.kind==='sample'){
+      insertFlowSample(item.id,target?.dataset.flowTrack||null,target?null:route);return;
+    }
+    if(item.kind==='preset'){if(target)useFlowPreset(item.id,target.dataset.flowTrack);else toast('Suelta el preset sobre una pista.');return;}
     if(!target&&item.kind==='rhythms'){chooseLibraryItem('rhythms',item.id);return;}
-    if(!target)return toast('Suelta el efecto sobre una pista');
-    const id=target.dataset.flowTrack;
-    if(item.kind==='effect')applyFlowFx(id,item.id,true);
-    else if(item.kind==='remove-fx')applyFlowFx(id,item.id,true);
-    else chooseLibraryItem(item.kind,item.id,id);
+    if(!target)return toast('Arrastra un sample a una pista, bus o MASTER; o un nodo a SAMPLE DESK.');
+    if(item.kind==='track')return;
+    if(item.kind==='effect')applyFlowFx(target.dataset.flowTrack,item.id,true);
+    else if(item.kind==='remove-fx')applyFlowFx(target.dataset.flowTrack,item.id,true);
+    else chooseLibraryItem(item.kind,item.id,target.dataset.flowTrack);
   });
   body.addEventListener('dragend',()=>{dragged=null;});
   library.addEventListener('dragend',()=>{dragged=null;});
@@ -564,32 +671,28 @@ function setupFlow(){
     const board=$('#flowBoard'),id=handle.dataset.flowDrag,node=handle.closest('[data-flow-track]');
     if(!board||!node)return;
     event.preventDefault();
-    const index=state.tracks.findIndex(t=>t.id===id);
     const point={x:node.offsetLeft,y:node.offsetTop},step=event.shiftKey?40:12;
     const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,Math.max(12,board.clientWidth-440));
     const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
     if(x!==point.x||y!==point.y){
-      checkpoint();state.flowPositions[id]={x,y};
-      node.style.left=x+'px';node.style.top=y+'px';invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
+      checkpoint();state.flowPositions[id]={x,y};node.style.left=x+'px';node.style.top=y+'px';
+      invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
     }
   });
   body.addEventListener('pointerdown',event=>{
+    if(event.target.closest('[data-flow-export-sample]'))return;
     const out=event.target.closest('[data-flow-out]');
     if(out&&event.button===0){
-      const board=$('#flowBoard'),svg=$('#flowWires');
-      if(!board||!svg)return;
+      const board=$('#flowBoard'),svg=$('#flowWires');if(!board||!svg)return;
       const a=out.getBoundingClientRect(),r=board.getBoundingClientRect();
       const path=document.createElementNS('http://www.w3.org/2000/svg','path');
       path.classList.add('flow-wire','patch-wire-preview');svg.appendChild(path);
-      state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,
-        startX:event.clientX,startY:event.clientY,x:a.right-r.left,y:a.top-r.top+a.height/2,
-        moved:false,board,path};
-      return;
+      state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
+        x:a.right-r.left,y:a.top-r.top+a.height/2,moved:false,board,path};return;
     }
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;
-    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');
-    if(!node||!board)return;
+    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');if(!node||!board)return;
     event.preventDefault();handle.setPointerCapture(event.pointerId);
     const position={x:node.offsetLeft,y:node.offsetTop};
     state.flowDrag={id:node.dataset.flowTrack,startX:event.clientX,startY:event.clientY,x:position.x,y:position.y,node,board};
@@ -600,44 +703,44 @@ function setupFlow(){
     if(cable&&event.pointerId===cable.pointerId){
       const r=cable.board.getBoundingClientRect();
       cable.moved=cable.moved||Math.hypot(event.clientX-cable.startX,event.clientY-cable.startY)>6;
-      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));
-      return;
+      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));return;
     }
     if(!state.flowDrag)return;
     const drag=state.flowDrag,board=drag.board;
     const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
     const y=clamp(drag.y+event.clientY-drag.startY,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
-    drag.node.style.left=x+'px';drag.node.style.top=y+'px';
-    drag.next={x,y};invalidateFlowWireGeometry(flowArea);paintFlow();
+    drag.node.style.left=x+'px';drag.node.style.top=y+'px';drag.next={x,y};
+    invalidateFlowWireGeometry(flowArea);paintFlow();
   });
   const finish=event=>{
     const drag=state.flowDrag;if(!drag)return;
     state.flowDrag=null;drag.node.classList.remove('is-dragging');
     if(event.type!=='pointercancel'&&drag.next){
       const prior=state.flowPositions[drag.id]||{x:drag.x,y:drag.y};
-      if(prior.x!==drag.next.x||prior.y!==drag.next.y){
-        checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();
-      }
+      if(prior.x!==drag.next.x||prior.y!==drag.next.y){checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();}
     }else{drag.node.style.left=drag.x+'px';drag.node.style.top=drag.y+'px';}
     invalidateFlowWireGeometry(flowArea);paintFlow();
   };
   body.addEventListener('pointerup',finish);body.addEventListener('pointercancel',finish);
   const finishCable=event=>{
-    const cable=state.flowCableDrag;
-    if(!cable||event.pointerId!==cable.pointerId)return;
-    state.flowCableDrag=null;cable.path.remove();
-    if(event.type==='pointercancel')return;
+    const cable=state.flowCableDrag;if(!cable||event.pointerId!==cable.pointerId)return;
+    state.flowCableDrag=null;cable.path.remove();if(event.type==='pointercancel')return;
     const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-flow-in]');
     if(target){
       const raw=target.dataset.flowIn;
-      connectFlow(cable.id,raw==='master'||raw.startsWith('bus:')?raw:'track:'+raw);
-      return;
+      connectFlow(cable.id,raw==='master'||raw.startsWith('bus:')?raw:'track:'+raw);return;
     }
     state.flowArmedOutput=cable.id;
-    if(cable.moved)toast('Cable preparado · pulsa el puerto de entrada deseado.');
+    if(cable.moved)toast('Elige ahora una entrada compatible para completar la conexión.');
   };
   document.addEventListener('pointerup',finishCable);
   document.addEventListener('pointercancel',finishCable);
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    if($('#modalBackdrop')){closeModal();event.preventDefault();return;}
+    if($('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();return;}
+    if(state.flowFullscreen){setFlowFullscreen(false);event.preventDefault();}
+  });
 }
 
 function alignWaveRuler(){
@@ -1945,6 +2048,11 @@ function handleTrackAction(action,id){
   }
 }
 function handleModalAction(action){
+  if(action==='save-sample-original'||action==='save-sample-processed'){
+    const id=state.pendingSampleTrackId,name=$('#sampleExportName')?.value||'';
+    if(!id)return toast('Selecciona primero una pista');
+    saveTrackAsSample(id,action==='save-sample-processed',name);return;
+  }
   if(action==='close-modal'||action==='close'){closeModal();return;}
   if(action==='session-record'){toggleSessionRecording();return;}
   if(action==='tune-open'){openTuneLab('track');return;}
@@ -2109,7 +2217,7 @@ function setupSamples(){
  const root=$('#sampleDeckBody');
  if(!root)return;
  const deck=new SampleDeck({
-  root,engine,onMessage:toast,onLibraryChanged:refreshFlowAssets,
+  root,engine,onMessage:toast,onLibraryChanged:refreshFlowAssets,onClose:closeSampleDesk,
   onSource:()=>{
    const track=current();
    if(!track)return null;
@@ -2120,10 +2228,15 @@ function setupSamples(){
    return {name:clip.name||track.name,buffer:clip.buffer,
     from:loop?.from??bounds.start,to:loop?.to??bounds.end};
   },
-  onAdd:(buffer,name,settings)=>{
-    const track=addTrack(buffer,name,'audio',state.position);
+  onAdd:(buffer,name,settings,options={})=>{
+    const selected=state.tracks.find(t=>t.id===state.selected);
+    const destination=options.route||'samples';
+    const bus=destination==='selected'&&selected?busForTrack(selected):'samples';
+    const track=addTrack(buffer,name,'audio',state.position,bus,false,true);
+    track.bus=bus;track.sourceKind='sample';
+    track.flowTo=destination==='master'?'master':destination==='selected'&&selected?'track:'+selected.id:'bus:'+bus;
     if(settings)Object.assign(track,settings);
-    engine.updateTrack(track);render();
+    engine.updateTrack(track);render();restartPlayback();queueAutosave();
     return track;
   }
  });
@@ -2132,12 +2245,13 @@ function setupSamples(){
   refreshFlowAssets();
  const area=$('#sampleDeck'),toggle=$('#sampleToggle');
  const open=async()=>{
-  const visible=area.hidden;
-  area.hidden=!visible;
-  toggle.setAttribute('aria-expanded',String(visible));
-  if(visible){await deck.load();area.scrollIntoView({behavior:'smooth',block:'nearest'});}
+  if(area.classList.contains('is-fullscreen')){closeSampleDesk();return;}
+  await openSampleDesk();
  };
  toggle.addEventListener('click',open);
+ root.addEventListener('click',event=>{
+  if(event.target.closest('[data-pad-close-deck]'))closeSampleDesk();
+ });
  document.addEventListener('keydown',event=>{
   if(area.hidden||event.repeat||event.ctrlKey||event.metaKey||event.altKey||
    event.target.closest('input,textarea,select,[contenteditable],button')||$('#modalBackdrop'))return;
@@ -2190,7 +2304,7 @@ function wire(){
   $('#voiceLabBtn').onclick=()=>openTuneLab('live');
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
-  $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=openProjectMenu;
+  $('#exportBtn').onclick=openExport;$('#projectBtn').onclick=openProjectMenu;
   $('#projectInput').onchange=async event=>{await loadPortable(event.target.files?.[0]);event.target.value='';};
   $('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
   document.addEventListener('pointerdown',event=>{if(event.target.matches('[data-setting], #masterVolume'))checkpoint();});

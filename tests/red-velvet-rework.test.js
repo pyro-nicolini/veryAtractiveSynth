@@ -11,9 +11,9 @@ const file=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 test('real vocal and music bus lanes render with routing controls and bus to master',()=>{
   const make=(id,type)=>({id,name:id,type,volume:80,clean:0,brightness:50,warmth:20,
     autotune:0,drive:0,echo:0,space:0,muted:false,fxBypass:{}});
-  const voices=make('lead','voice'),music=make('beat','audio');
-  const markup=flowMarkup([voices,music]);
-  for(const id of ['vocals','music','fx'])
+  const voices=make('lead','voice'),music=make('beat','audio'),fx=make('fx-return','audio');fx.bus='fx';
+  const markup=flowMarkup([voices,music,fx]);
+  for(const id of ['vocals','music','samples','fx'])
     assert.ok(markup.includes('data-flow-bus="'+id+'"'),id);
   assert.match(markup,/data-flow-destination="lead"/);
   assert.match(markup,/data-flow-route="bus:vocals"/);
@@ -21,8 +21,8 @@ test('real vocal and music bus lanes render with routing controls and bus to mas
   assert.match(markup,/SUMADOR|PATCHBAY/);
   assert.match(markup,/data-flow-out="lead"/);
   assert.match(markup,/data-flow-in="lead"/);
-  assert.equal(flowPosition(voices,0).y,128);
-  assert.equal(flowPosition(music,0).y,429);
+  assert.equal(flowPosition(voices,0).y,125);
+  assert.equal(flowPosition(music,0).y,520);
 });
 
 test('sample FX presets are non-destructive data and stored pads retain selection',()=>{
@@ -59,19 +59,22 @@ test('additional stylized vocal presets use parameters of the existing audio eng
 
 test('Red Velvet startup, per-track export and samples are connected and included offline',()=>{
   const html=file('index.html'),app=file('src/app.js'),deck=file('src/sample-deck.js'),
-    theme=file('src/studio-console.css'),sw=file('sw.js'),engine=file('src/engine.js');
+    theme=file('src/signal-flow-v2.css'),sw=file('sw.js'),engine=file('src/engine.js'),portable=file('src/portable-project.js');
   assert.match(html,/Bienvenue\./);
   assert.match(html,/id="splashSkip"/);
-  assert.match(html,/id="flowArrange"/);
-  assert.match(html,/src\/studio-console\.css/);
+  assert.match(html,/id="flowArrange"/);assert.match(html,/id="flowFullscreen"/);
+  assert.match(html,/src\/studio-console\.css/);assert.match(html,/src\/signal-flow-v2\.css/);
   assert.match(app,/data-track-action="export-track"/);
   assert.match(app,/async function performTrackExport/);
-  assert.match(app,/data-flow-destination/);
+  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#modalBackdrop'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
   assert.match(deck,/data-pad-export="dry"/);
-  assert.match(deck,/data-pad-export="wet"/);
+  assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/const wav=processed\s*\?await this\.engine\.exportMix/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
+  assert.match(deck,/data-library-route="samples"/);assert.match(deck,/data-library-route="selected"/);assert.match(deck,/data-library-route="master"/);
+  assert.match(deck,/sampleInsertRoute/);assert.match(deck,/addLibrary\(id,route='samples'\)/);assert.match(deck,/this\.onAdd\(buffer,pad\.name,sampleEffect\(pad\.fx\)\.settings,\{route\}\)/);
+  assert.match(portable,/bus:\(music\|vocals\|samples\|fx\)/);assert.match(portable,/sourceKind:t\.sourceKind==='sample'\?'sample':undefined/);
   assert.match(deck,/this\.engine\.previewSample/);
-  assert.match(engine,/createDryGraph/);
-  assert.match(theme,/prefers-reduced-motion/);
-  for(const path of ['src/splash.js','src/studio-console.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js'])
+  assert.match(engine,/createDryGraph/);assert.match(engine,/setMasterFx\(settings\)/);assert.match(engine,/makeMaster\(offline,offline\.destination,this\.masterVolume,dry\?MASTER_FX_DEFAULTS:this\.masterFx\)/);
+  assert.match(theme,/prefers-reduced-motion/);assert.match(theme,/RED VELVET art direction/);assert.match(theme,/#modalRoot \.modal-backdrop\{z-index:1200\}/);assert.match(theme,/\.toast\{z-index:1300\}/);
+  for(const path of ['src/splash.js','src/studio-console.css','src/signal-flow-v2.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js','src/master-fx.js'])
     assert.ok(sw.includes(path),'offline asset absent: '+path);
 });

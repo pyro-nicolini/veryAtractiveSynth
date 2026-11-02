@@ -7,6 +7,7 @@ import {assembleSessionStereo} from './session-recording.js';
 import {loopBoundaryFades} from './loop-guard.js';
 import {clipSpeed} from './clip-edit.js';
 import {wireAudioGraphs} from './flow-routing.js';
+import {MASTER_FX_DEFAULTS,sanitiseMasterFx} from './master-fx.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -33,14 +34,45 @@ function impulse(ctx,length=1.8){
   }
   return buffer;
 }
-function makeMaster(ctx,destination,volume){
-  const gain=ctx.createGain();gain.gain.value=volume/100;
+function applyMasterFx(graph,settings,ctx){
+  const fx=sanitiseMasterFx(settings),now=ctx.currentTime||0,set=(param,value)=>param.setTargetAtTime(value,now,.02);
+  const off=fx.bypass;
+  set(graph.low.gain,off?0:fx.low);
+  set(graph.high.gain,off?0:fx.high);
+  const drive=off?0:fx.drive;
+  if(graph.lastDrive!==drive){graph.drive.curve=saturationCurve(drive);graph.lastDrive=drive;}
+  const compression=off?0:fx.compression;
+  set(graph.compressor.ratio,compression?1+compression/100*7:1);
+  set(graph.compressor.threshold,compression?-6-compression*.32:0);
+  set(graph.delayWet.gain,off?0:fx.delay/100*.24);
+  set(graph.reverbWet.gain,off?0:fx.reverb/100*.24);
+  graph.settings=fx;
+}
+function makeMaster(ctx,destination,masterVolume,settings=MASTER_FX_DEFAULTS){
+  // The input node is the stable destination for buses; the master fader
+  // lives after processing so moving it never changes drive/compression.
+  const gain=ctx.createGain();gain.gain.value=1;
+  const masterFader=ctx.createGain();masterFader.gain.value=masterVolume/100;
+  const low=ctx.createBiquadFilter();low.type='lowshelf';low.frequency.value=150;
+  const high=ctx.createBiquadFilter();high.type='highshelf';high.frequency.value=7000;
+  const drive=ctx.createWaveShaper();drive.oversample='2x';
+  const compressor=ctx.createDynamicsCompressor();compressor.knee.value=9;compressor.attack.value=.012;compressor.release.value=.18;
+  const dry=ctx.createGain(),delay=ctx.createDelay(1.5),delayWet=ctx.createGain(),feedback=ctx.createGain();
+  delay.delayTime.value=.24;feedback.gain.value=.18;
+  const delaySum=ctx.createGain(),convolver=ctx.createConvolver();convolver.buffer=impulse(ctx,2.1);
+  const reverbWet=ctx.createGain(),reverbSum=ctx.createGain();
   const limiter=ctx.createDynamicsCompressor();
   limiter.threshold.value=-3;limiter.knee.value=3;limiter.ratio.value=16;
   limiter.attack.value=.003;limiter.release.value=.14;
   const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.35;
-  gain.connect(limiter);limiter.connect(meter);meter.connect(destination);
-  return {gain,limiter,meter};
+  gain.connect(low);low.connect(high);high.connect(drive);drive.connect(compressor);
+  compressor.connect(dry);dry.connect(delaySum);
+  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(delaySum);delay.connect(feedback);feedback.connect(delay);
+  delaySum.connect(reverbSum);delaySum.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(reverbSum);
+  reverbSum.connect(limiter);limiter.connect(masterFader);masterFader.connect(meter);meter.connect(destination);
+  const graph={gain,masterFader,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,meter,
+    nodes:[gain,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,masterFader,meter]};
+  applyMasterFx(graph,settings,ctx);return graph;
 }
 function makeBus(ctx,destination,percent){
   const gain=ctx.createGain(),meter=ctx.createAnalyser();
@@ -201,7 +233,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.masterFx={...MASTER_FX_DEFAULTS};this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -209,7 +241,7 @@ export class AudioEngine {
       await context.audioWorklet.addModule(WORKLET_URL);
       await context.audioWorklet.addModule(CAPTURE_URL);
       await context.audioWorklet.addModule(SESSION_URL);
-      this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume);
+      this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume,this.masterFx);
     }
     if(this.ctx.state==='suspended')await this.ctx.resume();
     return this.ctx;
@@ -234,11 +266,16 @@ export class AudioEngine {
 
   setMaster(value){
     this.masterVolume=clamp(value,0,100);
-    if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
+    if(this.output)this.output.masterFader.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
   }
   setBuses(settings){
     this.busSettings=sanitiseBuses(settings);
     for(const [id,bus] of this.buses)bus.gain.gain.setTargetAtTime(this.busSettings[id]/100,this.ctx.currentTime,.02);
+  }
+  setMasterFx(settings){
+    this.masterFx=sanitiseMasterFx(settings);
+    if(this.output&&this.ctx)applyMasterFx(this.output,this.masterFx,this.ctx);
+    return {...this.masterFx};
   }
   getTrackMeter(id){
     const graph=this.graphs.get(id);
@@ -276,7 +313,7 @@ export class AudioEngine {
     gain.gain.setValueAtTime(.0001,time);
     gain.gain.exponentialRampToValueAtTime(accent?.12:.08,time+.002);
     gain.gain.exponentialRampToValueAtTime(.0001,time+.055);
-    osc.connect(gain);gain.connect(this.output.gain);
+    osc.connect(gain);gain.connect(this.output.masterFader);
     osc.start(time);osc.stop(time+.065);
     osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch{}};
   }
@@ -561,9 +598,9 @@ export class AudioEngine {
     const duration=projectDuration(active);
     if(!duration)throw Error('No hay audio que exportar');
     if(duration>60*20)throw Error('El render local admite hasta 20 minutos por exportación');
-    const hasReverb=!dry&&active.some(track=>Number(track.space)>0);
-    const hasDelay=!dry&&active.some(track=>Number(track.echo)>0);
-    const tail=hasReverb?1.9:hasDelay?1.1:.08;
+    const hasReverb=!dry&&(active.some(track=>Number(track.space)>0)||this.masterFx.reverb>0&&!this.masterFx.bypass);
+    const hasDelay=!dry&&(active.some(track=>Number(track.echo)>0)||this.masterFx.delay>0&&!this.masterFx.bypass);
+    const tail=hasReverb?2.35:hasDelay?1.15:.08;
     // Account for the effects tail so the end is not truncated.
     const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
     if(!dry){
@@ -571,7 +608,7 @@ export class AudioEngine {
       try{await offline.audioWorklet.addModule(WORKLET_URL);}
       catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
     }
-    const output=makeMaster(offline,offline.destination,this.masterVolume);
+    const output=makeMaster(offline,offline.destination,this.masterVolume,dry?MASTER_FX_DEFAULTS:this.masterFx);
     const ir=impulse(offline);
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
     const graphs=new Map();

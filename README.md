@@ -12,17 +12,20 @@
 - 🔗 **Signal Flow:** conecta la salida de una pista con la entrada de otra, usa buses reales y arrastra procesadores o samples al editor.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
 
-## 🎛️ Signal Flow 2.0 · edición en rama de revisión
+## 🎛️ Signal Flow V2 · editor modular
 
-- **Dos cadenas en paralelo:** VOICE SIGNAL para voces, TRACK SIGNAL para música y samples; cada línea desemboca en un bus y luego en MASTER. Pulsa **ENCADENAR** para organizar todos los canales existentes en serie o usa sus puertos circulares con clic/arrastre, así como el menú **SALIDA**.
-- **Audio serial de verdad:** una conexión `Pista A → Pista B` envía la señal de A al **procesador de B**, donde se suma a su propio audio y pasa por los FX, volumen y paneo de B. Si silencias B, también se silencia lo que reciba de A. No se permiten ciclos ni conexiones entre las dos líneas de pistas.
-- **Efectos como etapas visibles:** afinación, limpieza, EQ, drive, compresor, delay y reverb muestran su posición en el procesador real. Delay y reverb se encadenan con sus mezclas seco/húmedo. Puedes activar/desactivar FX, mantener sus parámetros y guardar el conjunto de ajustes con **▣ FX** para aplicarlo a otra pista. Por seguridad, el orden interno de los insertos sigue siendo fijo, no libremente reordenable.
-- **Biblioteca reutilizable:** los 12 pads siguen con hotkeys; **Guardar en biblioteca** conserva nuevos recortes por separado en IndexedDB sin el límite de doce pads. Abre **MIS SAMPLES** en la barra del patchbay y arrastra un pad o recorte al canvas o a otra pista.
-- **Exportación:** cada pista puede descargarse WAV seco/procesado 16/24/32-bit o convertirse en una pista nueva, sin sobrescribir la fuente. Cada pad tiene WAV original/con FX. El render de la mezcla utiliza las mismas rutas seriales del reproductor.
-- **Diseño Synth Console:** grafito, relieve de equipo musical, naranja, cian y magenta; sustituye al burdeo de Red Velvet. Se conserva la entrada «Bienvenue» (salto permitido y compatibilidad con movimiento reducido).
-- **Proyectos heredados:** los archivos anteriores mantienen su ruta de bus original hasta cambiarla. El respaldo `.vasproject` guarda `flowTo` de cada pista. Los presets FX y samples locales son **bibliotecas independientes del respaldo**: exporta WAV y guarda por separado tus presets si cambias de equipo.
+- **Canvas principal limpio:** VOICE SIGNAL y TRACK SIGNAL son las dos líneas de fuentes. Los buses de VOZ, MÚSICA y SAMPLES se muestran como destinos; FX RETURN solo aparece cuando se utiliza. Todos llegan a MASTER.
+- **FX como subnodos:** los efectos están cerrados dentro de cada tarjeta. Abre **FX** en una voz o pista para activar/desactivar sus procesadores sin convertirlos en nodos principales ni modificar el archivo original. Los presets guardados se aplican a la pista desde la que se abrieron.
+- **MASTER FX real:** EQ LOW/HIGH, DRIVE, COMP, DELAY y REVERB procesan la mezcla sumada. El mismo grafo se usa en reproducción y render WAV; BYPASS conserva los ajustes y el limitador de seguridad permanece activo. El fader MASTER actúa después de los efectos y del limitador, sin alterar su respuesta.
+- **Sample Desk fullscreen:** conserva los 12 pads y añade una biblioteca local en IndexedDB, con preview, insertar y eliminar. Cada sample guardado y cada pad permite elegir destino: SAMPLE BUS, pista seleccionada o MASTER. Arrastra el asa ♫ de cualquier pista al dock SAMPLE DESK para guardar una copia; el diálogo permite elegir audio ORIGINAL o CON FX (FX de pista + Master). La pista de origen nunca se modifica.
+- **Fullscreen Flow:** canvas ampliado y desplazable, nodos movibles, conectores IN/OUT, controles compactos de play/stop y volumen Master. Puedes conectar arrastrando un cable o seleccionando salida y entrada. Se bloquean los ciclos y las conexiones entre pistas de líneas distintas.
+- **Feedback y aprendizaje:** las ondas, cables y buses responden a analizadores reales; los estados idle/playing/muted son distinguibles. El canvas vacío enseña los tres pasos básicos y Master FX tiene ayuda contextual.
+- **Navegación simplificada:** abrir y guardar están agrupados en **PROYECTO**; Flow, Sample Desk, Mixer, Voice Lab y Exportar siguen accesibles. La dirección visual **Red Velvet** usa fondos vino profundos, superficies glassmorphism, controles rose-metal con volumen 3D CSS y acentos cian/magenta para distinguir señales, con contraste reforzado y menos contenedores.
+- **Compatibilidad:** el bus SAMPLES tiene nivel por defecto 100 en proyectos antiguos. Master FX se guarda en opciones del proyecto y en archivos portables. La biblioteca de samples y los presets FX permanecen locales a este navegador; no se suben al archivo de proyecto ni a servidores.
 
-Los presets vocales adicionales son transformaciones estilizadas, no conversión realista de formantes o identidades. Los tests JS automatizados comprueban rutas y persistencia; sigue pendiente validación auditiva y QA de puertos táctiles en Chrome/Edge antes de fusionar con `main`.
+Los tests automatizados de rutas, Master FX, subnodos, persistencia y sintaxis pasan en GitHub Actions. La escucha comparativa, el arrastre táctil y la comprobación visual final en Chrome/Edge siguen siendo QA manual antes de fusionar o desplegar.
+
+Checklist de aceptación y handoff para continuar con Codex: [docs/QA-SIGNAL-FLOW-V2.md](docs/QA-SIGNAL-FLOW-V2.md).
 
 ## 🚀 Instalar y ejecutar
 
