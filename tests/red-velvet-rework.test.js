@@ -68,7 +68,7 @@ test('Red Velvet startup, per-track export and samples are connected and include
   assert.match(app,/async function performTrackExport/);
   assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#modalBackdrop'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
   assert.match(deck,/data-pad-export="dry"/);
-  assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
+  assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/const wav=processed\s*\?await this\.engine\.exportMix/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
   assert.match(deck,/data-library-route="samples"/);assert.match(deck,/data-library-route="selected"/);assert.match(deck,/data-library-route="master"/);
   assert.match(deck,/sampleInsertRoute/);assert.match(deck,/addLibrary\(id,route='samples'\)/);assert.match(deck,/this\.onAdd\(buffer,pad\.name,sampleEffect\(pad\.fx\)\.settings,\{route\}\)/);
   assert.match(portable,/bus:\(music\|vocals\|samples\|fx\)/);assert.match(portable,/sourceKind:t\.sourceKind==='sample'\?'sample':undefined/);
