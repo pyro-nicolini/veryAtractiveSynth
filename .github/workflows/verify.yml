@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, DesignPhase]
   pull_request:
-    branches: [main, DesignPhase]
+    branches: [main, DesignPhase, feat/red-velvet-flow-export]
 permissions:
   contents: read
 jobs:
