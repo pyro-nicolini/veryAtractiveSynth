@@ -77,3 +77,10 @@ test('transport cannot halt the visualizer by iterating a single HTMLElement',()
   const ticker=source.slice(source.indexOf('function runTicker(){'),source.indexOf('async function playPause(){'));
   assert.doesNotMatch(ticker,/paintFlow\(/,'cable animation is not coupled to transport loop');
 });
+
+test('fullscreen Sample Desk suspends hidden Flow animation and resumes it on close',()=>{
+ const source=read('src/app.js');
+ assert.match(source,/function flowMotionAllowed\(\)\{\s*const sampleDeskOpen=\$\('#sampleDeck'\)\?\.classList\.contains\('is-fullscreen'\);\s*return state\.flowOpen&&!sampleDeskOpen&&engine\.playing/);
+ assert.match(source,/async function openSampleDesk\(\)\{\s*const area=\$\('#sampleDeck'\);if\(!area\)return;\s*stopFlowMotion\(\);/);
+ assert.match(source,/function closeSampleDesk\(\)\{[\s\S]*?if\(engine\.playing\)startFlowMotion\(\);/);
+});
