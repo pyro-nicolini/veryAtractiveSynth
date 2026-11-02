@@ -492,7 +492,7 @@ function connectFlow(id,to){
 
 function setupFlow(){
   renderLibrary();
-  const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody'),sampleRoot=$('#sampleDeckBody');
+  const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody');
   if('IntersectionObserver' in window){
     const observer=new IntersectionObserver(entries=>{
       flowInViewport=entries[0]?.isIntersecting??true;
@@ -614,13 +614,10 @@ function setupFlow(){
   let dragged=null;
   function startDrag(event){
     const sampleSave=event.target.closest('[data-flow-export-sample]');
-    const savedSample=event.target.closest('[data-saved-sample]');
-    const sample=event.target.closest('[data-flow-sample]');
     const fxPreset=event.target.closest('[data-flow-preset]');
     const libraryItem=event.target.closest('[data-library-item]');
     const chip=event.target.closest('[data-flow-effect]');
     dragged=sampleSave?{kind:'track',id:sampleSave.dataset.flowExportSample}:
-      savedSample?{kind:'sample',id:'lib:'+savedSample.dataset.savedSample}:
       fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:
       sample?{kind:'sample',id:sample.dataset.flowSample}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
@@ -632,7 +629,6 @@ function setupFlow(){
   }
   library.addEventListener('dragstart',startDrag);
   body.addEventListener('dragstart',startDrag);
-  sampleRoot?.addEventListener('dragstart',startDrag);
   body.addEventListener('dragover',event=>{
     if(!dragged)return;
     if(event.target.closest('[data-flow-track],[data-flow-in],[data-flow-sample-dock],#flowBoard')){
@@ -662,7 +658,6 @@ function setupFlow(){
   });
   body.addEventListener('dragend',()=>{dragged=null;});
   library.addEventListener('dragend',()=>{dragged=null;});
-  sampleRoot?.addEventListener('dragend',()=>{dragged=null;});
   body.addEventListener('keydown',event=>{
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))return;
