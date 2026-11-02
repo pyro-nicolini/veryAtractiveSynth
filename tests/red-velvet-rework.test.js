@@ -11,8 +11,8 @@ const file=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 test('real vocal and music bus lanes render with routing controls and bus to master',()=>{
   const make=(id,type)=>({id,name:id,type,volume:80,clean:0,brightness:50,warmth:20,
     autotune:0,drive:0,echo:0,space:0,muted:false,fxBypass:{}});
-  const voices=make('lead','voice'),music=make('beat','audio');
-  const markup=flowMarkup([voices,music]);
+  const voices=make('lead','voice'),music=make('beat','audio'),fx=make('fx-return','audio');fx.bus='fx';
+  const markup=flowMarkup([voices,music,fx]);
   for(const id of ['vocals','music','samples','fx'])
     assert.ok(markup.includes('data-flow-bus="'+id+'"'),id);
   assert.match(markup,/data-flow-destination="lead"/);
