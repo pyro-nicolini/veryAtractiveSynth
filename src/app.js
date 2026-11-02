@@ -33,7 +33,7 @@ const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
 const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
 const HELP={
-  flowStudio:['Signal Flow','Cada tarjeta es una pista real. Arrastra su cabecera para moverla y conecta el puerto derecho con una entrada compatible. Abre FX dentro de una pista para activar sus efectos; esos efectos solo modifican esa pista. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
+  flowStudio:['Signal Flow','Cada tarjeta representa una pista real. Abre FLOW para trabajar a pantalla completa. Arrastra el fondo para desplazarte, usa + / − para hacer zoom y conecta puertos de salida y entrada. Pulsa FX para abrir una mesa flotante que puedes mover o maximizar, sin perder el grafo de fondo. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
   masterFx:['Efectos globales','Estos controles se aplican después de sumar las voces, pistas y samples. LOW y HIGH ajustan el tono general; DRIVE añade saturación; COMP controla la dinámica; DELAY y REVERB añaden espacio. BYPASS desactiva estos efectos sin borrar sus ajustes. El limitador de seguridad permanece activo.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
   studio:['Bienvenido a tu estudio','1. Importa una base o prueba un ritmo. 2. Pulsa Grabar mi voz y canta. 3. Selecciona una capa para modificarla. 4. Dale Play y exporta tu mezcla. Todo el audio se procesa en tu equipo.'],
@@ -543,9 +543,8 @@ function setupFlow(){
     if(document.hidden)stopFlowMotion();else startFlowMotion();
   });
   $('#flowToggle').onclick=()=>{
-    if(state.flowOpen&&state.flowFullscreen)setFlowFullscreen(false);
-    state.flowOpen=!state.flowOpen;if(!state.flowOpen)stopFlowMotion();renderFlow();queueAutosave();
-    if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
+    if(!state.flowOpen){state.flowOpen=true;renderFlow();}
+    setFlowFullscreen(!state.flowFullscreen);
   };
   $('#flowFullscreen').onclick=()=>setFlowFullscreen();
   body.addEventListener('wheel',event=>{
