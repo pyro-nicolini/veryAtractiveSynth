@@ -767,7 +767,7 @@ function setupFlow(){
     }
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;
-    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');if(!node||!board)return;
+    const node=handle.closest('[data-flow-track]');if(!node||!board)return;
     event.preventDefault();handle.setPointerCapture(event.pointerId);
     const position={x:node.offsetLeft,y:node.offsetTop};
     state.flowDrag={id:node.dataset.flowTrack,startX:event.clientX,startY:event.clientY,x:position.x,y:position.y,node,board};
