@@ -77,7 +77,7 @@ function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
   '<button class="patch-port patch-port-out" data-flow-out="'+esc(track.id)+'" type="button" title="Arrastra desde aquí para conectar" aria-label="Salida de '+esc(track.name)+'"></button>'+
   (expanded?'<div id="fx-'+esc(track.id)+'">'+trackFxDrawer(track,presets)+'</div>':'')+'</article>';
 }
-export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[],expandedFx=[],masterFx={}){
+export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[],expandedFx=[],masterFx={},masterVolume=85){
  const visible=tracks.filter(t=>!t.flowHidden),expanded=new Set(expandedFx||[]);
  const voice=visible.filter(t=>busForTrack(t)==='vocals');
  const music=visible.filter(t=>['music','samples','fx'].includes(busForTrack(t)));
@@ -111,7 +111,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  const emptyMusic=!music.length?'<div class="flow-lane-empty" style="left:70px;top:410px">Añade una base, un loop o un sample.</div>':'';
  const dock='<button type="button" class="patch-sample-dock" data-flow-sample-dock title="Arrastra aquí cualquier nodo para guardar su audio en la biblioteca"><span>▦</span><span><strong>SAMPLE DESK</strong><small>Arrastra un nodo aquí para guardarlo como sample</small></span><b>↗</b></button>';
  const guide=!visible.length?'<div class="flow-onboarding"><span><b>1</b> Añade una voz o una pista</span><span><b>2</b> Abre FX dentro del nodo</span><span><b>3</b> Conecta OUT → IN o guarda en Sample Desk</span></div>':'';
- const transport='<div class="flow-mini-transport"><button type="button" data-flow-play aria-label="Reproducir o pausar">▶</button><button type="button" data-flow-stop aria-label="Detener">■</button><label><span>MASTER</span><input type="range" min="0" max="100" data-flow-master-volume value="'+(Number(masterFx.masterVolume)||85)+'" aria-label="Volumen Master"></label></div>';
+ const transport='<div class="flow-mini-transport"><button type="button" data-flow-play aria-label="Reproducir o pausar">▶</button><button type="button" data-flow-stop aria-label="Detener">■</button><label><span>MASTER</span><input type="range" min="0" max="100" data-flow-master-volume value="'+(Number(masterVolume)||0)+'" aria-label="Volumen Master"></label></div>';
  return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+transport+dock+'</div>'+guide+
   '<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
   '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div>'+
