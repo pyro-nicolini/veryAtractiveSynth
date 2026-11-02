@@ -99,7 +99,8 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   return '<button type="button" class="flow-bus-node flow-bus-'+id+'" data-flow-bus="'+id+'" data-flow-in="bus:'+id+'" style="left:'+busX+'px;top:'+busY[id]+'px" title="'+title+' recibe las pistas conectadas">'+
    '<span class="flow-bus-orb">'+(id==='vocals'?'◉':id==='music'?'≋':id==='samples'?'▦':'✧')+'</span><span><small>SUMADOR</small><strong>'+title+'</strong><small>'+sub+'</small></span></button>';
  }).join('');
- const master='<article class="flow-master '+(expanded.has('master')?'fx-expanded':'')+'" id="flowMaster" data-flow-in="master" style="left:'+masterX+'px;top:300px">'+
+ const master='<article class="flow-master '+(expanded.has('master')?'fx-expanded':'')+'" id="flowMaster" style="left:'+masterX+'px;top:300px">'+
+  '<button type="button" class="patch-port patch-port-in flow-master-in" data-flow-in="master" title="Entrada de la mezcla" aria-label="Entrada de MASTER"></button>'+
   '<button type="button" class="flow-master-orb" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'" title="Abrir efectos globales">◉</button>'+
   '<strong>MASTER OUT</strong><small>Salida final · estéreo</small>'+
   '<button type="button" class="flow-master-fx" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'">MASTER FX</button>'+
