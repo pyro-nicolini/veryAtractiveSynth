@@ -257,6 +257,7 @@ function setFlowFullscreen(force){
 }
 async function openSampleDesk(){
   const area=$('#sampleDeck');if(!area)return;
+  stopFlowMotion();
   area.hidden=false;area.classList.add('is-fullscreen');document.body.classList.add('sample-desk-open');
   $('#sampleToggle')?.setAttribute('aria-expanded','true');
   await state.sampleDeck?.load();
@@ -265,6 +266,7 @@ function closeSampleDesk(){
   const area=$('#sampleDeck');if(!area)return;
   area.classList.remove('is-fullscreen');area.hidden=true;document.body.classList.remove('sample-desk-open');
   $('#sampleToggle')?.setAttribute('aria-expanded','false');
+  if(engine.playing)startFlowMotion();
 }
 function openTrackSampleDialog(trackId){
   const track=state.tracks.find(item=>item.id===trackId);
@@ -297,7 +299,8 @@ let flowMotionLast=0;
 let flowInViewport=true;
 const FLOW_FRAME_MS=1000/60;
 function flowMotionAllowed(){
-  return state.flowOpen&&engine.playing&&!document.hidden&&flowInViewport&&
+  const sampleDeskOpen=$('#sampleDeck')?.classList.contains('is-fullscreen');
+  return state.flowOpen&&!sampleDeskOpen&&engine.playing&&!document.hidden&&flowInViewport&&
     !!$('#flowBoard')&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 function paintFlow(animate=flowMotionAllowed(),time=performance.now()){
