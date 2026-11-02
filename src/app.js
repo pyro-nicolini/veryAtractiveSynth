@@ -406,7 +406,12 @@ function deleteFlowNode(id){
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   checkpoint();
   if(!t.muted){t.muted=true;engine.updateTrack(t);toast('Conexión cortada. Supr de nuevo retira el nodo.');}
-  else{t.flowHidden=true;toast('Nodo retirado. La pista se conserva en Tu mezcla, puedes restaurarla con ↗.');}
+  else{
+    const fallback='bus:'+busForTrack(t);
+    for(const source of state.tracks)if(source.id!==t.id&&source.flowTo==='track:'+t.id){source.flowTo=fallback;engine.updateTrack(source);}
+    t.flowHidden=true;state.flowExpandedFx=state.flowExpandedFx.filter(id=>id!==t.id);
+    toast('Nodo retirado del mapa. Las pistas conectadas continúan hacia su bus; el audio original sigue en Tu mezcla.');
+  }
   render();
   if(!t.flowHidden){
     requestAnimationFrame(()=>{
@@ -419,7 +424,7 @@ function deleteTrack(id){
   if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de borrar');
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
   if(!window.confirm('¿Eliminar la pista "'+t.name+'"? Puedes deshacer con Ctrl+Z.'))return;
-  checkpoint();state.tracks=state.tracks.filter(x=>x.id!==id);delete state.flowPositions[id];
+  checkpoint();for(const source of state.tracks)if(source.id!==id&&source.flowTo==='track:'+id){source.flowTo='bus:'+busForTrack(t);engine.updateTrack(source);}state.tracks=state.tracks.filter(x=>x.id!==id);delete state.flowPositions[id];state.flowExpandedFx=state.flowExpandedFx.filter(key=>key!==id);
   state.selected=state.tracks[0]?.id||null;state.selectedClip=null;
   if(engine.playing){engine.stop();state.position=0;cancelAnimationFrame(raf);}
   modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Pista eliminada. Puedes deshacer.');
