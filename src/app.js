@@ -462,6 +462,7 @@ async function insertFlowSample(ref,targetId=null,targetRoute=null){
     const dest=state.tracks.find(t=>t.id===targetId);
     const bus=dest?busForTrack(dest):targetRoute?.startsWith('bus:')?targetRoute.slice(4):'samples';
     const track=addTrack(buffer,pad.name,'audio',state.position,BUS_IDS.includes(bus)?bus:'samples',false,true);
+    track.sourceKind='sample';
     if(dest){track.bus=busForTrack(dest);track.flowTo='track:'+dest.id;}
     else track.flowTo=targetRoute==='master'?'master':'bus:'+(BUS_IDS.includes(bus)?bus:'samples');
     Object.assign(track,sampleEffect(pad.fx).settings);
@@ -2223,7 +2224,7 @@ function setupSamples(){
     const destination=options.route||'samples';
     const bus=destination==='selected'&&selected?busForTrack(selected):'samples';
     const track=addTrack(buffer,name,'audio',state.position,bus,false,true);
-    track.bus=bus;
+    track.bus=bus;track.sourceKind='sample';
     track.flowTo=destination==='master'?'master':destination==='selected'&&selected?'track:'+selected.id:'bus:'+bus;
     if(settings)Object.assign(track,settings);
     engine.updateTrack(track);render();restartPlayback();queueAutosave();
