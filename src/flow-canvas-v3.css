@@ -46,7 +46,7 @@
 #flowArea .flow-footnote{margin:0;padding:8px 13px;flex:none;background:#19212c;color:#c6d3dd;border-top:1px solid #344251;font-size:10px;line-height:1.4}
 #flowArea .flow-onboarding{background:#192632;border-color:#334451;color:#d7e5ee}
 #flowArea .flow-fx-layer{position:absolute;inset:50px 0 0 0;z-index:25;pointer-events:none;overflow:hidden}
-#flowArea .flow-floating-panel{position:absolute;display:flex;flex-direction:column;width:min(520px,calc(100% - 24px));min-height:280px;max-height:calc(100% - 20px);border:1px solid #536a7e;border-radius:12px;background:#1a2530f5;box-shadow:0 18px 55px #000c;backdrop-filter:blur(14px);color:#f1f7fb;pointer-events:auto;overflow:auto;resize:vertical}
+#flowArea .flow-floating-panel{position:absolute;display:flex;flex-direction:column;width:min(680px,calc(100% - 24px));min-height:360px;height:min(640px,calc(100% - 30px));max-height:calc(100% - 20px);border:1px solid #536a7e;border-radius:12px;background:#1a2530eb;box-shadow:0 18px 55px #000b;backdrop-filter:blur(14px);color:#f1f7fb;pointer-events:auto;overflow:auto;resize:vertical}
 #flowArea .flow-floating-panel.is-maximized{left:4%!important;top:3%!important;width:92%!important;height:94%!important;max-height:94%!important;resize:none}
 #flowArea .flow-fx-drawer,#flowArea .master-fx-drawer{position:static!important;display:flex;flex-direction:column;flex:1;gap:12px;width:100%;min-height:0;padding:0 18px 18px;background:transparent;border:0;border-radius:0;box-shadow:none;overflow-y:auto}
 #flowArea .flow-floating-handle{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 -18px 8px;padding:14px 18px!important;background:#243342;border-bottom:1px solid #4b6272;cursor:grab;touch-action:none}
@@ -88,4 +88,27 @@
 }
 @media(prefers-reduced-motion:reduce){
  #flowArea .flow-node-wave i{animation:none!important}
+}
+
+/* FX live in independent, complete channel strips rather than orphan controls. */
+#flowArea .flow-fx-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:12px}
+#flowArea .flow-fx-unit{display:flex;flex-direction:column;min-width:0;border:1px solid #475a6a;border-radius:10px;background:#22313f;padding:9px;gap:10px}
+#flowArea .flow-fx-unit.is-active{border-color:#6abacb;background:#253d49}
+#flowArea .flow-fx-unit.is-bypassed{opacity:.82}
+#flowArea .flow-fx-unit .flow-fx-subnode{display:flex;align-items:center;gap:9px;min-height:54px;width:100%;border:none;border-bottom:1px solid #4d6272;border-radius:0;background:transparent;padding:4px;color:#f6f8fa;box-shadow:none}
+#flowArea .flow-fx-unit .flow-fx-subnode:hover{color:#fff}
+#flowArea .flow-fx-unit .flow-fx-state{margin-left:auto;min-width:30px;border-radius:5px;padding:4px 5px;background:#3c4853;color:#cbd8e0;font-size:10px;font-weight:750;text-align:center}
+#flowArea .flow-fx-unit.is-active .flow-fx-state{background:#305c64;color:#c9fffc}
+#flowArea .flow-fx-controls{display:flex;flex-direction:column;gap:12px;padding:3px 2px 5px}
+#flowArea .flow-fx-knob{display:grid;grid-template-columns:72px minmax(0,1fr) 27px;align-items:center;gap:8px;margin:0;padding:0;color:#e0eaf2;font-size:10px}
+#flowArea .flow-fx-knob span{min-width:0}
+#flowArea .flow-fx-knob input{width:100%;min-width:0}
+#flowArea .flow-fx-fixed{padding:4px 0;margin:0;font-size:10px}
+#flowArea .flow-fx-copy{min-width:0}
+#flowArea .flow-fx-copy small{line-height:1.4;white-space:normal}
+#flowArea .flow-floating-panel.is-maximized{width:94%!important;left:3%!important;top:2%!important;height:96%!important;max-height:96%!important}
+@media(max-width:650px){
+ #flowArea .flow-fx-grid{grid-template-columns:1fr;gap:9px}
+ #flowArea .flow-floating-panel{height:calc(100% - 16px);min-height:0}
+ #flowArea .flow-fx-knob{grid-template-columns:70px minmax(0,1fr) 28px}
 }
