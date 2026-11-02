@@ -22,7 +22,7 @@ export function flowPosition(track,index,positions={}){
  const p=positions?.[track.id];
  return p&&Number.isFinite(p.x)&&Number.isFinite(p.y)?
   {x:Math.max(12,Math.min(7000,p.x)),y:Math.max(12,Math.min(3000,p.y))}:
-  {x:70+index*285,y:busForTrack(track)==='vocals'?135:430};
+  {x:70+index*285,y:busForTrack(track)==='vocals'?125:520};
 }
 export function flowHeight(){return 920;}
 function trackFxDrawer(track,presets=[]){
