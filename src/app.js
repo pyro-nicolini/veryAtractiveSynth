@@ -312,6 +312,8 @@ function renderFlow(){
 }
 
 function setFlowFullscreen(force){
+  const existing=$('#flowCanvasScroller');
+  if(existing)state.flowPan={left:existing.scrollLeft,top:existing.scrollTop};
   state.flowFullscreen=typeof force==='boolean'?force:!state.flowFullscreen;
   const area=$('#flowArea');
   area?.classList.toggle('is-fullscreen',state.flowFullscreen);
@@ -576,6 +578,14 @@ function setupFlow(){
   }
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden)stopFlowMotion();else startFlowMotion();
+  });
+  window.addEventListener('resize',()=>{
+    if(!state.flowOpen||!$('#flowCanvasScroller'))return;
+    const scroller=$('#flowCanvasScroller');
+    state.flowPan={left:scroller.scrollLeft,top:scroller.scrollTop};
+    applyFlowViewport();
+    scroller.scrollLeft=state.flowPan.left;scroller.scrollTop=state.flowPan.top;
+    clampFloatingFxWindows();
   });
   $('#flowToggle').onclick=()=>{
     if(!state.flowOpen){state.flowOpen=true;renderFlow();}
