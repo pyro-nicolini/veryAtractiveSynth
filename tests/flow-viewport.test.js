@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {clampFlowZoom,screenToGraph,graphViewportSize,fitFlowZoom,zoomAroundPoint} from '../src/flow-viewport.js';
+import {flowMarkup} from '../src/flow-studio.js';
+import {readFileSync} from 'node:fs';
+const source=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const track={id:'v1',name:'Voz principal',type:'voice',bus:'vocals',volume:75,autotune:40,retune:65,clean:35,brightness:55,warmth:30,drive:10,echo:12,space:18,muted:false,fxBypass:{}};
+test('zoom clamps and converts screen deltas into graph coordinates',()=>{
+ assert.equal(clampFlowZoom(.1),.45);assert.equal(clampFlowZoom(8),1.8);
+ assert.deepEqual(screenToGraph(90,60,.5),{x:180,y:120});
+ assert.deepEqual(graphViewportSize(1200,900,.5),{width:600,height:450});
+ assert.equal(fitFlowZoom(1200,900,900,600),.6333333333333333);
+ const point=zoomAroundPoint({scrollLeft:200,scrollTop:100,x:100,y:80,oldZoom:1,newZoom:1.5});
+ assert.deepEqual(point,{left:350,top:190});
+});
+test('FX controls live in floating layer rather than nested inside a source card',()=>{
+ const markup=flowMarkup([track],{},'v1',[],[],[],['v1','master'],{},85,{v1:{x:160,y:90}},'v1');
+ assert.match(markup,/id="flowCanvasScroller"/);
+ assert.match(markup,/id="flowCanvasSpace"/);
+ assert.match(markup,/id="flowFxLayer"/);
+ assert.match(markup,/data-flow-fx-window="v1"/);
+ assert.match(markup,/data-flow-fx-move="v1"/);
+ assert.match(markup,/data-flow-fx-param="autotune"/);
+ assert.match(markup,/data-flow-fx-param="retune"/);
+ assert.match(markup,/data-flow-fx-maximize="v1"/);
+ assert.match(markup,/data-master-fx-panel/);
+ assert.match(markup,/data-flow-zoom-in/);
+ assert.match(markup,/class="flow-floating-panel is-maximized"/);
+ const sourceCard=markup.slice(markup.indexOf('data-flow-track="v1"'),markup.indexOf('data-flow-track="v1"')+1700);
+ assert.doesNotMatch(sourceCard,/flow-fx-drawer/);
+});
+test('canvas persists independent zoom and FX positions; geometry uses unscaled units',()=>{
+ const app=source('src/app.js'),flow=source('src/flow-studio.js'),css=source('src/flow-canvas-v3.css'),sw=source('sw.js');
+ assert.match(app,/flowCanvasZoom:state\.flowCanvasZoom/);
+ assert.match(app,/flowFxWindows:\{\.\.\.state\.flowFxWindows\}/);
+ assert.match(app,/function setFlowZoom/);
+ assert.match(app,/function fitFlowCanvas/);
+ assert.match(app,/screenToGraph\(event\.clientX-drag\.startX/);
+ assert.match(flow,/scale=rect\.width\/Math\.max\(1,width\)/);
+ assert.match(css,/#flowArea \.flow-fx-layer/);
+ assert.ok(sw.includes('src/flow-viewport.js'));
+ assert.ok(sw.includes('src/flow-canvas-v3.css'));
+});
