@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clampFlowZoom,screenToGraph,graphViewportSize,fitFlowZoom,zoomAroundPoint} from '../src/flow-viewport.js';
+import {clampFlowZoom,screenToGraph,graphViewportSize,fitFlowZoom,zoomAroundPoint,flowWorkspaceMetrics} from '../src/flow-viewport.js';
 import {flowMarkup} from '../src/flow-studio.js';
 import {readFileSync} from 'node:fs';
 const source=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
@@ -64,4 +64,19 @@ test('moving an FX slider enables its processor and updates indicator in place',
  assert.match(app,/unit\.classList\.toggle\('is-active',active\)/);
  assert.match(app,/button\.setAttribute\('aria-pressed',String\(active\)\)/);
  assert.match(app,/engine\.updateTrack\(track\)/);
+});
+
+test('canvas offers free pan even beyond small zoomed graph and keeps pointer anchored',()=>{
+ const bounds=flowWorkspaceMetrics(1200,920,1920,1080,.45);
+ assert.ok(bounds.width>3840,'scrollable stage must extend beyond a wide monitor');
+ assert.ok(bounds.height>2160,'stage must allow dragging vertically');
+ assert.ok(bounds.originX>=1920,'the board should start beyond one viewport of pan margin');
+ assert.ok(bounds.originY>=1080);
+ const old=flowWorkspaceMetrics(1200,920,1920,1080,1);
+ const newBounds=flowWorkspaceMetrics(1200,920,1920,1080,1.4);
+ const scroll=zoomAroundPoint({scrollLeft:old.originX+100,scrollTop:old.originY+70,x:90,y:50,
+  oldZoom:1,newZoom:1.4,oldOriginX:old.originX,oldOriginY:old.originY,
+  newOriginX:newBounds.originX,newOriginY:newBounds.originY});
+ assert.equal(scroll.left,Math.round(newBounds.originX+190*1.4-90));
+ assert.equal(scroll.top,Math.round(newBounds.originY+120*1.4-50));
 });
