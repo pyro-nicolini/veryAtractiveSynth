@@ -147,10 +147,19 @@ function getFlowGeometry(board,svg){
 }
 export function updateFlowWires(root,tracks,engine,animate=true,time=0){
  const board=root?.querySelector('#flowBoard'),svg=root?.querySelector('#flowWires');if(!board||!svg)return;
- const layout=getFlowGeometry(board,svg),byId=new Map(tracks.map(t=>[t.id,t]));
+ const layout=getFlowGeometry(board,svg),byId=new Map(tracks.map(t=>[t.id,t])),trackMeters=new Map(),busMeters=new Map();
+ const trackMeter=id=>{
+  if(trackMeters.has(id))return trackMeters.get(id);
+  const track=byId.get(id),value=animate&&track&&!track.muted?engine.getTrackMeter?.(id):null;
+  trackMeters.set(id,value);return value;
+ };
+ const busMeter=id=>{
+  if(busMeters.has(id))return busMeters.get(id);
+  const value=animate?engine.getBusMeter?.(id):null;busMeters.set(id,value);return value;
+ };
  for(const entry of layout.entries){
   const track=byId.get(entry.owner),busId=entry.busId;
-  const meter=animate&&(!track||!track.muted)?(busId?engine.getBusMeter?.(busId):engine.getTrackMeter?.(track?.id)):null;
+  const meter=busId?busMeter(busId):track?trackMeter(track.id):null;
   const rms=Number(meter?.rms)||0,target=animate?Math.min(1,Math.sqrt(Math.max(0,rms))*3):0;
   entry.level+=(target-entry.level)*(target>entry.level?.35:.16);
   entry.path.setAttribute('d',wireCurve(entry.from.x,entry.from.y,entry.to.x,entry.to.y,entry.level,animate?time:0));
@@ -159,13 +168,13 @@ export function updateFlowWires(root,tracks,engine,animate=true,time=0){
   entry.path.style.strokeWidth=(2.4+entry.level*3.5).toFixed(2)+'px';
  }
  for(const card of board.querySelectorAll('[data-flow-track]')){
-  const track=byId.get(card.dataset.flowTrack),meter=animate&&!track?.muted?engine.getTrackMeter?.(track?.id):null,rms=Number(meter?.rms)||0;
+  const track=byId.get(card.dataset.flowTrack),meter=track?trackMeter(track.id):null,rms=Number(meter?.rms)||0;
   const active=!!animate&&!track?.muted&&rms>.002;
   card.classList.toggle('is-playing',active);
   card.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));
  }
  for(const bus of board.querySelectorAll('[data-flow-bus]')){
-  const meter=animate?engine.getBusMeter?.(bus.dataset.flowBus):null,rms=Number(meter?.rms)||0;
+  const meter=busMeter(bus.dataset.flowBus),rms=Number(meter?.rms)||0;
   bus.classList.toggle('is-playing',!!animate&&rms>.002);
   bus.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));
  }
