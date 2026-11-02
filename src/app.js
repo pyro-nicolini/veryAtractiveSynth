@@ -786,6 +786,16 @@ function setupFlow(){
   });
   body.addEventListener('dragend',()=>{dragged=null;});
   library.addEventListener('dragend',()=>{dragged=null;});
+  function growFlowBoard(x,y){
+    const board=$('#flowBoard');
+    if(!board)return;
+    const width=Math.min(12000,Math.max(board.offsetWidth,Math.ceil(x+650)));
+    const height=Math.min(3500,Math.max(board.offsetHeight,Math.ceil(y+300)));
+    if(width>board.offsetWidth||height>board.offsetHeight){
+      board.style.width=width+'px';board.style.height=height+'px';
+      applyFlowViewport();
+    }
+  }
   body.addEventListener('keydown',event=>{
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))return;
@@ -793,11 +803,11 @@ function setupFlow(){
     if(!board||!node)return;
     event.preventDefault();
     const point={x:node.offsetLeft,y:node.offsetTop},step=event.shiftKey?40:12;
-    const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,Math.max(12,board.clientWidth-440));
-    const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
+    const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,7000);
+    const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,3000);
     if(x!==point.x||y!==point.y){
       checkpoint();state.flowPositions[id]={x,y};node.style.left=x+'px';node.style.top=y+'px';
-      invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
+      growFlowBoard(x,y);invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
     }
   });
   let windowDrag=null,panDrag=null;
@@ -856,10 +866,10 @@ function setupFlow(){
     if(!state.flowDrag)return;
     const drag=state.flowDrag,board=drag.board;
     const point=screenToGraph(event.clientX-drag.startX,event.clientY-drag.startY,state.flowCanvasZoom);
-    const x=clamp(drag.x+point.x,12,Math.max(12,board.clientWidth-440));
-    const y=clamp(drag.y+point.y,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
+    const x=clamp(drag.x+point.x,12,7000);
+    const y=clamp(drag.y+point.y,12,3000);
     drag.node.style.left=x+'px';drag.node.style.top=y+'px';drag.next={x,y};
-    invalidateFlowWireGeometry(flowArea);paintFlow();
+    growFlowBoard(x,y);invalidateFlowWireGeometry(flowArea);paintFlow();
   });
   const finish=event=>{
     if(windowDrag&&windowDrag.pointer===event.pointerId){
@@ -875,7 +885,7 @@ function setupFlow(){
     state.flowDrag=null;drag.node.classList.remove('is-dragging');
     if(event.type!=='pointercancel'&&drag.next){
       const prior=state.flowPositions[drag.id]||{x:drag.x,y:drag.y};
-      if(prior.x!==drag.next.x||prior.y!==drag.next.y){checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();}
+      if(prior.x!==drag.next.x||prior.y!==drag.next.y){checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();renderFlow();}
     }else{drag.node.style.left=drag.x+'px';drag.node.style.top=drag.y+'px';}
     invalidateFlowWireGeometry(flowArea);paintFlow();
   };
