@@ -62,7 +62,7 @@ function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
  const wave=Array.from({length:18},(_,i)=>'<i style="--bar:'+((i*17+7)%11+3)+'"></i>').join('');
  return '<article class="flow-node '+(track.id===selectedId?'flow-node-selected ':'')+(track.muted?'flow-node-off ':'')+
   (isVoice?'flow-node-voice ':isSample?'flow-node-sample ':'flow-node-track ')+(expanded?'fx-expanded':'')+
-  '" data-flow-track="'+esc(track.id)+'" data-flow-route="'+esc(dest)+'" data-flow-bus="'+esc(busForTrack(track))+'" style="left:'+position.x+'px;top:'+position.y+'px;--flow-accent:'+(isVoice?'#f36aa9':isSample?'#a9d88d':'#55c5e5')+'">'+
+  '" data-flow-track="'+esc(track.id)+'" data-flow-route="'+esc(dest)+'" style="left:'+position.x+'px;top:'+position.y+'px;--flow-accent:'+(isVoice?'#f36aa9':isSample?'#a9d88d':'#55c5e5')+'">'+
   '<button class="patch-port patch-port-in" data-flow-in="'+esc(track.id)+'" type="button" title="Entrada de '+esc(track.name)+'" aria-label="Entrada de '+esc(track.name)+'"></button>'+
   '<header class="flow-node-top" data-flow-drag="'+esc(track.id)+'" tabindex="0" aria-label="Arrastrar para mover '+esc(track.name)+'">'+
    '<span class="flow-source-icon">'+(isVoice?'◉':isSample?'▦':'♫')+'</span><span class="flow-node-name"><strong>'+esc(track.name)+'</strong><small>'+kind+' · '+formatDb(track.volume)+'</small></span>'+
