@@ -548,6 +548,12 @@ function setupFlow(){
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
   $('#flowFullscreen').onclick=()=>setFlowFullscreen();
+  body.addEventListener('wheel',event=>{
+    if(!event.ctrlKey&&!event.metaKey)return;
+    if(!event.target.closest('#flowCanvasScroller'))return;
+    event.preventDefault();
+    setFlowZoom(state.flowCanvasZoom*(event.deltaY<0?1.12:1/1.12),event.clientX,event.clientY);
+  },{passive:false});
   $('#flowHelp').onclick=()=>help('flowStudio');
   $('#flowChain').onclick=()=>{
     if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de conectar');
@@ -573,6 +579,13 @@ function setupFlow(){
   body.addEventListener('click',event=>{
     if(event.target.closest('[data-flow-play]')){Promise.resolve(playPause()).finally(syncFlowTransport);return;}
     if(event.target.closest('[data-flow-stop]')){stop();syncFlowTransport();return;}
+    if(event.target.closest('[data-flow-zoom-in]')){setFlowZoom(state.flowCanvasZoom*1.2);return;}
+    if(event.target.closest('[data-flow-zoom-out]')){setFlowZoom(state.flowCanvasZoom/1.2);return;}
+    if(event.target.closest('[data-flow-fit]')){fitFlowCanvas();return;}
+    const closeFx=event.target.closest('[data-flow-fx-close]');
+    if(closeFx){state.flowExpandedFx=state.flowExpandedFx.filter(id=>id!==closeFx.dataset.flowFxClose);if(state.flowFxMaximized===closeFx.dataset.flowFxClose)state.flowFxMaximized=null;renderFlow();queueAutosave();return;}
+    const maximizeFx=event.target.closest('[data-flow-fx-maximize]');
+    if(maximizeFx){state.flowFxMaximized=state.flowFxMaximized===maximizeFx.dataset.flowFxMaximize?null:maximizeFx.dataset.flowFxMaximize;renderFlow();return;}
     if(event.target.closest('[data-flow-destination]'))return;
     const dock=event.target.closest('[data-flow-sample-dock]');
     if(dock){openSampleDesk();return;}
@@ -584,9 +597,10 @@ function setupFlow(){
     if(input){if(state.flowArmedOutput)connectFlow(state.flowArmedOutput,input.dataset.flowIn.startsWith('bus:')||input.dataset.flowIn==='master'?input.dataset.flowIn:'track:'+input.dataset.flowIn);return;}
     const expand=event.target.closest('[data-flow-expand-fx]');
     if(expand){
-      const id=expand.dataset.flowExpandFx,items=new Set(state.flowExpandedFx);
-      if(items.has(id))items.delete(id);else items.add(id);
-      state.flowExpandedFx=[...items];renderFlow();queueAutosave();return;
+      const id=expand.dataset.flowExpandFx;
+      if(state.flowExpandedFx.includes(id)){state.flowExpandedFx=[];state.flowFxMaximized=null;}
+      else {state.flowExpandedFx=[id];state.flowFxMaximized=null;}
+      renderFlow();queueAutosave();return;
     }
     const effectToggle=event.target.closest('[data-flow-effect-toggle]');
     if(effectToggle){
@@ -626,6 +640,17 @@ function setupFlow(){
     if(node){selectFlowTrack(node.dataset.flowTrack);}
   });
   body.addEventListener('input',event=>{
+    const fxParam=event.target.closest('[data-flow-fx-param]');
+    if(fxParam){
+      if(state.recording||state.sessionRecording)return;
+      const track=state.tracks.find(t=>t.id===fxParam.dataset.flowOwner),key=fxParam.dataset.flowFxParam;
+      if(!track||!['autotune','retune','clean','brightness','warmth','drive','echo','space'].includes(key))return;
+      track[key]=clamp(Number(fxParam.value),0,100);
+      if(key==='autotune'||key==='retune'){const point=tunePointFromManual(track.autotune,track.retune);track.tuneX=point.x;track.tuneY=point.y;}
+      engine.updateTrack(track);
+      const output=fxParam.closest('label')?.querySelector('output');if(output)output.textContent=String(track[key]);
+      queueAutosave();return;
+    }
     const masterVolume=event.target.closest('[data-flow-master-volume]');
     if(masterVolume){
       state.master=Number(masterVolume.value);engine.setMaster(state.master);
@@ -648,10 +673,10 @@ function setupFlow(){
     if(control){queueAutosave();return;}
   });
   body.addEventListener('pointerdown',event=>{
-    if(event.target.matches('[data-master-fx],[data-flow-master-volume]'))checkpoint();
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume],[data-flow-fx-param]'))checkpoint();
   });
   body.addEventListener('keydown',event=>{
-    if(event.target.matches('[data-master-fx],[data-flow-master-volume]')&&
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume],[data-flow-fx-param]')&&
        ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)&&!event.repeat)checkpoint();
   });
   let dragged=null;
