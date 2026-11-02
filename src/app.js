@@ -2279,7 +2279,7 @@ function wire(){
   $('#voiceLabBtn').onclick=()=>openTuneLab('live');
   $('#loopBtn').onclick=()=>{checkpoint();state.loop=!state.loop;$('#loopBtn').setAttribute('aria-pressed',String(state.loop));toast(state.loop?'Repetición activada':'Repetición desactivada');};
   $('#playBtn').onclick=playPause;$('#stopBtn').onclick=stop;$('#backBtn').onclick=()=>{if(engine.playing){engine.pause();state.position=0;restartPlaybackAtZero();}else{state.position=0;updateTransport();}};
-  $('#exportBtn').onclick=openExport;$('#saveBtn').onclick=save;$('#loadBtn').onclick=openProjectMenu;
+  $('#exportBtn').onclick=openExport;$('#projectBtn').onclick=openProjectMenu;
   $('#projectInput').onchange=async event=>{await loadPortable(event.target.files?.[0]);event.target.value='';};
   $('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
   document.addEventListener('pointerdown',event=>{if(event.target.matches('[data-setting], #masterVolume'))checkpoint();});
