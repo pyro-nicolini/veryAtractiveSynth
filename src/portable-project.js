@@ -102,6 +102,7 @@ export async function importProject(file,ctx){
       trimEnd:clamp(t.trimEnd,0,buffer.duration),offset:clamp(t.offset,0,3600),
       fadeIn:clamp(t.fadeIn,0,30),fadeOut:clamp(t.fadeOut,0,30),
       muted:!!t.muted,solo:!!t.solo,flowHidden:!!t.flowHidden,bypassEffects:!!t.bypassEffects,
+      sourceKind:t.sourceKind==='sample'?'sample':undefined,
       fxBypass:Object.fromEntries(['tune','clean','eq','drive','compressor','delay','reverb'].map(id=>[id,t.fxBypass?.[id]===true])),
       bus:['music','vocals','samples','fx'].includes(t.bus)?t.bus:(t.type==='voice'?'vocals':'music'),
       flowTo:typeof t.flowTo==='string'&&/^(master|bus:(music|vocals|samples|fx)|track:[\w-]{1,128})$/.test(t.flowTo)?t.flowTo:undefined,
