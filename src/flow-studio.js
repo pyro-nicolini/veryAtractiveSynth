@@ -31,7 +31,7 @@ function trackFxDrawer(track,presets=[]){
   return '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
    '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+(active?'ACTIVO':'DESACTIVADO')+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>';
  }).join('');
- const saved=(presets||[]).map(p=>'<button type="button" class="flow-fx-preset" data-flow-preset="'+esc(p.id)+'" title="Aplicar este preset a '+esc(track.name)+'">◈ '+esc(p.name)+'</button>').join('');
+ const saved=(presets||[]).map(p=>'<button type="button" class="flow-fx-preset" data-flow-preset="'+esc(p.id)+'" data-flow-owner="'+esc(track.id)+'" title="Aplicar este preset a '+esc(track.name)+'">◈ '+esc(p.name)+'</button>').join('');
  return '<section class="flow-fx-drawer" data-flow-fx-drawer="'+esc(track.id)+'" aria-label="Efectos de '+esc(track.name)+'">'+
   '<header><div><strong>FX DE ESTA PISTA</strong><small>Solo modifica este sonido · el original se conserva</small></div>'+
   '<button type="button" data-flow-save-fx="'+esc(track.id)+'">▣ Guardar preset</button></header>'+
