@@ -15,6 +15,7 @@ import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx
 import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
+import {clampFlowZoom,graphViewportSize,screenToGraph,fitFlowZoom,zoomAroundPoint} from './flow-viewport.js';
 import {canConnect,chainLane} from './flow-routing.js';
 import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
@@ -30,7 +31,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Signal Flow','Cada tarjeta es una pista real. Arrastra su cabecera para moverla y conecta el puerto derecho con una entrada compatible. Abre FX dentro de una pista para activar sus efectos; esos efectos solo modifican esa pista. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
   masterFx:['Efectos globales','Estos controles se aplican después de sumar las voces, pistas y samples. LOW y HIGH ajustan el tono general; DRIVE añade saturación; COMP controla la dinámica; DELAY y REVERB añaden espacio. BYPASS desactiva estos efectos sin borrar sus ajustes. El limitador de seguridad permanece activo.'],
@@ -82,7 +83,7 @@ let tuneGesture=null,tuneFrame=0;
 const modalStack=[];
 const history={past:[],future:[]};
 function getProjectOptions(){
-  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},masterFx:{...state.masterFx},flowOpen:state.flowOpen,flowExpandedFx:[...state.flowExpandedFx],zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
+  return {bpm:state.bpm,metronome:state.metronome,snap:state.snap,loop:state.loop,recordShiftMs:state.recordShiftMs,inputGain:state.inputGain,monitorGain:state.monitorGain,buses:{...state.buses},masterFx:{...state.masterFx},flowOpen:state.flowOpen,flowExpandedFx:[...state.flowExpandedFx],flowFxWindows:{...state.flowFxWindows},flowCanvasZoom:state.flowCanvasZoom,zoom:state.zoom,flowPositions:Object.fromEntries(Object.entries(state.flowPositions).map(([id,p])=>[id,{x:p.x,y:p.y}]))};
 }
 function applyProjectOptions(options={}){
   state.bpm=clamp(options.bpm??104,40,240);
@@ -91,7 +92,9 @@ function applyProjectOptions(options={}){
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
   state.masterFx=sanitiseMasterFx(options.masterFx);engine.setMasterFx(state.masterFx);
-  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(0,80):[];state.zoom=clamp(Number(options.zoom)||1,1,8);
+  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(0,80):[];
+  state.flowFxWindows=Object.fromEntries(Object.entries(options.flowFxWindows&&typeof options.flowFxWindows==='object'?options.flowFxWindows:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,0,3000),y:clamp(p.y,0,1800)}]));
+  state.flowCanvasZoom=clampFlowZoom(options.flowCanvasZoom??1);state.flowFxMaximized=null;state.zoom=clamp(Number(options.zoom)||1,1,8);
   state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,5000),y:clamp(p.y,12,3000)}]));
   const bpm=$('#bpmInput');if(bpm)bpm.value=String(state.bpm);
   $('#metronomeBtn')?.setAttribute('aria-pressed',String(state.metronome));
@@ -230,18 +233,50 @@ function syncFlowTransport(){
   button.textContent=engine.playing?'Ⅱ':'▶';
   button.setAttribute('aria-label',engine.playing?'Pausar reproducción':'Reproducir mezcla');
 }
+function applyFlowViewport(){
+  const board=$('#flowBoard'),space=$('#flowCanvasSpace'),label=$('#flowZoomLabel');
+  if(!board||!space)return;
+  const z=clampFlowZoom(state.flowCanvasZoom),size=graphViewportSize(board.offsetWidth,board.offsetHeight,z);
+  state.flowCanvasZoom=z;
+  board.style.transform='scale('+z+')';
+  space.style.width=size.width+'px';space.style.height=size.height+'px';
+  if(label)label.textContent=Math.round(z*100)+'%';
+  invalidateFlowWireGeometry($('#flowArea'));
+  paintFlow(engine.playing);
+}
+function setFlowZoom(zoom,clientX=null,clientY=null){
+  const scroller=$('#flowCanvasScroller');if(!scroller)return;
+  const previous=state.flowCanvasZoom,next=clampFlowZoom(zoom),rect=scroller.getBoundingClientRect();
+  if(Math.abs(previous-next)<.001)return;
+  const x=clientX===null?scroller.clientWidth/2:clientX-rect.left;
+  const y=clientY===null?scroller.clientHeight/2:clientY-rect.top;
+  const scroll=zoomAroundPoint({scrollLeft:scroller.scrollLeft,scrollTop:scroller.scrollTop,x,y,oldZoom:previous,newZoom:next});
+  state.flowCanvasZoom=next;applyFlowViewport();
+  scroller.scrollLeft=scroll.left;scroller.scrollTop=scroll.top;
+  state.flowPan={left:scroller.scrollLeft,top:scroller.scrollTop};
+  queueAutosave();
+}
+function fitFlowCanvas(){
+  const board=$('#flowBoard'),scroller=$('#flowCanvasScroller');if(!board||!scroller)return;
+  state.flowCanvasZoom=fitFlowZoom(board.offsetWidth,board.offsetHeight,scroller.clientWidth,scroller.clientHeight);
+  applyFlowViewport();scroller.scrollLeft=0;scroller.scrollTop=0;state.flowPan={left:0,top:0};queueAutosave();
+}
 function renderFlow(){
   const area=$('#flowArea'),body=$('#flowBody');
   if(!area||!body)return;
+  const previousScroller=$('#flowCanvasScroller');
+  if(previousScroller)state.flowPan={left:previousScroller.scrollLeft,top:previousScroller.scrollTop};
   area.hidden=!state.flowOpen;
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
-  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx,state.master);
+  body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx,state.master,state.flowFxWindows,state.flowFxMaximized);
   syncFlowTransport();
   area.classList.toggle('is-fullscreen',state.flowFullscreen);
   $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
   $('#flowFullscreen')?.setAttribute('aria-label',state.flowFullscreen?'Salir de pantalla completa':'Pantalla completa');
-  // Keep the audio-reactive cable loop independent from timeline/transport UI.
+  applyFlowViewport();
+  const scroller=$('#flowCanvasScroller');
+  if(scroller){scroller.scrollLeft=state.flowPan.left;scroller.scrollTop=state.flowPan.top;}
   if(engine.playing)startFlowMotion();
   else paintFlow(false);
 }
