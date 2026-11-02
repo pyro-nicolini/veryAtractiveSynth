@@ -41,3 +41,27 @@ test('canvas persists independent zoom and FX positions; geometry uses unscaled 
  assert.ok(sw.includes('src/flow-viewport.js'));
  assert.ok(sw.includes('src/flow-canvas-v3.css'));
 });
+
+test('each processor owns its toggle and adjustable parameters in one card',()=>{
+ const markup=flowMarkup([track],{},'v1',[],[],[],['v1'],{},85);
+ for(const effect of ['tune','clean','eq','drive','compressor','delay','reverb']){
+  assert.match(markup,new RegExp('data-flow-fx-unit="'+effect+'"'));
+  assert.match(markup,new RegExp('data-flow-effect-toggle="'+effect+'"'));
+ }
+ assert.match(markup,/data-flow-fx-id="tune"/);
+ assert.match(markup,/data-flow-fx-id="eq"/);
+ assert.match(markup,/data-flow-fx-id="delay"/);
+ const start=markup.indexOf('data-flow-fx-unit="tune"'),end=markup.indexOf('data-flow-fx-unit="clean"');
+ const tune=markup.slice(start,end);
+ assert.match(tune,/data-flow-effect-toggle="tune"/);
+ assert.match(tune,/data-flow-fx-param="autotune"/);
+ assert.match(tune,/data-flow-fx-param="retune"/);
+ assert.doesNotMatch(tune,/data-flow-fx-param="drive"/);
+});
+test('moving an FX slider enables its processor and updates indicator in place',()=>{
+ const app=source('src/app.js');
+ assert.match(app,/track\.fxBypass=\{\.\.\.track\.fxBypass,\[fxId\]:false\}/);
+ assert.match(app,/unit\.classList\.toggle\('is-active',active\)/);
+ assert.match(app,/button\.setAttribute\('aria-pressed',String\(active\)\)/);
+ assert.match(app,/engine\.updateTrack\(track\)/);
+});
