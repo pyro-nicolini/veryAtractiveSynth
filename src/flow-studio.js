@@ -47,7 +47,7 @@ function masterFxDrawer(settings={}){
  }).join('');
  return '<section class="master-fx-drawer" data-master-fx-panel>'+
   '<header><div><strong>MASTER FX</strong><small>Procesa la mezcla completa: voces + música + samples</small></div>'+
-  '<label class="master-fx-bypass"><input type="checkbox" data-master-fx-bypass '+(settings.bypass?'checked':'')+'> BYPASS</label></header>'+
+  '<div class="master-fx-head-actions"><button type="button" data-flow-master-help title="Qué hace el procesamiento global">?</button><label class="master-fx-bypass"><input type="checkbox" data-master-fx-bypass '+(settings.bypass?'checked':'')+'> BYPASS</label></div></header>'+
   '<div class="master-fx-grid">'+controls+'</div></section>';
 }
 function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
