@@ -110,10 +110,11 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  const emptyVoice=!voice.length?'<div class="flow-lane-empty" style="left:70px;top:115px">Importa una grabación vocal o pulsa «Añadir voz».</div>':'';
  const emptyMusic=!music.length?'<div class="flow-lane-empty" style="left:70px;top:410px">Añade una base, un loop o un sample.</div>':'';
  const dock='<button type="button" class="patch-sample-dock" data-flow-sample-dock title="Arrastra aquí cualquier nodo para guardar su audio en la biblioteca"><span>▦</span><span><strong>SAMPLE DESK</strong><small>Arrastra un nodo aquí para guardarlo como sample</small></span><b>↗</b></button>';
- return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+dock+'</div>'+
+ const guide=!visible.length?'<div class="flow-onboarding"><span><b>1</b> Añade una voz o una pista</span><span><b>2</b> Abre FX dentro del nodo</span><span><b>3</b> Conecta OUT → IN o guarda en Sample Desk</span></div>':'';
+ return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+dock+'</div>'+guide+
   '<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
   '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div>'+
-  '<p class="flow-footnote"><strong>Cómo funciona:</strong> cada pista tiene sus propios efectos. Los buses agrupan voces, música y samples. MASTER FX afecta a toda la mezcla. Arrastra el pequeño icono ♫ de un nodo a SAMPLE DESK para guardar su audio.</p></div>';
+  '<p class="flow-footnote"><strong>Empieza:</strong> añade una voz o pista, abre FX para modificar solo ese sonido y conecta su salida con otra entrada. MASTER FX modifica toda la mezcla. Arrastra el icono ♫ de cualquier nodo a SAMPLE DESK para guardar una copia original o procesada.</p></div>';
 }
 export function wireCurve(ax,ay,bx,by,energy=0,time=0){
  const dx=bx-ax,dy=by-ay,length=Math.hypot(dx,dy)||1,amp=Math.min(21,Math.max(0,energy)*24);
