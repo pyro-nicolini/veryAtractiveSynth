@@ -12,6 +12,17 @@
 - 🔗 **Signal Flow:** conecta la salida de una pista con la entrada de otra, usa buses reales y arrastra procesadores o samples al editor.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
 
+## 🧭 Flow V3 · canvas libre y FX flotantes
+
+- **Pantalla completa desde FLOW:** el mapa ocupa el navegador como entorno de trabajo, no como una tarjeta dentro de la landing.
+- **Navegación:** arrastra el fondo para desplazarte; usa + / −, Ctrl + rueda o **Ajustar** para ver el grafo. El zoom del mapa es independiente del timeline.
+- **FX independientes:** pulsa FX en una voz o pista (o MASTER FX) para abrir una ventana flotante. Muévela por su encabezado, maximízala o ciérrala; los cables y nodos permanecen detrás.
+- **Parámetros reales por pista:** ajusta afinación, retune, limpieza, brillo, calidez, saturación, eco o espacio. El DSP sigue siendo no destructivo.
+- **Diseño más ligero:** una única superficie de grafo con barras compactas, mayor contraste y menos contenedores; los demás módulos mantienen su funcionalidad.
+- **Sin migración a React Flow:** el editor actual está implementado con JavaScript, CSS y SVG nativos. Se entregó interacción similar sin incorporar React ni reescribir el motor de audio.
+
+Checklist de validación para Codex: [docs/QA-FLOW-V3.md](docs/QA-FLOW-V3.md). La funcionalidad visual y auditiva requiere QA manual antes de aprobarla.
+
 ## 🎛️ Signal Flow V2 · editor modular
 
 - **Canvas principal limpio:** VOICE SIGNAL y TRACK SIGNAL son las dos líneas de fuentes. Los buses de VOZ, MÚSICA y SAMPLES se muestran como destinos; FX RETURN solo aparece cuando se utiliza. Todos llegan a MASTER.
