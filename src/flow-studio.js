@@ -143,8 +143,8 @@ const flowGeometryCache=new WeakMap();
 export function invalidateFlowWireGeometry(root){const board=root?.querySelector('#flowBoard');if(board)flowGeometryCache.delete(board);}
 function getFlowGeometry(board,svg){
  const cached=flowGeometryCache.get(board);if(cached)return cached;
- const rect=board.getBoundingClientRect(),entries=[],scale=rect.width/Math.max(1,board.offsetWidth)||1;
- svg.setAttribute('viewBox','0 0 '+Math.round(board.offsetWidth)+' '+Math.round(board.offsetHeight));
+ const rect=board.getBoundingClientRect(),entries=[],width=board.offsetWidth||rect.width,height=board.offsetHeight||rect.height,scale=rect.width/Math.max(1,width)||1;
+ svg.setAttribute('viewBox','0 0 '+Math.round(width)+' '+Math.round(height));
  const point=(el,side)=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:((side==='right'?r.right:r.left)-rect.left)/scale,y:(r.top-rect.top+r.height/2)/scale};};
  const add=(id,from,to,owner,busId)=>{if(from&&to)entries.push({id,from,to,owner,busId,level:0,path:null});};
  const findInput=el=>el?.querySelector?.('[data-flow-in]')||el;
