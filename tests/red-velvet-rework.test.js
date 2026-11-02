@@ -71,7 +71,7 @@ test('Red Velvet startup, per-track export and samples are connected and include
   assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
   assert.match(deck,/data-library-route="samples"/);assert.match(deck,/data-library-route="selected"/);assert.match(deck,/data-library-route="master"/);
   assert.match(deck,/sampleInsertRoute/);assert.match(deck,/addLibrary\(id,route='samples'\)/);assert.match(deck,/this\.onAdd\(buffer,pad\.name,sampleEffect\(pad\.fx\)\.settings,\{route\}\)/);
-  assert.match(portable,/bus:\(music\|vocals\|samples\|fx\)/);
+  assert.match(portable,/bus:\(music\|vocals\|samples\|fx\)/);assert.match(portable,/sourceKind:t\.sourceKind==='sample'\?'sample':undefined/);
   assert.match(deck,/this\.engine\.previewSample/);
   assert.match(engine,/createDryGraph/);assert.match(engine,/setMasterFx\(settings\)/);assert.match(engine,/makeMaster\(offline,offline\.destination,this\.masterVolume,dry\?MASTER_FX_DEFAULTS:this\.masterFx\)/);
   assert.match(theme,/prefers-reduced-motion/);assert.match(theme,/RED VELVET art direction/);
