@@ -556,7 +556,7 @@ function setupFlow(){
     const fxPreset=event.target.closest('[data-flow-preset]');
     if(fxPreset){if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);else toast('Selecciona primero una pista.');return;}
     const sampleSave=event.target.closest('[data-flow-export-sample]');
-    if(sampleSave){saveTrackAsSample(sampleSave.dataset.flowExportSample);return;}
+    if(sampleSave){openTrackSampleDialog(sampleSave.dataset.flowExportSample);return;}
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
     if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
     const sample=event.target.closest('[data-flow-sample]');
@@ -625,7 +625,7 @@ function setupFlow(){
     const input=event.target.closest('[data-flow-in]');
     const route=input?.dataset.flowIn||null;
     const removal=event.target.closest('#flowRemoveZone');
-    if(dock&&item.kind==='track'){saveTrackAsSample(item.id);return;}
+    if(dock&&item.kind==='track'){openTrackSampleDialog(item.id);return;}
     if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
     if(item.kind==='sample'){
       insertFlowSample(item.id,target?.dataset.flowTrack||null,target?null:route);return;
