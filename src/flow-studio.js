@@ -101,6 +101,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   });
  }
  const boardWidth=Math.min(12000,Math.max(FLOW_MIN_WIDTH,maxRight+520));
+ const boardHeight=Math.max(flowHeight(),...Array.from(geom.values(),p=>p.y+300));
  const busX=boardWidth-500,masterX=boardWidth-260;
  const nodes=visible.map(track=>nodeMarkup(track,geom.get(track.id),{tracks:visible},selectedId,expanded.has(track.id),presets)).join('');
  const busY={vocals:165,music:535,samples:655,fx:760};
@@ -131,7 +132,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  }).join('');
  const viewControls='<div class="flow-view-tools" aria-label="Navegación del canvas"><button type="button" data-flow-zoom-out aria-label="Alejar">−</button><output id="flowZoomLabel">100%</output><button type="button" data-flow-zoom-in aria-label="Acercar">+</button><button type="button" data-flow-fit title="Ver todos los nodos">Ajustar</button><span>Arrastra el fondo para moverte</span></div>';
  return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+transport+dock+'</div>'+guide+
-  '<div class="flow-board-scroller" id="flowCanvasScroller"><div class="flow-canvas-space" id="flowCanvasSpace" style="width:'+boardWidth+'px;height:'+flowHeight()+'px"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
+  '<div class="flow-board-scroller" id="flowCanvasScroller"><div class="flow-canvas-space" id="flowCanvasSpace" style="width:'+boardWidth+'px;height:'+boardHeight+'px"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
   '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div></div>'+viewControls+'<div class="flow-fx-layer" id="flowFxLayer">'+floating+'</div>'+
   '<p class="flow-footnote"><strong>Empieza:</strong> añade una voz o pista, abre FX para modificar solo ese sonido y conecta su salida con otra entrada. MASTER FX modifica toda la mezcla. Arrastra el icono ♫ de cualquier nodo a SAMPLE DESK para guardar una copia original o procesada.</p></div>';
 }
