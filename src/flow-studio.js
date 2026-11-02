@@ -57,7 +57,7 @@ function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
  const label=to=>to==='master'?'MASTER OUT':to.startsWith('bus:')?'BUS · '+(BUS_LABELS[to.slice(4)]||to.slice(4).toUpperCase()):'PISTA · '+(destOptions.tracks.find(t=>t.id===to.slice(6))?.name||'');
  const opts=options.map(to=>'<option value="'+esc(to)+'" '+(dest===to?'selected':'')+'>'+esc(label(to))+'</option>').join('');
  const activeFx=FX_CHAIN.filter(f=>effectIsActive(track,f.id)).length;
- const isVoice=busForTrack(track)==='vocals',isSample=busForTrack(track)==='samples';
+ const isSample=track.sourceKind==='sample'||busForTrack(track)==='samples',isVoice=!isSample&&busForTrack(track)==='vocals';
  const kind=isVoice?'VOICE':isSample?'SAMPLE':track.type==='demo'?'BEAT':'TRACK';
  const wave=Array.from({length:18},(_,i)=>'<i style="--bar:'+((i*17+7)%11+3)+'"></i>').join('');
  return '<article class="flow-node '+(track.id===selectedId?'flow-node-selected ':'')+(track.muted?'flow-node-off ':'')+
