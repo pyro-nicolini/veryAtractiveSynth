@@ -93,7 +93,8 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  const busX=boardWidth-500,masterX=boardWidth-260;
  const nodes=visible.map(track=>nodeMarkup(track,geom.get(track.id),{tracks:visible},selectedId,expanded.has(track.id),presets)).join('');
  const busY={vocals:165,music:535,samples:655,fx:760};
- const buses=BUS_IDS.map(id=>{
+ const visibleBusIds=BUS_IDS.filter(id=>id!=='fx'||visible.some(t=>busForTrack(t)==='fx'||routeFor(t,visible)==='bus:fx'));
+ const buses=visibleBusIds.map(id=>{
   const title=id==='fx'?'FX RETURN':id==='samples'?'SAMPLE BUS':BUS_LABELS[id];
   const sub=id==='samples'?'Samples reutilizables':id==='fx'?'Efectos auxiliares':'Salida del grupo';
   return '<button type="button" class="flow-bus-node flow-bus-'+id+'" data-flow-bus="'+id+'" data-flow-in="bus:'+id+'" style="left:'+busX+'px;top:'+busY[id]+'px" title="'+title+' recibe las pistas conectadas">'+
