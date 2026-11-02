@@ -122,7 +122,7 @@ export class SampleDeck{
   if(target.hasAttribute('data-pad-insert')){
     const pad=this.draft||this.pads[this.selected];if(!pad)return;
     try{const ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
-      const route=this.root.querySelector('#sampleInsertRoute')?.value||'samples';this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings,{route});this.say('Sample insertado en '+(route==='master'?'MASTER':route==='selected'?'la pista seleccionada':'SAMPLE BUS')+'.');}
+      const route=this.root.querySelector('#sampleInsertRoute')?.value||'samples',track=this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings,{route});const actual=route==='selected'&&!track?.flowTo?.startsWith('track:')?'SAMPLE BUS':route==='master'?'MASTER':route==='selected'?'la pista seleccionada':'SAMPLE BUS';this.say('Sample insertado en '+actual+'.');}
     catch(error){this.say(error.message);}return;
   }
   if(target.hasAttribute('data-pad-remove')){
