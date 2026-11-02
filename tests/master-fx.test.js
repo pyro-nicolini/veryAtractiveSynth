@@ -16,7 +16,7 @@ test('master bus processing is applied to both realtime output and offline WAV r
  const app=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
  assert.match(engine,/function makeMaster\(ctx,destination,volume,settings=MASTER_FX_DEFAULTS\)/);
  assert.match(engine,/gain\.connect\(low\);low\.connect\(high\);high\.connect\(drive\);drive\.connect\(compressor\)/);
- assert.match(engine,/reverbSum\.connect\(limiter\);limiter\.connect\(meter\)/);
+ assert.match(engine,/const gain=ctx\.createGain\(\);gain\.gain\.value=1;\s*const masterFader=ctx\.createGain\(\);masterFader\.gain\.value=masterVolume\/100;/);\n assert.match(engine,/reverbSum\.connect\(limiter\);limiter\.connect\(masterFader\);masterFader\.connect\(meter\)/);\n assert.match(engine,/this\.output\.masterFader\.gain\.setTargetAtTime/);\n assert.match(engine,/gain\.connect\(this\.output\.masterFader\)/);
  assert.match(engine,/setMasterFx\(settings\)/);
  assert.match(engine,/makeMaster\(offline,offline\.destination,this\.masterVolume,dry\?MASTER_FX_DEFAULTS:this\.masterFx\)/);
  assert.match(app,/masterFx:\{\.\.\.state\.masterFx\}/);
