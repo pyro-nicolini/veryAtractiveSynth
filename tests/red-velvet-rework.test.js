@@ -74,7 +74,7 @@ test('Red Velvet startup, per-track export and samples are connected and include
   assert.match(portable,/bus:\(music\|vocals\|samples\|fx\)/);assert.match(portable,/sourceKind:t\.sourceKind==='sample'\?'sample':undefined/);
   assert.match(deck,/this\.engine\.previewSample/);
   assert.match(engine,/createDryGraph/);assert.match(engine,/setMasterFx\(settings\)/);assert.match(engine,/makeMaster\(offline,offline\.destination,this\.masterVolume,dry\?MASTER_FX_DEFAULTS:this\.masterFx\)/);
-  assert.match(theme,/prefers-reduced-motion/);assert.match(theme,/RED VELVET art direction/);
+  assert.match(theme,/prefers-reduced-motion/);assert.match(theme,/RED VELVET art direction/);assert.match(theme,/#modalRoot \.modal-backdrop\{z-index:1200\}/);assert.match(theme,/\.toast\{z-index:1300\}/);
   for(const path of ['src/splash.js','src/studio-console.css','src/signal-flow-v2.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js','src/master-fx.js'])
     assert.ok(sw.includes(path),'offline asset absent: '+path);
 });
