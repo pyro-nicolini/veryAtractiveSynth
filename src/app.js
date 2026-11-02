@@ -238,6 +238,44 @@ function renderFlow(){
   if(engine.playing)startFlowMotion();
   else paintFlow(false);
 }
+
+function setFlowFullscreen(force){
+  state.flowFullscreen=typeof force==='boolean'?force:!state.flowFullscreen;
+  const area=$('#flowArea');
+  area?.classList.toggle('is-fullscreen',state.flowFullscreen);
+  document.body.classList.toggle('flow-fullscreen-open',state.flowFullscreen);
+  $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
+  const button=$('#flowFullscreen');if(button)button.textContent=state.flowFullscreen?'↙ VOLVER':'⛶ PANTALLA COMPLETA';
+  requestAnimationFrame(()=>{invalidateFlowWireGeometry(area);paintFlow(engine.playing);});
+}
+async function openSampleDesk(){
+  const area=$('#sampleDeck');if(!area)return;
+  area.hidden=false;area.classList.add('is-fullscreen');document.body.classList.add('sample-desk-open');
+  $('#sampleToggle')?.setAttribute('aria-expanded','true');
+  await state.sampleDeck?.load();
+}
+function closeSampleDesk(){
+  const area=$('#sampleDeck');if(!area)return;
+  area.classList.remove('is-fullscreen');area.hidden=true;document.body.classList.remove('sample-desk-open');
+  $('#sampleToggle')?.setAttribute('aria-expanded','false');
+}
+async function saveTrackAsSample(trackId){
+  if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de guardar un sample');
+  const track=state.tracks.find(item=>item.id===trackId);if(!track?.buffer)return toast('No se encontró el audio de esta pista');
+  const processed=confirm('¿Guardar el sonido con sus efectos actuales?\n\nAceptar: audio procesado.\nCancelar: audio original, sin FX.');
+  const suggested=track.name+(processed?' · FX':' · original');
+  const name=prompt('Nombre para tu sample:',suggested);if(name===null)return;
+  if(!name.trim())return toast('El sample necesita un nombre');
+  try{
+    const source={...track,offset:0,muted:false,solo:false};
+    const wav=await engine.exportMix([source],{depth:32,rate:48000,dry:!processed});
+    const buffer=await engine.decode(new File([wav],safeFilename(name)+'.wav',{type:'audio/wav'}));
+    const saved=await saveLibrarySample({buffer,from:0,to:buffer.duration,name:name.trim(),fx:processed?'rendered':'original'});
+    await state.sampleDeck?.refreshAssets?.();await refreshFlowAssets();
+    toast('Guardado en SAMPLE DESK: '+saved.name);
+  }catch(error){toast('No se pudo guardar el sample: '+error.message);}
+}
+
 let flowMotionFrame=0;
 let flowMotionLast=0;
 let flowInViewport=true;
