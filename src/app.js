@@ -184,14 +184,14 @@ function dial(label,key,value,color='var(--green)',min=0,max=100){
   const readout=key==='pan'?(value<0?'IZQ '+Math.abs(value):value>0?'DER '+value:'CENTRO'):Math.round(value)+'%';
   return '<div class="dial-wrap" style="--dial-color:'+color+'">'+buttonInfo(key)+'<div class="dial" style="--fill:'+Math.round(pct*.78)+'%"><div class="dial-inner"><span>'+readout+'</span><small>AJUSTE</small></div></div><label for="dial-'+key+'">'+label+'</label><input id="dial-'+key+'" type="range" data-setting="'+key+'" min="'+min+'" max="'+max+'" value="'+value+'" aria-label="'+label+'"></div>';
 }
-function addTrack(buffer,name,type='audio',offset=0,bus=null,chain=true){
+function addTrack(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false){
   const id=globalThis.crypto?.randomUUID?.()||'track-'+Date.now()+'-'+Math.random();
   const t={id,buffer,name:name.slice(0,80),type,color:COLORS[state.tracks.length%COLORS.length],...defaults(),offset:Math.max(0,offset),bus:bus||(type==='voice'?'vocals':'music')};
   checkpoint();
   const previous=chain?state.tracks.filter(x=>!x.flowHidden&&busForTrack(x)===t.bus).at(-1):null;
   t.flowTo='bus:'+t.bus;
   if(previous&&(!previous.flowTo||previous.flowTo==='bus:'+t.bus))previous.flowTo='track:'+id;
-  state.tracks.push(t);state.selected=id;state.selectedClip=null;render();if(engine.playing)restartPlayback();
+  state.tracks.push(t);state.selected=id;state.selectedClip=null;if(!deferRender){render();if(engine.playing)restartPlayback();}
   return t;
 }
 function render(){
@@ -461,7 +461,7 @@ async function insertFlowSample(ref,targetId=null,targetRoute=null){
     const ctx=await engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
     const dest=state.tracks.find(t=>t.id===targetId);
     const bus=dest?busForTrack(dest):targetRoute?.startsWith('bus:')?targetRoute.slice(4):'samples';
-    const track=addTrack(buffer,pad.name,'audio',state.position,BUS_IDS.includes(bus)?bus:'samples',false);
+    const track=addTrack(buffer,pad.name,'audio',state.position,BUS_IDS.includes(bus)?bus:'samples',false,true);
     if(dest){track.bus=busForTrack(dest);track.flowTo='track:'+dest.id;}
     else track.flowTo=targetRoute==='master'?'master':'bus:'+(BUS_IDS.includes(bus)?bus:'samples');
     Object.assign(track,sampleEffect(pad.fx).settings);
@@ -2227,7 +2227,7 @@ function setupSamples(){
     const selected=state.tracks.find(t=>t.id===state.selected);
     const destination=options.route||'samples';
     const bus=destination==='selected'&&selected?busForTrack(selected):'samples';
-    const track=addTrack(buffer,name,'audio',state.position,bus,false);
+    const track=addTrack(buffer,name,'audio',state.position,bus,false,true);
     track.bus=bus;
     track.flowTo=destination==='master'?'master':destination==='selected'&&selected?'track:'+selected.id:'bus:'+bus;
     if(settings)Object.assign(track,settings);
