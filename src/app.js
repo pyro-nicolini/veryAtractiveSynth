@@ -92,7 +92,7 @@ function applyProjectOptions(options={}){
   state.inputGain=clamp(options.inputGain??100,0,200);state.monitorGain=clamp(options.monitorGain??75,0,100);
   state.buses=sanitiseBuses(options.buses);engine.setBuses(state.buses);
   state.masterFx=sanitiseMasterFx(options.masterFx);engine.setMasterFx(state.masterFx);
-  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(0,80):[];
+  state.flowOpen=options.flowOpen!==false;state.flowExpandedFx=Array.isArray(options.flowExpandedFx)?options.flowExpandedFx.filter(x=>typeof x==='string'&&x.length<128).slice(-1):[];
   state.flowFxWindows=Object.fromEntries(Object.entries(options.flowFxWindows&&typeof options.flowFxWindows==='object'?options.flowFxWindows:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,0,3000),y:clamp(p.y,0,1800)}]));
   state.flowCanvasZoom=clampFlowZoom(options.flowCanvasZoom??1);state.flowFxMaximized=null;state.zoom=clamp(Number(options.zoom)||1,1,8);
   state.flowPositions=Object.fromEntries(Object.entries(options.flowPositions&&typeof options.flowPositions==='object'?options.flowPositions:{}).filter(([id,p])=>typeof id==='string'&&id.length<128&&p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(([id,p])=>[id,{x:clamp(p.x,12,5000),y:clamp(p.y,12,3000)}]));
