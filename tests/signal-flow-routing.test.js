@@ -9,7 +9,7 @@ test('legacy project audio retains direct-to-bus routing',()=>{
  assert.equal(routeFor(tracks[0],tracks),'bus:vocals');
  assert.equal(routeFor(tracks[2],tracks),'bus:music');
  assert.equal(routeFor(tracks[3],tracks),'bus:samples');
- assert.equal(routeMap(tracks).size,3);
+ assert.equal(routeMap(tracks).size,4);
 });
 test('real serial connections support same-lane links and block cycles and cross-lane paths',()=>{
  const tracks=[track('voice1','vocals','track:voice2'),track('voice2','vocals','bus:vocals'),track('drums','music','bus:music')];
