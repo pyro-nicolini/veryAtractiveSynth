@@ -619,7 +619,6 @@ function setupFlow(){
     const chip=event.target.closest('[data-flow-effect]');
     dragged=sampleSave?{kind:'track',id:sampleSave.dataset.flowExportSample}:
       fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:
-      sample?{kind:'sample',id:sample.dataset.flowSample}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
       chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
     if(dragged&&event.dataTransfer){
