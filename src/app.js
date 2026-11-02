@@ -739,7 +739,21 @@ function setupFlow(){
       invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
     }
   });
+  let windowDrag=null,panDrag=null;
   body.addEventListener('pointerdown',event=>{
+    const handleFx=event.target.closest('[data-flow-fx-move]');
+    if(handleFx&&event.button===0&&!event.target.closest('button,input,label')){
+      const win=handleFx.closest('[data-flow-fx-window]');
+      if(win&&!win.classList.contains('is-maximized')){
+        windowDrag={id:handleFx.dataset.flowFxMove,pointer:event.pointerId,win,startX:event.clientX,startY:event.clientY,x:win.offsetLeft,y:win.offsetTop};
+        event.preventDefault();return;
+      }
+    }
+    const scroller=$('#flowCanvasScroller'),board=$('#flowBoard');
+    if(scroller&&board&&event.button===0&&event.target.closest('#flowBoard')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
+      panDrag={pointer:event.pointerId,startX:event.clientX,startY:event.clientY,left:scroller.scrollLeft,top:scroller.scrollTop,scroller};
+      scroller.classList.add('is-panning');event.preventDefault();return;
+    }
     if(event.target.closest('[data-flow-export-sample]'))return;
     const out=event.target.closest('[data-flow-out]');
     if(out&&event.button===0){
@@ -747,8 +761,9 @@ function setupFlow(){
       const a=out.getBoundingClientRect(),r=board.getBoundingClientRect();
       const path=document.createElementNS('http://www.w3.org/2000/svg','path');
       path.classList.add('flow-wire','patch-wire-preview');svg.appendChild(path);
+      const z=state.flowCanvasZoom;
       state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
-        x:a.right-r.left,y:a.top-r.top+a.height/2,moved:false,board,path};return;
+        x:(a.right-r.left)/z,y:(a.top-r.top+a.height/2)/z,moved:false,board,path};return;
     }
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;
@@ -759,20 +774,40 @@ function setupFlow(){
     node.classList.add('is-dragging');
   });
   body.addEventListener('pointermove',event=>{
+    if(windowDrag&&windowDrag.pointer===event.pointerId){
+      const parent=$('#flowFxLayer'),win=windowDrag.win;
+      const x=clamp(windowDrag.x+event.clientX-windowDrag.startX,0,Math.max(0,(parent?.clientWidth||0)-win.offsetWidth));
+      const y=clamp(windowDrag.y+event.clientY-windowDrag.startY,0,Math.max(0,(parent?.clientHeight||0)-Math.min(win.offsetHeight,70)));
+      win.style.left=x+'px';win.style.top=y+'px';return;
+    }
+    if(panDrag&&panDrag.pointer===event.pointerId){
+      panDrag.scroller.scrollLeft=panDrag.left-(event.clientX-panDrag.startX);
+      panDrag.scroller.scrollTop=panDrag.top-(event.clientY-panDrag.startY);return;
+    }
     const cable=state.flowCableDrag;
     if(cable&&event.pointerId===cable.pointerId){
       const r=cable.board.getBoundingClientRect();
       cable.moved=cable.moved||Math.hypot(event.clientX-cable.startX,event.clientY-cable.startY)>6;
-      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));return;
+      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,(event.clientX-r.left)/state.flowCanvasZoom,(event.clientY-r.top)/state.flowCanvasZoom));return;
     }
     if(!state.flowDrag)return;
     const drag=state.flowDrag,board=drag.board;
-    const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
-    const y=clamp(drag.y+event.clientY-drag.startY,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
+    const point=screenToGraph(event.clientX-drag.startX,event.clientY-drag.startY,state.flowCanvasZoom);
+    const x=clamp(drag.x+point.x,12,Math.max(12,board.clientWidth-440));
+    const y=clamp(drag.y+point.y,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
     drag.node.style.left=x+'px';drag.node.style.top=y+'px';drag.next={x,y};
     invalidateFlowWireGeometry(flowArea);paintFlow();
   });
   const finish=event=>{
+    if(windowDrag&&windowDrag.pointer===event.pointerId){
+      const win=windowDrag.win,id=windowDrag.id;
+      if(event.type!=='pointercancel'){state.flowFxWindows[id]={x:win.offsetLeft,y:win.offsetTop};queueAutosave();}
+      windowDrag=null;return;
+    }
+    if(panDrag&&panDrag.pointer===event.pointerId){
+      const drag=panDrag;panDrag=null;drag.scroller.classList.remove('is-panning');
+      state.flowPan={left:drag.scroller.scrollLeft,top:drag.scroller.scrollTop};return;
+    }
     const drag=state.flowDrag;if(!drag)return;
     state.flowDrag=null;drag.node.classList.remove('is-dragging');
     if(event.type!=='pointercancel'&&drag.next){
