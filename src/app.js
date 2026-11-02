@@ -610,7 +610,11 @@ function setupFlow(){
     if(control){queueAutosave();return;}
   });
   body.addEventListener('pointerdown',event=>{
-    if(event.target.matches('[data-master-fx]'))checkpoint();
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume]'))checkpoint();
+  });
+  body.addEventListener('keydown',event=>{
+    if(event.target.matches('[data-master-fx],[data-flow-master-volume]')&&
+       ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)&&!event.repeat)checkpoint();
   });
   let dragged=null;
   function startDrag(event){
