@@ -12,7 +12,7 @@
 ## Alcance entregado
 
 - FX por pista como paneles/subnodos colapsados.
-- MASTER FX real en reproducción y exportación offline.
+- MASTER FX real en reproducción y exportación offline; el fader de salida está después de la cadena de efectos y del limitador.
 - Buses separados para música, voces, samples y FX return.
 - Samples one-shot en paralelo por defecto.
 - Sample Desk fullscreen, biblioteca local IndexedDB y 12 pads.
@@ -46,7 +46,8 @@
 ### 3. MASTER FX
 - Probar LOW, HIGH, DRIVE, COMP, DELAY y REVERB por separado.
 - Probar BYPASS y confirmar que no borra los valores.
-- Probar el volumen Master desde el canvas.
+- Probar el volumen Master desde el canvas; moverlo no debe cambiar la intensidad relativa de DRIVE/COMP/DELAY/REVERB.
+- Comprobar que el metrónomo sigue el fader Master pero no pasa por los efectos creativos.
 - Reproducir una mezcla de voz + música + sample y comprobar que MASTER FX procesa la suma.
 
 **Aceptación:** los efectos globales se escuchan después de sumar los buses; el limitador sigue activo.
