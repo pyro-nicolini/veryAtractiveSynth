@@ -274,3 +274,7 @@ body{background:radial-gradient(ellipse 58% 38% at 12% -8%,#762b4677,transparent
 .flow-mini-transport>button:first-child{background:linear-gradient(145deg,#ffe0c9,#e99a91 55%,#a94360);border-color:#f2b7a8;color:#28131d}
 .flow-onboarding{background:#281a29;border-color:#64465c;color:#f3dfe7}
 @media(prefers-reduced-transparency:reduce){.topbar,.transport,.flow-node,.flow-studio,.action-tile{backdrop-filter:none}}
+
+/* Global overlays must stay above both fullscreen workspaces. */
+#modalRoot .modal-backdrop{z-index:1200}
+.toast{z-index:1300}
