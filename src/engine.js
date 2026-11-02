@@ -48,8 +48,11 @@ function applyMasterFx(graph,settings,ctx){
   set(graph.reverbWet.gain,off?0:fx.reverb/100*.24);
   graph.settings=fx;
 }
-function makeMaster(ctx,destination,volume,settings=MASTER_FX_DEFAULTS){
-  const gain=ctx.createGain();gain.gain.value=volume/100;
+function makeMaster(ctx,destination,masterVolume,settings=MASTER_FX_DEFAULTS){
+  // The input node is the stable destination for buses; the master fader
+  // lives after processing so moving it never changes drive/compression.
+  const gain=ctx.createGain();gain.gain.value=1;
+  const masterFader=ctx.createGain();masterFader.gain.value=masterVolume/100;
   const low=ctx.createBiquadFilter();low.type='lowshelf';low.frequency.value=150;
   const high=ctx.createBiquadFilter();high.type='highshelf';high.frequency.value=7000;
   const drive=ctx.createWaveShaper();drive.oversample='2x';
@@ -66,9 +69,9 @@ function makeMaster(ctx,destination,volume,settings=MASTER_FX_DEFAULTS){
   compressor.connect(dry);dry.connect(delaySum);
   compressor.connect(delay);delay.connect(delayWet);delayWet.connect(delaySum);delay.connect(feedback);feedback.connect(delay);
   delaySum.connect(reverbSum);delaySum.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(reverbSum);
-  reverbSum.connect(limiter);limiter.connect(meter);meter.connect(destination);
-  const graph={gain,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,meter,
-    nodes:[gain,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,meter]};
+  reverbSum.connect(limiter);limiter.connect(masterFader);masterFader.connect(meter);meter.connect(destination);
+  const graph={gain,masterFader,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,meter,
+    nodes:[gain,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,masterFader,meter]};
   applyMasterFx(graph,settings,ctx);return graph;
 }
 function makeBus(ctx,destination,percent){
@@ -263,7 +266,7 @@ export class AudioEngine {
 
   setMaster(value){
     this.masterVolume=clamp(value,0,100);
-    if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
+    if(this.output)this.output.masterFader.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
   }
   setBuses(settings){
     this.busSettings=sanitiseBuses(settings);
@@ -310,7 +313,7 @@ export class AudioEngine {
     gain.gain.setValueAtTime(.0001,time);
     gain.gain.exponentialRampToValueAtTime(accent?.12:.08,time+.002);
     gain.gain.exponentialRampToValueAtTime(.0001,time+.055);
-    osc.connect(gain);gain.connect(this.output.gain);
+    osc.connect(gain);gain.connect(this.output.masterFader);
     osc.start(time);osc.stop(time+.065);
     osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch{}};
   }
