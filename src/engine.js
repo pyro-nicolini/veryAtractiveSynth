@@ -597,7 +597,7 @@ export class AudioEngine {
     if(duration>60*20)throw Error('El render local admite hasta 20 minutos por exportación');
     const hasReverb=!dry&&(active.some(track=>Number(track.space)>0)||this.masterFx.reverb>0&&!this.masterFx.bypass);
     const hasDelay=!dry&&(active.some(track=>Number(track.echo)>0)||this.masterFx.delay>0&&!this.masterFx.bypass);
-    const tail=hasReverb?1.9:hasDelay?1.1:.08;
+    const tail=hasReverb?2.35:hasDelay?1.15:.08;
     // Account for the effects tail so the end is not truncated.
     const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
     if(!dry){
