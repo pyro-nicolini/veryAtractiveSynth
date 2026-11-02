@@ -554,7 +554,7 @@ function setupFlow(){
     const fxDelete=event.target.closest('[data-flow-delete-preset]');
     if(fxDelete){if(confirm('¿Eliminar este preset?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}return;}
     const fxPreset=event.target.closest('[data-flow-preset]');
-    if(fxPreset){if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);else toast('Selecciona primero una pista.');return;}
+    if(fxPreset){if(fxPreset.dataset.flowOwner||state.selected)useFlowPreset(fxPreset.dataset.flowPreset,fxPreset.dataset.flowOwner||state.selected);else toast('Selecciona primero una pista.');return;}
     const sampleSave=event.target.closest('[data-flow-export-sample]');
     if(sampleSave){openTrackSampleDialog(sampleSave.dataset.flowExportSample);return;}
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
