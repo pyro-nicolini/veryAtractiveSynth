@@ -209,3 +209,12 @@ body.sample-desk-open{overflow:hidden}
 .flow-mini-transport label{display:flex;align-items:center;gap:6px;padding:0 5px;color:#e6edf3;font-size:8px;font-weight:800}
 .flow-mini-transport input{width:75px;accent-color:#ff9a60}
 @media(max-width:620px){.flow-mini-transport{order:2}.patch-toolbar{gap:8px}.flow-mini-transport input{width:58px}}
+
+.sample-library-item{flex-wrap:wrap}
+.sample-library-item .sample-library-name{flex-basis:calc(100% - 45px);min-width:120px}
+.sample-library-item button[data-library-add]{width:30px;height:27px;border-color:#6c8e79;background:#2d4339;color:#d8f3c8;font-size:12px;font-weight:850}
+.sample-library-item button[data-library-add]:hover{background:#3c5b49;border-color:#b4e69d;color:#fff}
+.sample-library-item button[data-library-route="master"]{border-color:#a97d60;background:#493a33;color:#ffd9bc}
+.sample-library-item button[data-library-route="selected"]{border-color:#718a9b;background:#33434f}
+.sample-insert-target{display:flex;align-items:center;gap:10px;max-width:340px;margin:12px 0;color:#c9d4dc;font-size:10px;font-weight:850;letter-spacing:.8px}
+.sample-insert-target select{flex:1;min-width:0;padding:9px 11px;border-radius:8px;font-size:11px}
