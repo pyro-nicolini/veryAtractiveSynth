@@ -15,7 +15,7 @@ import {FX_CHAIN,FX_IDS,normaliseFxBypass,toggleTrackFx,isFxBypassed} from './fx
 import {GROOVES,VOICE_STYLES,AUTO_TRANSITIONS,makeGroove,applyVoiceStyle,applyAutoTransition} from './studio-library.js';
 import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
-import {clampFlowZoom,graphViewportSize,screenToGraph,fitFlowZoom,zoomAroundPoint} from './flow-viewport.js';
+import {clampFlowZoom,graphViewportSize,screenToGraph,fitFlowZoom,zoomAroundPoint,flowWorkspaceMetrics} from './flow-viewport.js';
 import {canConnect,chainLane} from './flow-routing.js';
 import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
@@ -31,7 +31,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPanReady:false,flowCanvasOrigin:{x:0,y:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Signal Flow','Cada tarjeta representa una pista real. Abre FLOW para trabajar a pantalla completa. Arrastra el fondo para desplazarte, usa + / − para hacer zoom y conecta puertos de salida y entrada. Pulsa FX para abrir una mesa flotante que puedes mover o maximizar, sin perder el grafo de fondo. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
   masterFx:['Efectos globales','Estos controles se aplican después de sumar las voces, pistas y samples. LOW y HIGH ajustan el tono general; DRIVE añade saturación; COMP controla la dinámica; DELAY y REVERB añaden espacio. BYPASS desactiva estos efectos sin borrar sus ajustes. El limitador de seguridad permanece activo.'],
@@ -234,23 +234,37 @@ function syncFlowTransport(){
   button.setAttribute('aria-label',engine.playing?'Pausar reproducción':'Reproducir mezcla');
 }
 function applyFlowViewport(){
-  const board=$('#flowBoard'),space=$('#flowCanvasSpace'),label=$('#flowZoomLabel');
-  if(!board||!space)return;
-  const z=clampFlowZoom(state.flowCanvasZoom),size=graphViewportSize(board.offsetWidth,board.offsetHeight,z);
+  const board=$('#flowBoard'),space=$('#flowCanvasSpace'),scroller=$('#flowCanvasScroller'),label=$('#flowZoomLabel');
+  if(!board||!space||!scroller)return;
+  const z=clampFlowZoom(state.flowCanvasZoom);
+  const size=flowWorkspaceMetrics(board.offsetWidth,board.offsetHeight,scroller.clientWidth,scroller.clientHeight,z);
+  const old=state.flowCanvasOrigin;
   state.flowCanvasZoom=z;
+  state.flowCanvasOrigin={x:size.originX,y:size.originY};
+  if(!state.flowPanReady){
+    state.flowPan={left:size.originX,top:size.originY};state.flowPanReady=true;
+  }else{
+    state.flowPan={left:state.flowPan.left+size.originX-old.x,top:state.flowPan.top+size.originY-old.y};
+  }
   board.style.transform='scale('+z+')';
+  board.style.left=size.originX+'px';board.style.top=size.originY+'px';
   space.style.width=size.width+'px';space.style.height=size.height+'px';
   if(label)label.textContent=Math.round(z*100)+'%';
   invalidateFlowWireGeometry($('#flowArea'));
   paintFlow(engine.playing);
 }
 function setFlowZoom(zoom,clientX=null,clientY=null){
-  const scroller=$('#flowCanvasScroller');if(!scroller)return;
+  const scroller=$('#flowCanvasScroller'),board=$('#flowBoard');if(!scroller||!board)return;
   const previous=state.flowCanvasZoom,next=clampFlowZoom(zoom),rect=scroller.getBoundingClientRect();
   if(Math.abs(previous-next)<.001)return;
   const x=clientX===null?scroller.clientWidth/2:clientX-rect.left;
   const y=clientY===null?scroller.clientHeight/2:clientY-rect.top;
-  const scroll=zoomAroundPoint({scrollLeft:scroller.scrollLeft,scrollTop:scroller.scrollTop,x,y,oldZoom:previous,newZoom:next});
+  const newSize=flowWorkspaceMetrics(board.offsetWidth,board.offsetHeight,scroller.clientWidth,scroller.clientHeight,next);
+  const scroll=zoomAroundPoint({
+    scrollLeft:scroller.scrollLeft,scrollTop:scroller.scrollTop,x,y,
+    oldZoom:previous,newZoom:next,oldOriginX:state.flowCanvasOrigin.x,oldOriginY:state.flowCanvasOrigin.y,
+    newOriginX:newSize.originX,newOriginY:newSize.originY
+  });
   state.flowCanvasZoom=next;applyFlowViewport();
   scroller.scrollLeft=scroll.left;scroller.scrollTop=scroll.top;
   state.flowPan={left:scroller.scrollLeft,top:scroller.scrollTop};
@@ -259,7 +273,11 @@ function setFlowZoom(zoom,clientX=null,clientY=null){
 function fitFlowCanvas(){
   const board=$('#flowBoard'),scroller=$('#flowCanvasScroller');if(!board||!scroller)return;
   state.flowCanvasZoom=fitFlowZoom(board.offsetWidth,board.offsetHeight,scroller.clientWidth,scroller.clientHeight);
-  applyFlowViewport();scroller.scrollLeft=0;scroller.scrollTop=0;state.flowPan={left:0,top:0};queueAutosave();
+  applyFlowViewport();
+  const w=board.offsetWidth*state.flowCanvasZoom,h=board.offsetHeight*state.flowCanvasZoom;
+  scroller.scrollLeft=state.flowCanvasOrigin.x-Math.max(0,(scroller.clientWidth-w)/2);
+  scroller.scrollTop=state.flowCanvasOrigin.y-Math.max(0,(scroller.clientHeight-h)/2);
+  state.flowPan={left:scroller.scrollLeft,top:scroller.scrollTop};queueAutosave();
 }
 function clampFloatingFxWindows(){
   const layer=$('#flowFxLayer');if(!layer)return;
@@ -300,7 +318,12 @@ function setFlowFullscreen(force){
   document.body.classList.toggle('flow-fullscreen-open',state.flowFullscreen);
   $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
   const button=$('#flowFullscreen');if(button)button.textContent=state.flowFullscreen?'↙ VOLVER':'⛶ PANTALLA COMPLETA';
-  requestAnimationFrame(()=>{invalidateFlowWireGeometry(area);paintFlow(engine.playing);});
+  requestAnimationFrame(()=>{
+    applyFlowViewport();
+    const scroller=$('#flowCanvasScroller');
+    if(scroller){scroller.scrollLeft=state.flowPan.left;scroller.scrollTop=state.flowPan.top;}
+    clampFloatingFxWindows();invalidateFlowWireGeometry(area);paintFlow(engine.playing);
+  });
 }
 async function openSampleDesk(){
   const area=$('#sampleDeck');if(!area)return;
@@ -789,7 +812,7 @@ function setupFlow(){
       }
     }
     const scroller=$('#flowCanvasScroller'),board=$('#flowBoard');
-    if(scroller&&board&&event.button===0&&event.target.closest('#flowBoard')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
+    if(scroller&&board&&event.button===0&&event.target.closest('#flowCanvasScroller')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
       panDrag={pointer:event.pointerId,startX:event.clientX,startY:event.clientY,left:scroller.scrollLeft,top:scroller.scrollTop,scroller};
       event.target.setPointerCapture?.(event.pointerId);
       scroller.classList.add('is-panning');event.preventDefault();return;
