@@ -7,7 +7,7 @@ import {MASTER_FX_CHAIN} from './master-fx.js';
 import {formatDb,BUS_IDS,BUS_LABELS,busForTrack} from './studio-mixer.js';
 import {routeFor,canConnect} from './flow-routing.js';
 
-export const FLOW_MIN_WIDTH=1080;
+export const FLOW_MIN_WIDTH=1200;
 export const FLOW_NODE_WIDTH=232;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const FX_ICON={tune:'✦',clean:'◌',eq:'≋',drive:'◈',compressor:'◉',delay:'↺',reverb:'✧'};
@@ -24,7 +24,7 @@ export function flowPosition(track,index,positions={}){
   {x:Math.max(12,Math.min(7000,p.x)),y:Math.max(12,Math.min(3000,p.y))}:
   {x:70+index*285,y:busForTrack(track)==='vocals'?135:430};
 }
-export function flowHeight(){return 790;}
+export function flowHeight(){return 920;}
 function trackFxDrawer(track,presets=[]){
  const fx=FX_CHAIN.map(item=>{
   const active=effectIsActive(track,item.id);
@@ -85,14 +85,14 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
  for(const [lane,items] of [['vocals',voice],['music',music]]){
   items.forEach((track,index)=>{
    const stored=positions?.[track.id],pos=stored&&Number.isFinite(stored.x)&&Number.isFinite(stored.y)?
-    flowPosition(track,index,positions):{x:70+index*285,y:lane==='vocals'?135:430};
+    flowPosition(track,index,positions):{x:70+index*285,y:lane==='vocals'?125:520};
    geom.set(track.id,pos);maxRight=Math.max(maxRight,pos.x+FLOW_NODE_WIDTH+70);
   });
  }
- const boardWidth=Math.min(12000,Math.max(FLOW_MIN_WIDTH,maxRight+420));
- const busX=boardWidth-380,masterX=boardWidth-175;
+ const boardWidth=Math.min(12000,Math.max(FLOW_MIN_WIDTH,maxRight+520));
+ const busX=boardWidth-500,masterX=boardWidth-260;
  const nodes=visible.map(track=>nodeMarkup(track,geom.get(track.id),{tracks:visible},selectedId,expanded.has(track.id),presets)).join('');
- const busY={vocals:165,music:440,samples:565,fx:675};
+ const busY={vocals:165,music:535,samples:655,fx:760};
  const buses=BUS_IDS.map(id=>{
   const title=id==='fx'?'FX RETURN':id==='samples'?'SAMPLE BUS':BUS_LABELS[id];
   const sub=id==='samples'?'Samples reutilizables':id==='fx'?'Efectos auxiliares':'Salida del grupo';
@@ -105,7 +105,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   '<button type="button" class="flow-master-fx" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'">MASTER FX</button>'+
   (expanded.has('master')?masterFxDrawer(masterFx):'')+'</article>';
  const laneTags='<div class="patch-lane-title" style="top:28px"><span class="patch-lane-dot voices"></span>01 · VOICE SIGNAL <small>Voces · cada pista tiene sus propios FX</small><button type="button" data-flow-add-voice>＋ Añadir voz</button></div>'+
-  '<div class="patch-lane-title" style="top:340px"><span class="patch-lane-dot music"></span>02 · TRACK SIGNAL <small>Instrumentos, loops y samples</small><button type="button" data-flow-add-track>＋ Añadir pista</button></div>';
+  '<div class="patch-lane-title" style="top:430px"><span class="patch-lane-dot music"></span>02 · TRACK SIGNAL <small>Instrumentos, loops y samples</small><button type="button" data-flow-add-track>＋ Añadir pista</button></div>';
  const emptyVoice=!voice.length?'<div class="flow-lane-empty" style="left:70px;top:115px">Importa una grabación vocal o pulsa «Añadir voz».</div>':'';
  const emptyMusic=!music.length?'<div class="flow-lane-empty" style="left:70px;top:410px">Añade una base, un loop o un sample.</div>':'';
  const dock='<button type="button" class="patch-sample-dock" data-flow-sample-dock title="Arrastra aquí cualquier nodo para guardar su audio en la biblioteca"><span>▦</span><span><strong>SAMPLE DESK</strong><small>Arrastra un nodo aquí para guardarlo como sample</small></span><b>↗</b></button>';
