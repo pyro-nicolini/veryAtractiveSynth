@@ -15,15 +15,16 @@ El repositorio sigue usando **JavaScript nativo + SVG + Web Audio API**. React F
 ## QA obligatorio en Chrome/Edge
 1. Pulsar **FLOW** → entra al canvas fullscreen. Escape y botón Volver cierran fullscreen.
 2. Hacer zoom +/−; usar **Ajustar**; Ctrl + rueda sobre el canvas. El zoom del timeline NO debe cambiar.
-3. Arrastrar el fondo del canvas para desplazarse. Arrastrar pistas después de hacer zoom (50%, 100%, 150%). Comprobar que el nodo sigue al puntero sin saltos.
+3. Arrastrar el fondo del canvas y las zonas vacías exteriores para desplazarse, incluso con el grafo más pequeño que la ventana. Arrastrar pistas después de hacer zoom (50%, 100%, 150%). Comprobar que el nodo sigue al puntero sin saltos.
 4. Conectar salida de voz a otra voz y salida de pista a otra pista a zoom distinto de 100%. Los cables deben encajar en ambos puertos. Los ciclos se rechazan.
 5. Abrir FX de una pista → flotan por encima del grafo sin empujar ni mover otros nodos.
-6. Mover la ventana FX por su cabecera; ampliarla y restaurarla; cerrarla. El canvas debe seguir visible detrás. MASTER FX usa la misma interacción.
-7. Probar sliders Tune, Retune, Clean, Brillo, Calidez, Drive, Eco y Reverb. Deben afectar la pista correcta sin modificar los buffers originales.
+6. Mover la ventana FX por su cabecera; ampliarla y restaurarla; cerrarla. El canvas debe seguir visible detrás. MASTER FX usa la misma interacción. Probar que una ventana se reajusta al redimensionar el navegador.
+7. Probar cada tarjeta FX: su botón ON/OFF y los sliders deben estar agrupados. Cambiar un slider reactiva ese efecto y actualiza su indicador y contador de FX sin interrumpir el gesto. Probar Tune, Retune, Clean, Brillo, Calidez, Drive, Eco y Reverb. Deben afectar la pista correcta sin modificar los buffers originales.
 8. Con dos pistas, modificar FX de una. La otra no debe cambiar. Guardar y recuperar un preset.
 9. Guardar proyecto, recargar la aplicación: recuperar zoom y posición flotante. Abrir proyecto anterior V2: FX y audio intactos.
-10. Probar mínimo 360px de ancho, teclado y `prefers-reduced-motion`.
-11. Probar Sample Desk desde el canvas y cerrar, asegurando que el grafo vuelve a funcionar.
+10. Probar mínimo 360px de ancho, teclado y `prefers-reduced-motion`. En táctil, el fondo debe desplazarse de forma nativa sin bloquear botones, selectores ni sliders.
+11. Mover un nodo hacia la derecha y hacia abajo hasta superar el tamaño inicial del canvas: el área de trabajo debe extenderse sin saltos y la posición debe persistir tras recargar.
+12. Probar Sample Desk desde el canvas y cerrar, asegurando que el grafo vuelve a funcionar.
 
 ## Pruebas automáticas
 ```bash
