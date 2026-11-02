@@ -13,7 +13,7 @@ test('real vocal and music bus lanes render with routing controls and bus to mas
     autotune:0,drive:0,echo:0,space:0,muted:false,fxBypass:{}});
   const voices=make('lead','voice'),music=make('beat','audio');
   const markup=flowMarkup([voices,music]);
-  for(const id of ['vocals','music','fx'])
+  for(const id of ['vocals','music','samples','fx'])
     assert.ok(markup.includes('data-flow-bus="'+id+'"'),id);
   assert.match(markup,/data-flow-destination="lead"/);
   assert.match(markup,/data-flow-route="bus:vocals"/);
@@ -21,8 +21,8 @@ test('real vocal and music bus lanes render with routing controls and bus to mas
   assert.match(markup,/SUMADOR|PATCHBAY/);
   assert.match(markup,/data-flow-out="lead"/);
   assert.match(markup,/data-flow-in="lead"/);
-  assert.equal(flowPosition(voices,0).y,128);
-  assert.equal(flowPosition(music,0).y,429);
+  assert.equal(flowPosition(voices,0).y,125);
+  assert.equal(flowPosition(music,0).y,520);
 });
 
 test('sample FX presets are non-destructive data and stored pads retain selection',()=>{
@@ -59,19 +59,19 @@ test('additional stylized vocal presets use parameters of the existing audio eng
 
 test('Red Velvet startup, per-track export and samples are connected and included offline',()=>{
   const html=file('index.html'),app=file('src/app.js'),deck=file('src/sample-deck.js'),
-    theme=file('src/studio-console.css'),sw=file('sw.js'),engine=file('src/engine.js');
+    theme=file('src/signal-flow-v2.css'),sw=file('sw.js'),engine=file('src/engine.js');
   assert.match(html,/Bienvenue\./);
   assert.match(html,/id="splashSkip"/);
-  assert.match(html,/id="flowArrange"/);
-  assert.match(html,/src\/studio-console\.css/);
+  assert.match(html,/id="flowArrange"/);assert.match(html,/id="flowFullscreen"/);
+  assert.match(html,/src\/studio-console\.css/);assert.match(html,/src\/signal-flow-v2\.css/);
   assert.match(app,/data-track-action="export-track"/);
   assert.match(app,/async function performTrackExport/);
-  assert.match(app,/data-flow-destination/);
+  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);
   assert.match(deck,/data-pad-export="dry"/);
-  assert.match(deck,/data-pad-export="wet"/);
+  assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/data-saved-sample/);
   assert.match(deck,/this\.engine\.previewSample/);
-  assert.match(engine,/createDryGraph/);
+  assert.match(engine,/createDryGraph/);assert.match(engine,/setMasterFx\(settings\)/);assert.match(engine,/makeMaster\(offline,offline\.destination,this\.masterVolume,dry\?MASTER_FX_DEFAULTS:this\.masterFx\)/);
   assert.match(theme,/prefers-reduced-motion/);
-  for(const path of ['src/splash.js','src/studio-console.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js'])
+  for(const path of ['src/splash.js','src/studio-console.css','src/signal-flow-v2.css','src/flow-routing.js','src/sample-library.js','src/patch-presets.js','src/master-fx.js'])
     assert.ok(sw.includes(path),'offline asset absent: '+path);
 });
