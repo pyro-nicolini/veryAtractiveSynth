@@ -90,7 +90,7 @@ export class SampleDeck{
       const ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
       const processed=target.dataset.padExport==='wet';
       const fx=sampleEffect(pad.fx);
-      const wav=processed&&pad.fx!=='original'
+      const wav=processed
         ?await this.engine.exportMix([{...defaults(),...fx.settings,id:'pad-export',name:pad.name,
           type:'audio',buffer,volume:85,bus:'music',muted:false,solo:false}],{depth:24,rate:48000})
         :encodeWav(buffer,24);
