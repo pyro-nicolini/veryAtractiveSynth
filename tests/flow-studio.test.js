@@ -26,3 +26,10 @@ test('curved cable is data-driven and vibrates only with nonzero meter',()=>{
  const still=wireCurve(10,20,300,100,0,15),loud=wireCurve(10,20,300,100,1,15);
  assert.ok(still.startsWith('M 10.0 20.0 Q'));assert.notEqual(loud,still);
 });
+
+test('sample identity stays visible when inserted into a voice bus',()=>{
+ const routedSample={...track,id:'one-shot',name:'One shot',type:'audio',bus:'vocals',sourceKind:'sample'};
+ const markup=flowMarkup([track,routedSample]);
+ assert.match(markup,/class="flow-node [^"]*flow-node-sample[^"]*" data-flow-track="one-shot"/);
+ assert.equal(flowPosition(routedSample,0).y,125);
+});
