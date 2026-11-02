@@ -27,7 +27,7 @@ export class SampleDeck{
  }
  render(){
   const count=this.pads.filter(Boolean).length;
-  const library=this.assets.length?this.assets.map(item=>'<article class="sample-library-item" draggable="true" data-saved-sample="'+esc(item.id)+'"><span class="sample-library-icon">♫</span><span class="sample-library-name"><strong>'+esc(item.name)+'</strong><small>'+Number(item.duration||0).toFixed(2)+' s · '+esc(item.fx||'original')+'</small></span><button type="button" data-library-play="'+esc(item.id)+'" title="Escuchar">▶</button><button type="button" data-library-add="'+esc(item.id)+'" title="Añadir a la mezcla">＋</button><button type="button" data-library-delete="'+esc(item.id)+'" title="Eliminar">×</button></article>').join(''):'<p class="sample-library-empty">Guarda un recorte o arrastra una pista aquí desde Signal Flow.</p>';
+  const library=this.assets.length?this.assets.map(item=>'<article class="sample-library-item" draggable="true" data-saved-sample="'+esc(item.id)+'"><span class="sample-library-icon">♫</span><span class="sample-library-name"><strong>'+esc(item.name)+'</strong><small>'+Number(item.duration||0).toFixed(2)+' s · '+esc(item.fx||'original')+'</small></span><button type="button" data-library-play="'+esc(item.id)+'" title="Escuchar">▶</button><button type="button" data-library-add="'+esc(item.id)+'" data-library-route="samples" title="Añadir al Sample Bus">＋</button><button type="button" data-library-add="'+esc(item.id)+'" data-library-route="selected" title="Insertar en la pista seleccionada">↳</button><button type="button" data-library-add="'+esc(item.id)+'" data-library-route="master" title="Enviar directamente a Master">M</button><button type="button" data-library-delete="'+esc(item.id)+'" title="Eliminar">×</button></article>').join(''):'<p class="sample-library-empty">Guarda un recorte o arrastra una pista aquí desde Signal Flow.</p>';
   this.root.innerHTML='<div class="sample-head"><div><div class="section-overline">INSTRUMENTO · LOCAL / PRIVADO</div><h2>Sample Desk <span class="sample-counter">'+count+' / 12</span></h2><p>Prueba, corta, guarda y reutiliza tus sonidos. Tus archivos permanecen en este equipo.</p></div><div class="sample-head-actions"><span class="sample-keys-hint">1—9 · 0 · − · =</span><button type="button" class="sample-close" data-pad-close-deck>← Volver al estudio</button></div></div>'+
    '<div class="sample-grid" role="group" aria-label="12 pads de sonido">'+
    this.pads.map((pad,i)=>'<div class="sample-pad '+(this.selected===i?'selected':'')+(pad?' filled':'')+'">'+
@@ -36,7 +36,7 @@ export class SampleDeck{
      (pad?padWaveSVG(pad.buffer,pad.from,pad.to):'<span class="sample-empty-wave">⌁</span>')+
      '<span class="sample-duration">'+(pad?(pad.to-pad.from).toFixed(2)+' s':'＋ Añadir')+'</span></button>'+
      '<button type="button" class="sample-pad-edit" data-pad-edit="'+i+'" aria-label="Editar pad '+(i+1)+'">✎</button></div>').join('')+'</div>'+
-   '<section class="sample-library"><header><div><strong>MI BIBLIOTECA</strong><small>Samples guardados · puedes arrastrarlos a una pista</small></div><span>'+this.assets.length+' sonidos</span></header><div class="sample-library-list">'+library+'</div></section>'+
+   '<section class="sample-library"><header><div><strong>MI BIBLIOTECA</strong><small>Samples guardados · elige dónde insertarlos</small></div><span>'+this.assets.length+' sonidos</span></header><div class="sample-library-list">'+library+'</div></section>'+
    '<div class="sample-editor" id="sampleEditor">'+(this.selected===null?'Elige un pad para cargar audio, recortar o guardar un sonido.':this.editorMarkup())+'</div>'+
    '<input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" hidden>';
  }
@@ -52,7 +52,8 @@ export class SampleDeck{
       '<p class="sample-edit-empty">Carga un sonido de hasta 30 segundos o corta uno desde tu pista seleccionada.</p>')+
     (pad?'<label class="sample-fx-label" for="sampleFx">COLOR DEL SAMPLE <select id="sampleFx" aria-label="Efecto del pad">'+
       Object.entries(SAMPLE_FX).map(([id,fx])=>'<option value="'+id+'" '+((pad.fx||'original')===id?'selected':'')+'>'+esc(fx.name)+'</option>').join('')+
-      '</select></label><p class="sample-fx-hint">El original se conserva · escucha el pad con el color elegido, o exporta cualquiera de las dos versiones.</p>':'')+
+      '</select></label><p class="sample-fx-hint">El original se conserva · escucha el pad con el color elegido, o exporta cualquiera de las dos versiones.</p>'+
+      '<label class="sample-insert-target">ENVIAR A <select id="sampleInsertRoute" aria-label="Destino del sample"><option value="samples">SAMPLE BUS</option><option value="selected">PISTA SELECCIONADA</option><option value="master">MASTER</option></select></label>':'')+
     '<div class="sample-editor-actions"><button type="button" data-pad-import>↑ Cargar audio</button>'+
     '<button type="button" data-pad-from-track>✂ Desde la pista</button>'+
     '<button type="button" data-pad-save '+(!pad?'disabled':'')+'>✓ Guardar pad</button>'+
@@ -67,7 +68,7 @@ export class SampleDeck{
   const target=event.target.closest('button');if(!target)return;
   if(target.hasAttribute('data-pad-close-deck')){this.onClose?.();return;}
   if(target.hasAttribute('data-library-play')){await this.playLibrary(target.dataset.libraryPlay);return;}
-  if(target.hasAttribute('data-library-add')){await this.addLibrary(target.dataset.libraryAdd);return;}
+  if(target.hasAttribute('data-library-add')){await this.addLibrary(target.dataset.libraryAdd,target.dataset.libraryRoute||'samples');return;}
   if(target.hasAttribute('data-library-delete')){await this.removeLibrary(target.dataset.libraryDelete);return;}
   if(target.hasAttribute('data-pad-edit')){this.select(Number(target.dataset.padEdit));return;}
   if(target.hasAttribute('data-pad-play')){
@@ -121,7 +122,7 @@ export class SampleDeck{
   if(target.hasAttribute('data-pad-insert')){
     const pad=this.draft||this.pads[this.selected];if(!pad)return;
     try{const ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
-      this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings);this.say('Sample agregado como pista con sus efectos editables');}
+      const route=this.root.querySelector('#sampleInsertRoute')?.value||'samples';this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings,{route});this.say('Sample insertado en '+(route==='master'?'MASTER':route==='selected'?'la pista seleccionada':'SAMPLE BUS')+'.');}
     catch(error){this.say(error.message);}return;
   }
   if(target.hasAttribute('data-pad-remove')){
@@ -143,11 +144,12 @@ export class SampleDeck{
    source.onended=()=>{try{source.disconnect();}catch{}};return source;
   }catch(error){this.say('No se pudo reproducir el sample: '+error.message);}
  }
- async addLibrary(id){
+ async addLibrary(id,route='samples'){
   try{
    const pad=await loadLibrarySample(id),ctx=await this.engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
-   this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings,{bus:'samples'});
-   this.say('Sample añadido a la mezcla y enviado al SAMPLE BUS.');
+   const track=this.onAdd(buffer,pad.name,sampleEffect(pad.fx).settings,{route});
+   const actual=route==='selected'&&!track?.flowTo?.startsWith('track:')?'SAMPLE BUS':route==='master'?'MASTER':route==='selected'?'la pista seleccionada':'SAMPLE BUS';
+   this.say('Sample añadido a '+actual+'.');
   }catch(error){this.say('No se pudo añadir: '+error.message);}
  }
  async removeLibrary(id){
