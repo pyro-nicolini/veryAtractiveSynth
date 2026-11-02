@@ -721,7 +721,10 @@ function setupFlow(){
         unit.classList.toggle('is-bypassed',!active);
         const button=unit.querySelector('[data-flow-effect-toggle]');
         if(button){button.setAttribute('aria-pressed',String(active));button.classList.toggle('is-active',active);}
-        const state=unit.querySelector('.flow-fx-state');if(state)state.textContent=active?'ON':'OFF';
+        const status=unit.querySelector('.flow-fx-state');if(status)status.textContent=active?'ON':'OFF';
+        const trigger=Array.from(body.querySelectorAll('[data-flow-expand-fx]')).find(item=>item.dataset.flowExpandFx===track.id);
+        const count=trigger?.querySelector('span');
+        if(count)count.textContent=String(unit.closest('[data-flow-fx-drawer]')?.querySelectorAll('.flow-fx-unit.is-active').length||0);
       }
       queueAutosave();return;
     }
