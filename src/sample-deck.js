@@ -137,7 +137,7 @@ export class SampleDeck{
  async playLibrary(id){
   try{
    const pad=await loadLibrarySample(id);
-   if(pad.fx&&pad.fx!=='original')return await this.engine.previewSample(pad.buffer,pad.from,pad.to,sampleEffect(pad.fx).settings);
+   if(SAMPLE_FX[pad.fx]&&pad.fx!=='original')return await this.engine.previewSample(pad.buffer,pad.from,pad.to,sampleEffect(pad.fx).settings);
    const ctx=await this.engine.ready(),source=ctx.createBufferSource();
    source.buffer=pad.buffer;source.connect(this.engine.output.gain);source.start(ctx.currentTime,pad.from,pad.to-pad.from);
    source.onended=()=>{try{source.disconnect();}catch{}};return source;
