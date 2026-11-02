@@ -745,12 +745,14 @@ function setupFlow(){
       const win=handleFx.closest('[data-flow-fx-window]');
       if(win&&!win.classList.contains('is-maximized')){
         windowDrag={id:handleFx.dataset.flowFxMove,pointer:event.pointerId,win,startX:event.clientX,startY:event.clientY,x:win.offsetLeft,y:win.offsetTop};
+        handleFx.setPointerCapture?.(event.pointerId);
         event.preventDefault();return;
       }
     }
     const scroller=$('#flowCanvasScroller'),board=$('#flowBoard');
     if(scroller&&board&&event.button===0&&event.target.closest('#flowBoard')&&!event.target.closest('button,input,select,[data-flow-track],[data-flow-bus],#flowMaster,[data-flow-drag]')){
       panDrag={pointer:event.pointerId,startX:event.clientX,startY:event.clientY,left:scroller.scrollLeft,top:scroller.scrollTop,scroller};
+      event.target.setPointerCapture?.(event.pointerId);
       scroller.classList.add('is-panning');event.preventDefault();return;
     }
     if(event.target.closest('[data-flow-export-sample]'))return;
@@ -833,6 +835,7 @@ function setupFlow(){
     if(event.key!=='Escape')return;
     if($('#modalBackdrop')){closeModal();event.preventDefault();return;}
     if($('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();return;}
+    if(state.flowExpandedFx.length){state.flowExpandedFx=[];state.flowFxMaximized=null;renderFlow();event.preventDefault();return;}
     if(state.flowFullscreen){setFlowFullscreen(false);event.preventDefault();}
   });
 }
