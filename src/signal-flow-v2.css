@@ -218,3 +218,59 @@ body.sample-desk-open{overflow:hidden}
 .sample-library-item button[data-library-route="selected"]{border-color:#718a9b;background:#33434f}
 .sample-insert-target{display:flex;align-items:center;gap:10px;max-width:340px;margin:12px 0;color:#c9d4dc;font-size:10px;font-weight:850;letter-spacing:.8px}
 .sample-insert-target select{flex:1;min-width:0;padding:9px 11px;border-radius:8px;font-size:11px}
+
+/* RED VELVET art direction — deep wine glass, rose-metal controls, restrained neon lanes. */
+:root{--ui-bg:#130d15;--ui-surface:#2a1b27;--ui-surface-2:#382332;--ui-edge:#654557;--ui-text:#fff4f3;--ui-muted:#d3bfc9;--ui-dim:#ae96a4;--ui-orange:#f2a17d;--ui-cyan:#70cddd;--ui-pink:#f17eae;--ui-green:#b6d993}
+html,body{background:#130d15;color:#fff3f4}
+body{background:radial-gradient(ellipse 58% 38% at 12% -8%,#762b4677,transparent 72%),radial-gradient(ellipse 42% 34% at 94% 16%,#54264f55,transparent 76%),linear-gradient(150deg,#1c111b,#100b13 65%,#170d18);background-attachment:fixed}
+.topbar,.transport{background:#21131fee;border-color:#674557;box-shadow:0 12px 36px #09050b99;backdrop-filter:blur(24px) saturate(135%)}
+.brand-mark{background:radial-gradient(circle at 28% 18%,#ffd9cf,#c66b7f 48%,#54243a 82%);border-color:#df9a9b;box-shadow:inset 2px 2px 7px #fff9,inset -6px -8px 14px #511c3999,0 7px 19px #08040b99}
+.brand-text>span,h1 em{color:#f3a0a7}
+.eyebrow,.section-overline,.transport-label{color:#f2a18e}
+.button-muted,.mini-action,.button-outline{background:linear-gradient(145deg,#563447,#2c1c2a 76%);border-color:#81566b;color:#fff0f0;box-shadow:inset 1px 1px #ffffff26,inset -3px -4px 8px #10081177,0 5px 13px #08040b88}
+.button-muted:hover,.mini-action:hover{border-color:#e5a2a5;color:#fff}
+.button-primary,.transport-play{background:linear-gradient(145deg,#ffe0c9,#e99a91 46%,#a94360);border-color:#f2b7a8;color:#28131d;box-shadow:inset 2px 2px 6px #fff9,inset -4px -5px 9px #77304a99,0 8px 22px #7f294744}
+.action-tile,.track-card,.inspector,.studio-mixer,.sound-library,.sample-deck,.flow-studio,.empty-state{background:linear-gradient(145deg,#422b3bdf,#251925f5 72%,#1b121e);border-color:#68485d;box-shadow:inset 1px 1px #ffffff20,inset -5px -7px 18px #0b060d77,0 13px 29px #08040b99;backdrop-filter:blur(16px) saturate(125%)}
+.action-tile:hover,.track-card:hover,.track-card.selected{border-color:#e39a9e;box-shadow:inset 1px 1px #ffffff2b,0 0 0 1px #e89aa733,0 15px 30px #09050b99}
+.action-symbol{background:radial-gradient(circle at 26% 18%,#ffe3d7,#e79b9d 43%,#9a3c5a 78%);color:#301321;box-shadow:inset 2px 2px 6px #fff9,inset -5px -6px 9px #68233e99,4px 8px 18px #08040b99}
+.flow-studio{background:linear-gradient(145deg,#3c2638f2,#211622f8 70%,#190f1b);border-color:#704b64;box-shadow:inset 1px 1px #ffffff24,0 16px 38px #08040baa;backdrop-filter:blur(18px)}
+.flow-studio.is-fullscreen{background:radial-gradient(ellipse 48% 34% at 16% 0%,#63283f66,transparent 72%),linear-gradient(145deg,#1e121e,#100a13 75%);backdrop-filter:blur(24px)}
+.patch-toolbar{background:linear-gradient(145deg,#422b3b,#251724);border-color:#704d63;color:#f6e6e9;backdrop-filter:blur(18px)}
+.patch-toolbar strong{color:#fff5f5}
+.patch-toolbar>span:nth-of-type(2){color:#d7bdc9}
+.flow-board-scroller{border-color:#69495f;background:#160f19;box-shadow:inset 0 0 34px #09050b77}
+.flow-board{background:radial-gradient(ellipse 38% 32% at 83% 17%,#74354b2b,transparent 72%),repeating-linear-gradient(0deg,#c48aa013 0 1px,transparent 1px 28px),repeating-linear-gradient(90deg,#c48aa013 0 1px,transparent 1px 28px),#1a121d}
+.flow-board:before{border-color:#bd7c9a44}
+.flow-node{background:linear-gradient(145deg,#56384b,#352333 72%,#241725);border-color:#865c72;color:#fff4f5;box-shadow:inset 1px 1px #ffffff2d,inset -4px -5px 12px #130a1688,0 10px 22px #08040baa;backdrop-filter:blur(12px)}
+.flow-node-voice{border-color:#ad6687}
+.flow-node-sample{border-color:#779878}
+.flow-node-selected{border-color:#f3b2a4;box-shadow:0 0 0 2px #eaa1a455,0 12px 27px #08040baa}
+.flow-node-name strong,.flow-node-actions button,.flow-node-route select{color:#fff5f5}
+.flow-node-wave{background:#1b101c}
+.flow-node-actions button{background:linear-gradient(145deg,#624256,#39263a);border-color:#8a6378;box-shadow:inset 1px 1px #ffffff1d,0 3px 7px #08040b66}
+.flow-node-actions button:hover{border-color:#f0aaa0}
+.flow-node-actions .flow-fx-trigger{background:linear-gradient(145deg,#774653,#482638);border-color:#c17a83;color:#ffe3e2}
+.patch-port{border-color:#241624;box-shadow:0 0 0 1px #d4a6b8,0 0 12px #e68bb377}
+.patch-port-in{background:#f0a28f;box-shadow:0 0 0 1px #ffd2c5,0 0 12px #ed8e8077}
+.flow-bus-node{background:linear-gradient(145deg,#513549,#2b1d2d);border-color:#80566e;box-shadow:inset 1px 1px #ffffff22,0 9px 19px #08040baa}
+.flow-bus-orb{background:linear-gradient(145deg,#a5e5e6,#4d9eac);box-shadow:inset 2px 2px 6px #fff9,3px 6px 12px #08040b99}
+.flow-bus-vocals .flow-bus-orb{background:linear-gradient(145deg,#ffd0df,#d35e98)}
+.flow-bus-samples .flow-bus-orb{background:linear-gradient(145deg,#e6ffc9,#82ae76)}
+.flow-master{background:linear-gradient(145deg,#744052,#482538 76%,#291724);border-color:#e1a18f;box-shadow:inset 2px 2px 7px #fff3,inset -5px -7px 12px #21101b99,0 14px 27px #08040baa}
+.flow-master-orb{background:radial-gradient(circle at 28% 18%,#ffe3d0,#e99a91 52%,#9b3d59);border-color:#f3c0ac;box-shadow:inset 3px 3px 7px #fff9,4px 7px 14px #08040b99}
+.flow-master-fx{background:linear-gradient(145deg,#744657,#4a283d);border-color:#d99b9b;color:#ffe6e5}
+.flow-fx-drawer,.master-fx-drawer{background:linear-gradient(145deg,#432a3d,#241725);border-color:#81556d;box-shadow:0 15px 28px #08040bcc,inset 1px 1px #ffffff20}
+.flow-fx-subnode,.flow-fx-preset{background:#39253a;border-color:#77536b;color:#fff0f2}
+.flow-fx-subnode.is-active{background:#553143;border-color:#e1a18f}
+.master-fx-control output{color:#ffc0b0}
+.patch-sample-dock{background:linear-gradient(145deg,#3a4539,#202e27);border-color:#8aaa83;box-shadow:inset 1px 1px #ffffff25,0 5px 13px #08040b77}
+.patch-sample-dock:hover,.patch-sample-dock.is-drop-target{background:#405742;border-color:#c4e7a6}
+.sample-deck.is-fullscreen{background:radial-gradient(ellipse 48% 30% at 10% 0%,#642b4566,transparent 72%),linear-gradient(145deg,#1e121e,#100a13 75%)}
+.sample-pad{background:linear-gradient(145deg,#58384c,#302132 75%,#211523);border-color:#79556c;box-shadow:inset 1px 1px #ffffff25,inset -4px -5px 9px #140b1688,0 8px 17px #08040b99}
+.sample-pad.selected,.sample-pad:hover{border-color:#f0a79d;box-shadow:0 0 0 1px #eea2a044,0 9px 19px #08040b99}
+.sample-library-item{background:linear-gradient(145deg,#3b2939,#251a29);border-color:#684b60;box-shadow:inset 1px 1px #ffffff18,0 4px 10px #08040b55}
+.sample-editor{background:linear-gradient(145deg,#3c2939,#241925);border-color:#6d4c62;box-shadow:inset 1px 1px #ffffff1a}
+.flow-mini-transport>button{background:linear-gradient(145deg,#624155,#36243a);border-color:#94677d}
+.flow-mini-transport>button:first-child{background:linear-gradient(145deg,#ffe0c9,#e99a91 55%,#a94360);border-color:#f2b7a8;color:#28131d}
+.flow-onboarding{background:#281a29;border-color:#64465c;color:#f3dfe7}
+@media(prefers-reduced-transparency:reduce){.topbar,.transport,.flow-node,.flow-studio,.action-tile{backdrop-filter:none}}
