@@ -614,7 +614,7 @@ function setupFlow(){
         state.flowExpandedFx=[id];state.flowFxMaximized=null;
         if(!state.flowFxWindows[id]){
           const layer=$('#flowFxLayer'),parent=layer?.parentElement;
-          state.flowFxWindows[id]={x:Math.max(12,(parent?.clientWidth||900)-550),y:60};
+          state.flowFxWindows[id]={x:Math.max(12,(parent?.clientWidth||900)-710),y:60};
         }
       }
       renderFlow();queueAutosave();return;
@@ -663,9 +663,30 @@ function setupFlow(){
       const track=state.tracks.find(t=>t.id===fxParam.dataset.flowOwner),key=fxParam.dataset.flowFxParam;
       if(!track||!['autotune','retune','clean','brightness','warmth','drive','echo','space'].includes(key))return;
       track[key]=clamp(Number(fxParam.value),0,100);
+      const fxId=fxParam.dataset.flowFxId;
+      if(FX_IDS.includes(fxId)){
+        track.fxBypass={...track.fxBypass,[fxId]:false};
+        track.bypassEffects=false;
+      }
+      if(key==='retune'&&track.autotune<=1){
+        track.autotune=72;
+        const tune=fxParam.closest('[data-flow-fx-drawer]')?.querySelector('[data-flow-fx-param="autotune"]');
+        if(tune){tune.value='72';const value=tune.closest('label')?.querySelector('output');if(value)value.textContent='72';}
+      }
       if(key==='autotune'||key==='retune'){const point=tunePointFromManual(track.autotune,track.retune);track.tuneX=point.x;track.tuneY=point.y;}
       engine.updateTrack(track);
       const output=fxParam.closest('label')?.querySelector('output');if(output)output.textContent=String(track[key]);
+      const unit=fxParam.closest('[data-flow-fx-unit]');
+      if(unit&&FX_IDS.includes(fxId)){
+        const active=fxId==='tune'?track.autotune>1:fxId==='clean'?track.clean>1:
+          fxId==='eq'?Math.abs(track.brightness-50)>7||Math.abs(track.warmth-20)>7:
+          fxId==='drive'?track.drive>1:fxId==='delay'?track.echo>1:fxId==='reverb'?track.space>1:true;
+        unit.classList.toggle('is-active',active);
+        unit.classList.toggle('is-bypassed',!active);
+        const button=unit.querySelector('[data-flow-effect-toggle]');
+        if(button){button.setAttribute('aria-pressed',String(active));button.classList.toggle('is-active',active);}
+        const state=unit.querySelector('.flow-fx-state');if(state)state.textContent=active?'ON':'OFF';
+      }
       queueAutosave();return;
     }
     const masterVolume=event.target.closest('[data-flow-master-volume]');
