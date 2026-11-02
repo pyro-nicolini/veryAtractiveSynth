@@ -200,3 +200,5 @@ body.sample-desk-open{overflow:hidden}
 .flow-onboarding b{width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:#3c514b;color:#d5f4c7;font-size:10px}
 .flow-node-route>span{color:#e0e7ed}
 @media(max-width:620px){.flow-onboarding{gap:8px 13px;font-size:9px}}
+
+.master-fx-head-actions{display:flex;align-items:center;gap:8px}.master-fx-head-actions>button{width:23px;height:23px;border:1px solid #71818c;border-radius:50%;background:#35434e;color:#fff;font-weight:800}
