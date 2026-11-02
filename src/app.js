@@ -225,6 +225,11 @@ function render(){
 function renderLibrary(){
   if($('#libraryBody'))$('#libraryBody').innerHTML=libraryMarkup(state.libraryTab);
 }
+function syncFlowTransport(){
+  const button=$('[data-flow-play]');if(!button)return;
+  button.textContent=engine.playing?'Ⅱ':'▶';
+  button.setAttribute('aria-label',engine.playing?'Pausar reproducción':'Reproducir mezcla');
+}
 function renderFlow(){
   const area=$('#flowArea'),body=$('#flowBody');
   if(!area||!body)return;
@@ -232,6 +237,7 @@ function renderFlow(){
   $('#flowToggle')?.setAttribute('aria-expanded',String(state.flowOpen));
   if(!state.flowOpen)return;
   body.innerHTML=flowMarkup(state.tracks,state.flowPositions,state.selected,state.sampleDeck?.pads||[],state.sampleAssets,listPatchPresets(),state.flowExpandedFx,state.masterFx,state.master);
+  syncFlowTransport();
   area.classList.toggle('is-fullscreen',state.flowFullscreen);
   $('#flowFullscreen')?.setAttribute('aria-pressed',String(state.flowFullscreen));
   $('#flowFullscreen')?.setAttribute('aria-label',state.flowFullscreen?'Salir de pantalla completa':'Pantalla completa');
@@ -525,6 +531,8 @@ function setupFlow(){
     if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
   });
   body.addEventListener('click',event=>{
+    if(event.target.closest('[data-flow-play]')){Promise.resolve(playPause()).finally(syncFlowTransport);return;}
+    if(event.target.closest('[data-flow-stop]')){stop();syncFlowTransport();return;}
     if(event.target.closest('[data-flow-destination]'))return;
     const dock=event.target.closest('[data-flow-sample-dock]');
     if(dock){openSampleDesk();return;}
@@ -578,6 +586,12 @@ function setupFlow(){
     if(node){selectFlowTrack(node.dataset.flowTrack);}
   });
   body.addEventListener('input',event=>{
+    const masterVolume=event.target.closest('[data-flow-master-volume]');
+    if(masterVolume){
+      state.master=Number(masterVolume.value);engine.setMaster(state.master);
+      $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
+      queueAutosave();return;
+    }
     const control=event.target.closest('[data-master-fx]');
     if(!control)return;
     const key=control.dataset.masterFx;
