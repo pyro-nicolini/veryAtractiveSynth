@@ -468,7 +468,7 @@ function connectFlow(id,to){
 
 function setupFlow(){
   renderLibrary();
-  const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody');
+  const flowArea=$('#flowArea'),body=$('#flowBody'),library=$('#libraryBody'),sampleRoot=$('#sampleDeckBody');
   if('IntersectionObserver' in window){
     const observer=new IntersectionObserver(entries=>{
       flowInViewport=entries[0]?.isIntersecting??true;
@@ -483,20 +483,21 @@ function setupFlow(){
     state.flowOpen=!state.flowOpen;if(!state.flowOpen)stopFlowMotion();renderFlow();queueAutosave();
     if(state.flowOpen)flowArea.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
+  $('#flowFullscreen').onclick=()=>setFlowFullscreen();
   $('#flowHelp').onclick=()=>help('flowStudio');
   $('#flowChain').onclick=()=>{
     if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de conectar');
     checkpoint();
-    for(const bus of ['vocals','music']){
+    for(const bus of ['vocals','music','samples','fx']){
       const links=chainLane(state.tracks,bus);
       for(const track of state.tracks)if(links.has(track.id))track.flowTo=links.get(track.id);
     }
     state.flowArmedOutput=null;state.flowPositions={};
-    renderFlow();restartPlayback();queueAutosave();toast('Voz y pistas encadenadas en dos líneas.');
+    renderFlow();restartPlayback();queueAutosave();toast('Cadenas organizadas por tipo de sonido.');
   };
   $('#flowArrange').onclick=()=>{
     checkpoint();state.flowPositions={};renderFlow();queueAutosave();
-    toast('Rutas ordenadas en líneas de voz, instrumentos y efectos.');
+    toast('Nodos ordenados por líneas de voz y pistas.');
   };
   $('#libraryHelp').onclick=()=>help('library');
   library.addEventListener('click',event=>{
@@ -507,42 +508,47 @@ function setupFlow(){
   });
   body.addEventListener('click',event=>{
     if(event.target.closest('[data-flow-destination]'))return;
-    if(event.target.closest('[data-flow-open-deck]')){const area=$('#sampleDeck');if(area?.hidden)$('#sampleToggle')?.click();else area?.scrollIntoView({behavior:'smooth'});return;}
+    const dock=event.target.closest('[data-flow-sample-dock]');
+    if(dock){openSampleDesk();return;}
+    if(event.target.closest('[data-flow-add-voice]')){$('#recordBtn')?.click();return;}
+    if(event.target.closest('[data-flow-add-track]')){$('#importBtn')?.click();return;}
     const output=event.target.closest('[data-flow-out]');
-    if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida lista · toca la entrada de otro nodo, bus o MASTER');return;}
+    if(output){state.flowArmedOutput=output.dataset.flowOut;body.classList.add('patch-awaiting-connection');toast('Salida seleccionada · ahora elige una entrada compatible');return;}
     const input=event.target.closest('[data-flow-in]');
     if(input){if(state.flowArmedOutput)connectFlow(state.flowArmedOutput,input.dataset.flowIn.startsWith('bus:')||input.dataset.flowIn==='master'?input.dataset.flowIn:'track:'+input.dataset.flowIn);return;}
+    const expand=event.target.closest('[data-flow-expand-fx]');
+    if(expand){
+      const id=expand.dataset.flowExpandFx,items=new Set(state.flowExpandedFx);
+      if(items.has(id))items.delete(id);else items.add(id);
+      state.flowExpandedFx=[...items];renderFlow();queueAutosave();return;
+    }
+    const effectToggle=event.target.closest('[data-flow-effect-toggle]');
+    if(effectToggle){
+      const active=effectToggle.getAttribute('aria-pressed')==='true';
+      applyFlowFx(effectToggle.dataset.flowOwner,effectToggle.dataset.flowEffectToggle,!active);return;
+    }
+    const masterBypass=event.target.closest('[data-master-fx-bypass]');
+    if(masterBypass){
+      checkpoint();state.masterFx=sanitiseMasterFx({...state.masterFx,bypass:masterBypass.checked});
+      engine.setMasterFx(state.masterFx);renderFlow();queueAutosave();return;
+    }
     const fxSave=event.target.closest('[data-flow-save-fx]');
     if(fxSave){
       const track=state.tracks.find(t=>t.id===fxSave.dataset.flowSaveFx);if(!track)return;
-      const name=prompt('Nombre del preset de efectos:',track.name+' · FX');
-      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Cadena FX guardada en Mis efectos');}
+      const name=prompt('Nombre para esta cadena de efectos:',track.name+' · FX');
+      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Preset guardado en este equipo.');}
       catch(error){toast(error.message);}return;
     }
     const fxDelete=event.target.closest('[data-flow-delete-preset]');
-    if(fxDelete){
-      if(confirm('¿Eliminar este preset FX guardado?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}
-      return;
-    }
+    if(fxDelete){if(confirm('¿Eliminar este preset?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}return;}
     const fxPreset=event.target.closest('[data-flow-preset]');
-    if(fxPreset){
-      if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);
-      else{state.flowArmedPreset=fxPreset.dataset.flowPreset;toast('Selecciona una pista para aplicar este preset');}
-      return;
-    }
+    if(fxPreset){if(state.selected)useFlowPreset(fxPreset.dataset.flowPreset,state.selected);else toast('Selecciona primero una pista.');return;}
+    const sampleSave=event.target.closest('[data-flow-export-sample]');
+    if(sampleSave){saveTrackAsSample(sampleSave.dataset.flowExportSample);return;}
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
-    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado de la biblioteca?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
+    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
     const sample=event.target.closest('[data-flow-sample]');
     if(sample){insertFlowSample(sample.dataset.flowSample);return;}
-    const tile=event.target.closest('[data-flow-palette]');
-    if(tile){
-      state.flowArmedEffect=state.flowArmedEffect===tile.dataset.flowPalette?null:tile.dataset.flowPalette;
-      state.flowArmedLibrary=null;renderFlow();
-      if(state.flowArmedEffect)toast('Ahora toca el planeta donde quieres conectar el efecto');
-      return;
-    }
-    const remove=event.target.closest('[data-flow-effect]');
-    if(remove){applyFlowFx(remove.dataset.flowOwner,remove.dataset.flowEffect,false);return;}
     const deletion=event.target.closest('[data-flow-delete]');
     if(deletion){deleteFlowNode(deletion.dataset.flowDelete);return;}
     const link=event.target.closest('[data-flow-link]');
@@ -552,19 +558,38 @@ function setupFlow(){
     const node=event.target.closest('[data-flow-track]');
     if(node){selectFlowTrack(node.dataset.flowTrack);}
   });
+  body.addEventListener('input',event=>{
+    const control=event.target.closest('[data-master-fx]');
+    if(!control)return;
+    const key=control.dataset.masterFx;
+    checkpoint();
+    state.masterFx=sanitiseMasterFx({...state.masterFx,[key]:Number(control.value)});
+    engine.setMasterFx(state.masterFx);
+    const output=Array.from(body.querySelectorAll('[data-master-fx-value]')).find(el=>el.dataset.masterFxValue===key);
+    if(output)output.textContent=control.value+(key==='low'||key==='high'?' dB':'%');
+    queueAutosave();
+  });
   body.addEventListener('change',event=>{
     const select=event.target.closest('[data-flow-destination]');
-    if(!select)return;
-    connectFlow(select.dataset.flowDestination,select.value);
+    if(select){connectFlow(select.dataset.flowDestination,select.value);return;}
+    const control=event.target.closest('[data-master-fx]');
+    if(control){queueAutosave();return;}
+  });
+  body.addEventListener('pointerdown',event=>{
+    if(event.target.matches('[data-master-fx]'))checkpoint();
   });
   let dragged=null;
   function startDrag(event){
-    const effect=event.target.closest('[data-flow-palette]');
+    const sampleSave=event.target.closest('[data-flow-export-sample]');
+    const savedSample=event.target.closest('[data-saved-sample]');
     const sample=event.target.closest('[data-flow-sample]');
     const fxPreset=event.target.closest('[data-flow-preset]');
     const libraryItem=event.target.closest('[data-library-item]');
     const chip=event.target.closest('[data-flow-effect]');
-    dragged=fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:sample?{kind:'sample',id:sample.dataset.flowSample}:effect?{kind:'effect',id:effect.dataset.flowPalette}:
+    dragged=sampleSave?{kind:'track',id:sampleSave.dataset.flowExportSample}:
+      savedSample?{kind:'sample',id:'lib:'+savedSample.dataset.savedSample}:
+      fxPreset?{kind:'preset',id:fxPreset.dataset.flowPreset}:
+      sample?{kind:'sample',id:sample.dataset.flowSample}:
       libraryItem?{kind:libraryItem.dataset.libraryKind,id:libraryItem.dataset.libraryItem}:
       chip?{kind:'remove-fx',id:chip.dataset.flowEffect,owner:chip.dataset.flowOwner}:null;
     if(dragged&&event.dataTransfer){
@@ -574,61 +599,65 @@ function setupFlow(){
   }
   library.addEventListener('dragstart',startDrag);
   body.addEventListener('dragstart',startDrag);
+  sampleRoot?.addEventListener('dragstart',startDrag);
   body.addEventListener('dragover',event=>{
     if(!dragged)return;
-    if(event.target.closest('[data-flow-track],#flowRemoveZone,#flowBoard')){
+    if(event.target.closest('[data-flow-track],[data-flow-in],[data-flow-sample-dock],#flowBoard')){
       event.preventDefault();event.dataTransfer.dropEffect='copy';
     }
   });
   body.addEventListener('drop',event=>{
     if(!dragged)return;
-    event.preventDefault();
-    const target=event.target.closest('[data-flow-track]'),removal=event.target.closest('#flowRemoveZone');
-    const item=dragged;dragged=null;
+    const item=dragged;dragged=null;event.preventDefault();
+    const dock=event.target.closest('[data-flow-sample-dock]');
+    const target=event.target.closest('[data-flow-track]');
+    const input=event.target.closest('[data-flow-in]');
+    const route=input?.dataset.flowIn||null;
+    const removal=event.target.closest('#flowRemoveZone');
+    if(dock&&item.kind==='track'){saveTrackAsSample(item.id);return;}
     if(removal&&item.kind==='remove-fx'){applyFlowFx(item.owner,item.id,false);return;}
-    if(item.kind==='sample'){insertFlowSample(item.id,target?.dataset.flowTrack||null);return;}
-    if(item.kind==='preset'){if(target)useFlowPreset(item.id,target.dataset.flowTrack);else toast('Suelta el preset sobre una pista');return;}
+    if(item.kind==='sample'){
+      insertFlowSample(item.id,target?.dataset.flowTrack||null,target?null:route);return;
+    }
+    if(item.kind==='preset'){if(target)useFlowPreset(item.id,target.dataset.flowTrack);else toast('Suelta el preset sobre una pista.');return;}
     if(!target&&item.kind==='rhythms'){chooseLibraryItem('rhythms',item.id);return;}
-    if(!target)return toast('Suelta el efecto sobre una pista');
-    const id=target.dataset.flowTrack;
-    if(item.kind==='effect')applyFlowFx(id,item.id,true);
-    else if(item.kind==='remove-fx')applyFlowFx(id,item.id,true);
-    else chooseLibraryItem(item.kind,item.id,id);
+    if(!target)return toast('Arrastra un sample a una pista, bus o MASTER; o un nodo a SAMPLE DESK.');
+    if(item.kind==='track')return;
+    if(item.kind==='effect')applyFlowFx(target.dataset.flowTrack,item.id,true);
+    else if(item.kind==='remove-fx')applyFlowFx(target.dataset.flowTrack,item.id,true);
+    else chooseLibraryItem(item.kind,item.id,target.dataset.flowTrack);
   });
   body.addEventListener('dragend',()=>{dragged=null;});
   library.addEventListener('dragend',()=>{dragged=null;});
+  sampleRoot?.addEventListener('dragend',()=>{dragged=null;});
   body.addEventListener('keydown',event=>{
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))return;
     const board=$('#flowBoard'),id=handle.dataset.flowDrag,node=handle.closest('[data-flow-track]');
     if(!board||!node)return;
     event.preventDefault();
-    const index=state.tracks.findIndex(t=>t.id===id);
     const point={x:node.offsetLeft,y:node.offsetTop},step=event.shiftKey?40:12;
     const x=clamp(point.x+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),12,Math.max(12,board.clientWidth-440));
     const y=clamp(point.y+(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0),12,Math.max(12,board.clientHeight-node.offsetHeight-12));
     if(x!==point.x||y!==point.y){
-      checkpoint();state.flowPositions[id]={x,y};
-      node.style.left=x+'px';node.style.top=y+'px';invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
+      checkpoint();state.flowPositions[id]={x,y};node.style.left=x+'px';node.style.top=y+'px';
+      invalidateFlowWireGeometry(flowArea);paintFlow();queueAutosave();
     }
   });
   body.addEventListener('pointerdown',event=>{
+    if(event.target.closest('[data-flow-export-sample]'))return;
     const out=event.target.closest('[data-flow-out]');
     if(out&&event.button===0){
-      const board=$('#flowBoard'),svg=$('#flowWires');
-      if(!board||!svg)return;
+      const board=$('#flowBoard'),svg=$('#flowWires');if(!board||!svg)return;
       const a=out.getBoundingClientRect(),r=board.getBoundingClientRect();
       const path=document.createElementNS('http://www.w3.org/2000/svg','path');
       path.classList.add('flow-wire','patch-wire-preview');svg.appendChild(path);
-      state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,
-        startX:event.clientX,startY:event.clientY,x:a.right-r.left,y:a.top-r.top+a.height/2,
-        moved:false,board,path};
-      return;
+      state.flowCableDrag={id:out.dataset.flowOut,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
+        x:a.right-r.left,y:a.top-r.top+a.height/2,moved:false,board,path};return;
     }
     const handle=event.target.closest('[data-flow-drag]');
     if(!handle||event.button!==0||state.recording)return;
-    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');
-    if(!node||!board)return;
+    const node=handle.closest('[data-flow-track]'),board=$('#flowBoard');if(!node||!board)return;
     event.preventDefault();handle.setPointerCapture(event.pointerId);
     const position={x:node.offsetLeft,y:node.offsetTop};
     state.flowDrag={id:node.dataset.flowTrack,startX:event.clientX,startY:event.clientY,x:position.x,y:position.y,node,board};
@@ -639,44 +668,42 @@ function setupFlow(){
     if(cable&&event.pointerId===cable.pointerId){
       const r=cable.board.getBoundingClientRect();
       cable.moved=cable.moved||Math.hypot(event.clientX-cable.startX,event.clientY-cable.startY)>6;
-      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));
-      return;
+      cable.path.setAttribute('d',wireCurve(cable.x,cable.y,event.clientX-r.left,event.clientY-r.top));return;
     }
     if(!state.flowDrag)return;
     const drag=state.flowDrag,board=drag.board;
     const x=clamp(drag.x+event.clientX-drag.startX,12,Math.max(12,board.clientWidth-440));
     const y=clamp(drag.y+event.clientY-drag.startY,12,Math.max(12,board.clientHeight-drag.node.offsetHeight-12));
-    drag.node.style.left=x+'px';drag.node.style.top=y+'px';
-    drag.next={x,y};invalidateFlowWireGeometry(flowArea);paintFlow();
+    drag.node.style.left=x+'px';drag.node.style.top=y+'px';drag.next={x,y};
+    invalidateFlowWireGeometry(flowArea);paintFlow();
   });
   const finish=event=>{
     const drag=state.flowDrag;if(!drag)return;
     state.flowDrag=null;drag.node.classList.remove('is-dragging');
     if(event.type!=='pointercancel'&&drag.next){
       const prior=state.flowPositions[drag.id]||{x:drag.x,y:drag.y};
-      if(prior.x!==drag.next.x||prior.y!==drag.next.y){
-        checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();
-      }
+      if(prior.x!==drag.next.x||prior.y!==drag.next.y){checkpoint();state.flowPositions[drag.id]=drag.next;queueAutosave();}
     }else{drag.node.style.left=drag.x+'px';drag.node.style.top=drag.y+'px';}
     invalidateFlowWireGeometry(flowArea);paintFlow();
   };
   body.addEventListener('pointerup',finish);body.addEventListener('pointercancel',finish);
   const finishCable=event=>{
-    const cable=state.flowCableDrag;
-    if(!cable||event.pointerId!==cable.pointerId)return;
-    state.flowCableDrag=null;cable.path.remove();
-    if(event.type==='pointercancel')return;
+    const cable=state.flowCableDrag;if(!cable||event.pointerId!==cable.pointerId)return;
+    state.flowCableDrag=null;cable.path.remove();if(event.type==='pointercancel')return;
     const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-flow-in]');
     if(target){
       const raw=target.dataset.flowIn;
-      connectFlow(cable.id,raw==='master'||raw.startsWith('bus:')?raw:'track:'+raw);
-      return;
+      connectFlow(cable.id,raw==='master'||raw.startsWith('bus:')?raw:'track:'+raw);return;
     }
     state.flowArmedOutput=cable.id;
-    if(cable.moved)toast('Cable preparado · pulsa el puerto de entrada deseado.');
+    if(cable.moved)toast('Elige ahora una entrada compatible para completar la conexión.');
   };
   document.addEventListener('pointerup',finishCable);
   document.addEventListener('pointercancel',finishCable);
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&state.flowFullscreen){setFlowFullscreen(false);event.preventDefault();}
+    if(event.key==='Escape'&&$('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();}
+  });
 }
 
 function alignWaveRuler(){
