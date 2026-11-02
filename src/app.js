@@ -30,7 +30,7 @@ import {signalQuality} from './sample-bank.js';
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
 const HELP={
   flowStudio:['Signal Flow','Cada tarjeta es una pista real. Arrastra su cabecera para moverla y conecta el puerto derecho con una entrada compatible. Abre FX dentro de una pista para activar sus efectos; esos efectos solo modifican esa pista. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia, o arrastra un sample hacia una pista, un bus o MASTER.'],
   library:['Tu biblioteca creativa','Los ritmos son originales y se generan completamente en tu dispositivo. Al tocarlos añades una base a la canción. Los estilos aplican valores reales a los controles de voz de una pista. Las transiciones generan fundidos y, cuando hay otro clip, cruces suaves sin modificar los archivos originales. Puedes arrastrar estilos o transiciones a los planetas de sonido.'],
@@ -259,18 +259,27 @@ function closeSampleDesk(){
   area.classList.remove('is-fullscreen');area.hidden=true;document.body.classList.remove('sample-desk-open');
   $('#sampleToggle')?.setAttribute('aria-expanded','false');
 }
-async function saveTrackAsSample(trackId){
+function openTrackSampleDialog(trackId){
+  const track=state.tracks.find(item=>item.id===trackId);
+  if(!track?.buffer)return toast('No se encontró el audio de esta pista');
+  if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de guardar un sample');
+  state.pendingSampleTrackId=trackId;
+  modal('Guardar en Sample Desk',
+    '<p>Crearás una copia reutilizable. La pista original y su posición no cambiarán.</p>'+
+    '<div class="field"><label for="sampleExportName">Nombre del sample</label><input id="sampleExportName" maxlength="60" value="'+html(track.name)+'"></div>'+
+    '<div class="note">CON FX incluye los efectos de esta pista y MASTER. ORIGINAL guarda el sonido sin procesar.</div>',
+    [{label:'GUARDAR ORIGINAL',type:'save-sample-original'},{label:'GUARDAR CON FX',type:'save-sample-processed',primary:true}]);
+}
+async function saveTrackAsSample(trackId,processed,name){
   if(state.recording||state.sessionRecording)return toast('Finaliza la grabación antes de guardar un sample');
   const track=state.tracks.find(item=>item.id===trackId);if(!track?.buffer)return toast('No se encontró el audio de esta pista');
-  const processed=confirm('¿Guardar el sonido con sus efectos actuales?\n\nAceptar: audio procesado.\nCancelar: audio original, sin FX.');
-  const suggested=track.name+(processed?' · FX':' · original');
-  const name=prompt('Nombre para tu sample:',suggested);if(name===null)return;
-  if(!name.trim())return toast('El sample necesita un nombre');
+  const sampleName=String(name||'').trim().slice(0,60);if(!sampleName)return toast('El sample necesita un nombre');
   try{
     const source={...track,offset:0,muted:false,solo:false};
     const wav=await engine.exportMix([source],{depth:32,rate:48000,dry:!processed});
-    const buffer=await engine.decode(new File([wav],safeFilename(name)+'.wav',{type:'audio/wav'}));
-    const saved=await saveLibrarySample({buffer,from:0,to:buffer.duration,name:name.trim(),fx:processed?'rendered':'original'});
+    const buffer=await engine.decode(new File([wav],safeFilename(sampleName)+'.wav',{type:'audio/wav'}));
+    const saved=await saveLibrarySample({buffer,from:0,to:buffer.duration,name:sampleName,fx:processed?'rendered':'original'});
+    state.pendingSampleTrackId=null;modalStack.length=0;$('#modalRoot').innerHTML='';
     await state.sampleDeck?.refreshAssets?.();await refreshFlowAssets();
     toast('Guardado en SAMPLE DESK: '+saved.name);
   }catch(error){toast('No se pudo guardar el sample: '+error.message);}
@@ -2013,6 +2022,11 @@ function handleTrackAction(action,id){
   }
 }
 function handleModalAction(action){
+  if(action==='save-sample-original'||action==='save-sample-processed'){
+    const id=state.pendingSampleTrackId,name=$('#sampleExportName')?.value||'';
+    if(!id)return toast('Selecciona primero una pista');
+    saveTrackAsSample(id,action==='save-sample-processed',name);return;
+  }
   if(action==='close-modal'||action==='close'){closeModal();return;}
   if(action==='session-record'){toggleSessionRecording();return;}
   if(action==='tune-open'){openTuneLab('track');return;}
