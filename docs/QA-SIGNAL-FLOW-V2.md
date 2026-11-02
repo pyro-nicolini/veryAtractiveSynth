@@ -7,7 +7,7 @@
 - Rama base: `feat/red-velvet-flow-export` (PR #18)
 - Ambos PR deben permanecer en Draft hasta completar este QA.
 - `main` y producción no se han modificado.
-- Último CI verificado: 122 tests aprobados, 0 fallidos; sintaxis JavaScript aprobada.
+- Último CI verificado: 123 tests aprobados, 0 fallidos; sintaxis JavaScript aprobada.
 
 ## Alcance entregado
 
@@ -104,7 +104,7 @@ node --check src/sample-deck.js
 node --check src/portable-project.js
 ```
 
-GitHub Actions ya ejecutó el conjunto completo: 122/122 tests aprobados en el último commit verificado.
+GitHub Actions ya ejecutó el conjunto completo: 123/123 tests aprobados en el último commit verificado.
 
 ## Instrucciones para continuar con Codex
 
