@@ -10,9 +10,9 @@ export function padWaveSVG(buffer,from=0,to=buffer.duration){
  return '<svg viewBox="0 0 120 40" preserveAspectRatio="none" class="sample-wave" role="img" aria-label="Onda del sample"><path d="'+lines+'"/></svg>';
 }
 export class SampleDeck{
- constructor({root,engine,onAdd,onSource,onMessage,onLibraryChanged}){
+ constructor({root,engine,onAdd,onSource,onMessage,onLibraryChanged,onClose}){
   this.root=root;this.engine=engine;this.onAdd=onAdd;this.onSource=onSource;
-  this.say=onMessage||(()=>{});this.onLibraryChanged=onLibraryChanged||(()=>{});this.pads=Array(12).fill(null);
+  this.say=onMessage||(()=>{});this.onLibraryChanged=onLibraryChanged||(()=>{});this.onClose=onClose||(()=>{});this.pads=Array(12).fill(null);
   this.selected=null;this.draft=null;this.loaded=false;this.assets=[];
   root.addEventListener('click',event=>this.click(event));
   root.addEventListener('input',event=>this.input(event));
