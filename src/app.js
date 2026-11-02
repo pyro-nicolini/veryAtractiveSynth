@@ -431,7 +431,7 @@ async function refreshFlowAssets(){
   try{state.sampleAssets=await listLibrarySamples();renderFlow();}
   catch(error){toast('Biblioteca no disponible: '+error.message);}
 }
-async function insertFlowSample(ref,targetId=null){
+async function insertFlowSample(ref,targetId=null,targetRoute=null){
   if(state.recording||state.sessionRecording)return toast('Termina la grabación antes de añadir audio');
   try{
     await state.sampleDeck?.load();
@@ -439,10 +439,13 @@ async function insertFlowSample(ref,targetId=null){
     if(!pad)throw Error('No se encontró el sample guardado');
     const ctx=await engine.ready(),buffer=copySample(ctx,pad.buffer,pad.from,pad.to);
     const dest=state.tracks.find(t=>t.id===targetId);
-    const track=addTrack(buffer,pad.name,dest?.type==='voice'?'voice':'audio',state.position);
+    const bus=dest?busForTrack(dest):targetRoute?.startsWith('bus:')?targetRoute.slice(4):'samples';
+    const track=addTrack(buffer,pad.name,'audio',state.position,BUS_IDS.includes(bus)?bus:'samples');
     if(dest){track.bus=busForTrack(dest);track.flowTo='track:'+dest.id;}
-    Object.assign(track,sampleEffect(pad.fx).settings);render();restartPlayback();
-    toast('Sample insertado como nodo: '+pad.name);
+    else track.flowTo=targetRoute==='master'?'master':'bus:'+(BUS_IDS.includes(bus)?bus:'samples');
+    Object.assign(track,sampleEffect(pad.fx).settings);
+    engine.updateTrack(track);render();restartPlayback();queueAutosave();
+    toast('Sample añadido a '+(dest?dest.name:targetRoute==='master'?'MASTER':BUS_LABELS[bus]||'SAMPLE BUS'));
   }catch(error){toast('No se pudo insertar el sample: '+error.message);}
 }
 function useFlowPreset(presetId,trackId){
@@ -2175,7 +2178,7 @@ function setupSamples(){
  const root=$('#sampleDeckBody');
  if(!root)return;
  const deck=new SampleDeck({
-  root,engine,onMessage:toast,onLibraryChanged:refreshFlowAssets,
+  root,engine,onMessage:toast,onLibraryChanged:refreshFlowAssets,onClose:closeSampleDesk,
   onSource:()=>{
    const track=current();
    if(!track)return null;
@@ -2187,7 +2190,8 @@ function setupSamples(){
     from:loop?.from??bounds.start,to:loop?.to??bounds.end};
   },
   onAdd:(buffer,name,settings)=>{
-    const track=addTrack(buffer,name,'audio',state.position);
+    const track=addTrack(buffer,name,'audio',state.position,'samples');
+    track.bus='samples';track.flowTo='bus:samples';
     if(settings)Object.assign(track,settings);
     engine.updateTrack(track);render();
     return track;
@@ -2198,12 +2202,13 @@ function setupSamples(){
   refreshFlowAssets();
  const area=$('#sampleDeck'),toggle=$('#sampleToggle');
  const open=async()=>{
-  const visible=area.hidden;
-  area.hidden=!visible;
-  toggle.setAttribute('aria-expanded',String(visible));
-  if(visible){await deck.load();area.scrollIntoView({behavior:'smooth',block:'nearest'});}
+  if(area.classList.contains('is-fullscreen')){closeSampleDesk();return;}
+  await openSampleDesk();
  };
  toggle.addEventListener('click',open);
+ root.addEventListener('click',event=>{
+  if(event.target.closest('[data-pad-close-deck]'))closeSampleDesk();
+ });
  document.addEventListener('keydown',event=>{
   if(area.hidden||event.repeat||event.ctrlKey||event.metaKey||event.altKey||
    event.target.closest('input,textarea,select,[contenteditable],button')||$('#modalBackdrop'))return;
