@@ -112,3 +112,7 @@
  #flowArea .flow-floating-panel{height:calc(100% - 16px);min-height:0}
  #flowArea .flow-fx-knob{grid-template-columns:70px minmax(0,1fr) 28px}
 }
+
+/* The background is a draggable touch surface; controls retain their own touch handling. */
+#flowArea .flow-board-scroller{touch-action:none}
+#flowArea .flow-node input,#flowArea .flow-node select,#flowArea .flow-floating-panel input{touch-action:auto}
