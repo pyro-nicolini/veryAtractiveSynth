@@ -34,13 +34,17 @@ function trackFxDrawer(track,presets=[]){
  };
  const fx=FX_CHAIN.map(item=>{
   const active=effectIsActive(track,item.id);
-  return '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
-   '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+(active?'ACTIVO':'DESACTIVADO')+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>'+
-   (params[item.id]?.length?params[item.id].map(([key,label,min,max])=>'<label class="flow-fx-knob"><span>'+label+'</span><input type="range" min="'+min+'" max="'+max+'" value="'+(Number(track[key])||0)+'" data-flow-fx-param="'+key+'" data-flow-owner="'+esc(track.id)+'" aria-label="'+label+' de '+esc(track.name)+'"><output data-flow-fx-value="'+key+'">'+(Number(track[key])||0)+'</output></label>').join(''):'<small class="flow-fx-fixed">Procesamiento automático</small>');
+  const controls=(params[item.id]||[]).map(([key,label,min,max])=>
+   '<label class="flow-fx-knob"><span>'+label+'</span><input type="range" min="'+min+'" max="'+max+'" value="'+(Number(track[key])||0)+'" data-flow-fx-param="'+key+'" data-flow-owner="'+esc(track.id)+'" data-flow-fx-id="'+item.id+'" aria-label="'+label+' de '+esc(track.name)+'"><output data-flow-fx-value="'+key+'">'+(Number(track[key])||0)+'</output></label>'
+  ).join('');
+  return '<div class="flow-fx-unit '+(active?'is-active':'is-bypassed')+'" data-flow-fx-unit="'+item.id+'">'+
+    '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
+      '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+esc(item.hint)+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>'+
+    '<div class="flow-fx-controls">'+(controls||'<p class="flow-fx-fixed">Procesamiento automático · botón ON / OFF</p>')+'</div></div>';
  }).join('');
  const saved=(presets||[]).map(p=>'<button type="button" class="flow-fx-preset" data-flow-preset="'+esc(p.id)+'" data-flow-owner="'+esc(track.id)+'" title="Aplicar este preset a '+esc(track.name)+'">◈ '+esc(p.name)+'</button>').join('');
  return '<section class="flow-fx-drawer" data-flow-fx-drawer="'+esc(track.id)+'" aria-label="Efectos de '+esc(track.name)+'">'+
-  '<header class="flow-floating-handle" data-flow-fx-move="'+esc(track.id)+'"><div><strong>FX · '+esc(track.name)+'</strong><small>Arrastra esta ventana · solo afecta esta pista</small></div>'+
+  '<header class="flow-floating-handle" data-flow-fx-move="'+esc(track.id)+'"><div><strong>FX · '+esc(track.name)+'</strong><small>Activa un efecto y ajusta sus parámetros · original intacto</small></div>'+
    '<div class="flow-floating-actions"><button type="button" data-flow-save-fx="'+esc(track.id)+'" title="Guardar configuración">Guardar</button><button type="button" data-flow-fx-maximize="'+esc(track.id)+'" title="Ampliar o restaurar">⛶</button><button type="button" data-flow-fx-close="'+esc(track.id)+'" aria-label="Cerrar efectos">×</button></div></header>'+
   '<div class="flow-fx-grid">'+fx+'</div>'+(saved?'<div class="flow-fx-presets"><small>MIS PRESETS</small>'+saved+'</div>':'')+'</section>';
 }
