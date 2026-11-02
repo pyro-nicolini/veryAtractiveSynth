@@ -565,7 +565,6 @@ function setupFlow(){
     const control=event.target.closest('[data-master-fx]');
     if(!control)return;
     const key=control.dataset.masterFx;
-    checkpoint();
     state.masterFx=sanitiseMasterFx({...state.masterFx,[key]:Number(control.value)});
     engine.setMasterFx(state.masterFx);
     const output=Array.from(body.querySelectorAll('[data-master-fx-value]')).find(el=>el.dataset.masterFxValue===key);
