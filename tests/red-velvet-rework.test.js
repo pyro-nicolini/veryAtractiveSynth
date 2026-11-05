@@ -57,16 +57,16 @@ test('additional stylized vocal presets use parameters of the existing audio eng
   }
 });
 
-test('Red Velvet startup, per-track export and samples are connected and included offline',()=>{
+test('Android Synth startup, per-track export and samples are connected and included offline',()=>{
   const html=file('index.html'),app=file('src/app.js'),deck=file('src/sample-deck.js'),
     theme=file('src/signal-flow-v2.css'),sw=file('sw.js'),engine=file('src/engine.js'),portable=file('src/portable-project.js');
-  assert.match(html,/Bienvenue\./);
+  assert.match(html,/ANDROID SYNTH/);
   assert.match(html,/id="splashSkip"/);
   assert.match(html,/id="flowArrange"/);assert.match(html,/id="flowFullscreen"/);
   assert.match(html,/src\/studio-console\.css/);assert.match(html,/src\/signal-flow-v2\.css/);
   assert.match(app,/data-track-action="export-track"/);
   assert.match(app,/async function performTrackExport/);
-  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#modalBackdrop'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
+  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#workspacePanel'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
   assert.match(deck,/data-pad-export="dry"/);
   assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/const wav=processed\s*\?await this\.engine\.exportMix/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
   assert.match(deck,/data-library-route="samples"/);assert.match(deck,/data-library-route="selected"/);assert.match(deck,/data-library-route="master"/);

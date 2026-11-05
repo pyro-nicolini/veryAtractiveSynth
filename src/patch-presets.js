@@ -1,5 +1,6 @@
 /* Reusable, device-local FX patches (no audio or network data). */
 import {normaliseFxBypass} from './fx-rack.js';
+import {normaliseTuneNoteMask} from './tune-targets.js';
 const KEY='vas-fx-patches-v1';
 export const FX_PATCH_FIELDS=Object.freeze(['autotune','retune','pitchShift','clean','brightness','warmth','drive','echo','space','key','scale']);
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,Number.isFinite(Number(v))?Number(v):min));
@@ -7,6 +8,8 @@ export function patchValues(track){
  const out={};
  for(const key of FX_PATCH_FIELDS)out[key]=key==='pitchShift'?clamp(track?.[key],-12,12):key==='key'?clamp(track?.[key],0,11):key==='scale'?clamp(track?.[key],0,2):clamp(track?.[key],0,100);
  out.fxBypass=normaliseFxBypass(track?.fxBypass);
+ out.tuneNoteMask=normaliseTuneNoteMask(track?.tuneNoteMask);
+ out.pitchCalibration=clamp(track?.pitchCalibration??0,-12,12);
  out.bypassEffects=!!track?.bypassEffects;
  return out;
 }

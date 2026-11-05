@@ -16,3 +16,10 @@ test('Reject unsafe ZIP entries and corrupted CRC',async()=>{
   broken[38]^=127;
   await assert.rejects(unzipStore(new Blob([broken])),/dañados/);
 });
+
+test('projects can contain more than 99 audio files',async()=>{
+ const entries=Array.from({length:125},(_,i)=>({name:`audio/${String(i+1).padStart(3,'0')}.wav`,data:Uint8Array.of(i)}));
+ const result=await unzipStore(await zipStore(entries));
+ assert.equal(result.size,125);
+ assert.equal(result.get('audio/125.wav')[0],124);
+});

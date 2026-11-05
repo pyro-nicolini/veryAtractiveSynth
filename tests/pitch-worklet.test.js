@@ -52,3 +52,34 @@ test('silence reports no confident note rather than fictional target',()=>{
   }
   assert.ok(voice.events.some(x=>x.type==='pitch'&&x.voiced===false));
 });
+test('custom target mask changes the actual pitch correction target',()=>{
+  const voice=processor();
+  voice.port.onmessage({data:{type:'monitor',enabled:true}});
+  voice.port.onmessage({data:{type:'note-mask',mask:1<<7}});
+  const params={strength:[1],retune:[1],clean:[0],key:[0],scale:[2]};
+  for(let b=0;b<120;b++){
+    const left=new Float32Array(128),out=[new Float32Array(128),new Float32Array(128)];
+    for(let i=0;i<128;i++)left[i]=.7*Math.sin(2*Math.PI*369.994*(b*128+i)/48000);
+    voice.process([[left]],[out],params);
+  }
+  const voiced=voice.events.filter(x=>x.type==='pitch'&&x.voiced);
+  assert.ok(voiced.length>0);
+  assert.ok(voiced.every(x=>((x.target%12)+12)%12===7));
+  assert.ok(voice.targetRatio>1,'F sharp must shift upward toward G');
+});
+test('calibration shifts the worklet note reference used for both reporting and correction',()=>{
+  const voice=processor();
+  voice.port.onmessage({data:{type:'monitor',enabled:true}});
+  voice.port.onmessage({data:{type:'pitch-calibration',semitones:-4}});
+  voice.port.onmessage({data:{type:'note-mask',mask:1}});
+  const params={strength:[1],retune:[1],clean:[0],key:[0],scale:[2]};
+  for(let b=0;b<120;b++){
+    const input=new Float32Array(128),out=[new Float32Array(128),new Float32Array(128)];
+    for(let i=0;i<128;i++)input[i]=.7*Math.sin(2*Math.PI*329.628*(b*128+i)/48000);
+    voice.process([[input]],[out],params);
+  }
+  const note=voice.events.filter(x=>x.type==='pitch'&&x.voiced).at(-1);
+  assert.ok(note);assert.ok(Math.abs(note.frequency-329.628)<8);
+  assert.equal(Math.round(note.midi),60);assert.equal(note.target,60);
+  assert.ok(Math.abs(voice.targetRatio-1)<.04);
+});

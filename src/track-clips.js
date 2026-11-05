@@ -50,7 +50,9 @@ export function clipsOf(track){
   if(Array.isArray(track.clips))return track.clips;
   return track.buffer?[{id:track.id+':original',name:track.name,buffer:track.buffer,
     offset:seconds(track.offset),trimStart:seconds(track.trimStart),trimEnd:seconds(track.trimEnd),
-    fadeIn:seconds(track.fadeIn),fadeOut:seconds(track.fadeOut),...(track.loop?{loop:{...track.loop}}:{})}]:[];
+    speed:clipSpeed(track),fadeIn:seconds(track.fadeIn),fadeOut:seconds(track.fadeOut),
+    ...(Array.isArray(track.pitchRegions)?{pitchRegions:track.pitchRegions.map(r=>({...r}))}:{}),
+    ...(track.loop?{loop:{...track.loop}}:{})}]:[];
 }
 export function ensureClips(track){
   if(!Array.isArray(track.clips))track.clips=clipsOf(track);

@@ -4,7 +4,7 @@ test('delete requires real focus and safe two-step node removal',()=>{
  const app=read('src/app.js'),flow=read('src/flow-studio.js');
  assert.match(app,/function deleteFlowNode\(id\)/);assert.match(app,/if\(!t\.muted\)/);
  assert.match(app,/t\.flowHidden=true/);assert.match(app,/function deleteTrack\(id\)/);
- assert.match(app,/window\.confirm/);
+ assert.match(app,/await askConfirm\('¿Eliminar la pista/);
  assert.match(app,/\['Delete','Backspace'\]/);
  assert.match(flow,/tracks\.filter\(t=>!t\.flowHidden\)/);
  assert.match(flow,/data-flow-delete/);

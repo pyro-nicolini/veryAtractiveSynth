@@ -26,15 +26,26 @@ export function flowPosition(track,index,positions={}){
 }
 export function flowHeight(){return 920;}
 function trackFxDrawer(track,presets=[]){
+ const params={
+  tune:[['autotune','Intensidad',0,100],['retune','Velocidad',0,100]],
+  clean:[['clean','Limpieza',0,100]],eq:[['brightness','Brillo',0,100],['warmth','Calidez',0,100]],
+  drive:[['drive','Saturación',0,100]],compressor:[],
+  delay:[['echo','Eco',0,100]],reverb:[['space','Espacio',0,100]]
+ };
  const fx=FX_CHAIN.map(item=>{
   const active=effectIsActive(track,item.id);
-  return '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
-   '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+(active?'ACTIVO':'DESACTIVADO')+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>';
+  const controls=(params[item.id]||[]).map(([key,label,min,max])=>
+   '<label class="flow-fx-knob"><span>'+label+'</span><input type="range" min="'+min+'" max="'+max+'" value="'+(Number(track[key])||0)+'" data-flow-fx-param="'+key+'" data-flow-owner="'+esc(track.id)+'" data-flow-fx-id="'+item.id+'" aria-label="'+label+' de '+esc(track.name)+'"><output data-flow-fx-value="'+key+'">'+(Number(track[key])||0)+'</output></label>'
+  ).join('');
+  return '<div class="flow-fx-unit '+(active?'is-active':'is-bypassed')+'" data-flow-fx-unit="'+item.id+'">'+
+    '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
+      '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+esc(item.hint)+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>'+
+    '<div class="flow-fx-controls">'+(controls||'<p class="flow-fx-fixed">Procesamiento automático · botón ON / OFF</p>')+'</div></div>';
  }).join('');
  const saved=(presets||[]).map(p=>'<button type="button" class="flow-fx-preset" data-flow-preset="'+esc(p.id)+'" data-flow-owner="'+esc(track.id)+'" title="Aplicar este preset a '+esc(track.name)+'">◈ '+esc(p.name)+'</button>').join('');
  return '<section class="flow-fx-drawer" data-flow-fx-drawer="'+esc(track.id)+'" aria-label="Efectos de '+esc(track.name)+'">'+
-  '<header><div><strong>FX DE ESTA PISTA</strong><small>Solo modifica este sonido · el original se conserva</small></div>'+
-  '<button type="button" data-flow-save-fx="'+esc(track.id)+'">▣ Guardar preset</button></header>'+
+  '<header class="flow-floating-handle" data-flow-fx-move="'+esc(track.id)+'"><div><strong>FX · '+esc(track.name)+'</strong><small>Activa un efecto y ajusta sus parámetros · original intacto</small></div>'+
+   '<div class="flow-floating-actions"><button type="button" data-flow-save-fx="'+esc(track.id)+'" title="Guardar configuración">Guardar</button><button type="button" data-flow-fx-maximize="'+esc(track.id)+'" title="Ampliar o restaurar">⛶</button><button type="button" data-flow-fx-close="'+esc(track.id)+'" aria-label="Cerrar efectos">×</button></div></header>'+
   '<div class="flow-fx-grid">'+fx+'</div>'+(saved?'<div class="flow-fx-presets"><small>MIS PRESETS</small>'+saved+'</div>':'')+'</section>';
 }
 function masterFxDrawer(settings={}){
@@ -46,8 +57,8 @@ function masterFxDrawer(settings={}){
    '<input type="range" data-master-fx="'+item.id+'" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+value+'" aria-label="'+esc(item.hint)+'"></label>';
  }).join('');
  return '<section class="master-fx-drawer" data-master-fx-panel>'+
-  '<header><div><strong>MASTER FX</strong><small>Procesa la mezcla completa: voces + música + samples</small></div>'+
-  '<div class="master-fx-head-actions"><button type="button" data-flow-master-help title="Qué hace el procesamiento global">?</button><label class="master-fx-bypass"><input type="checkbox" data-master-fx-bypass '+(settings.bypass?'checked':'')+'> BYPASS</label></div></header>'+
+  '<header class="flow-floating-handle" data-flow-fx-move="master"><div><strong>MASTER FX</strong><small>Efectos de toda la mezcla</small></div>'+
+  '<div class="master-fx-head-actions"><button type="button" data-flow-master-help title="Qué hace el procesamiento global">?</button><label class="master-fx-bypass"><input type="checkbox" data-master-fx-bypass '+(settings.bypass?'checked':'')+'> BYPASS</label><button type="button" data-flow-fx-maximize="master" title="Ampliar">⛶</button><button type="button" data-flow-fx-close="master" aria-label="Cerrar efectos">×</button></div></header>'+
   '<div class="master-fx-grid">'+controls+'</div></section>';
 }
 function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
@@ -75,9 +86,9 @@ function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
    '<button type="button" class="flow-node-more" data-flow-delete="'+esc(track.id)+'" title="Ocultar nodo">⋯</button></div>'+
   '<label class="flow-node-route"><span>ENVIAR A</span><select data-flow-destination="'+esc(track.id)+'" aria-label="Destino de '+esc(track.name)+'">'+opts+'</select></label>'+
   '<button class="patch-port patch-port-out" data-flow-out="'+esc(track.id)+'" type="button" title="Arrastra desde aquí para conectar" aria-label="Salida de '+esc(track.name)+'"></button>'+
-  (expanded?'<div id="fx-'+esc(track.id)+'">'+trackFxDrawer(track,presets)+'</div>':'')+'</article>';
+  '</article>';
 }
-export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[],expandedFx=[],masterFx={},masterVolume=85){
+export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[],expandedFx=[],masterFx={},masterVolume=85,fxWindows={},fxMaximized=null){
  const visible=tracks.filter(t=>!t.flowHidden),expanded=new Set(expandedFx||[]);
  const voice=visible.filter(t=>busForTrack(t)==='vocals');
  const music=visible.filter(t=>['music','samples','fx'].includes(busForTrack(t)));
@@ -90,6 +101,7 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   });
  }
  const boardWidth=Math.min(12000,Math.max(FLOW_MIN_WIDTH,maxRight+520));
+ const boardHeight=Math.max(flowHeight(),...Array.from(geom.values(),p=>p.y+300));
  const busX=boardWidth-500,masterX=boardWidth-260;
  const nodes=visible.map(track=>nodeMarkup(track,geom.get(track.id),{tracks:visible},selectedId,expanded.has(track.id),presets)).join('');
  const busY={vocals:165,music:535,samples:655,fx:760};
@@ -105,17 +117,24 @@ export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[]
   '<button type="button" class="flow-master-orb" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'" title="Abrir efectos globales">◉</button>'+
   '<strong>MASTER OUT</strong><small>Salida final · estéreo</small>'+
   '<button type="button" class="flow-master-fx" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'">MASTER FX</button>'+
-  (expanded.has('master')?masterFxDrawer(masterFx):'')+'</article>';
+  '</article>';
  const laneTags='<div class="patch-lane-title" style="top:28px"><span class="patch-lane-dot voices"></span>01 · VOICE SIGNAL <small>Voces · cada pista tiene sus propios FX</small><button type="button" data-flow-add-voice>＋ Añadir voz</button></div>'+
   '<div class="patch-lane-title" style="top:430px"><span class="patch-lane-dot music"></span>02 · TRACK SIGNAL <small>Instrumentos, loops y samples</small><button type="button" data-flow-add-track>＋ Añadir pista</button></div>';
  const emptyVoice=!voice.length?'<div class="flow-lane-empty" style="left:70px;top:115px">Importa una grabación vocal o pulsa «Añadir voz».</div>':'';
  const emptyMusic=!music.length?'<div class="flow-lane-empty" style="left:70px;top:410px">Añade una base, un loop o un sample.</div>':'';
  const dock='<button type="button" class="patch-sample-dock" data-flow-sample-dock title="Arrastra aquí cualquier nodo para guardar su audio en la biblioteca"><span>▦</span><span><strong>SAMPLE DESK</strong><small>Arrastra un nodo aquí para guardarlo como sample</small></span><b>↗</b></button>';
  const guide=!visible.length?'<div class="flow-onboarding"><span><b>1</b> Añade una voz o una pista</span><span><b>2</b> Abre FX dentro del nodo</span><span><b>3</b> Conecta OUT → IN o guarda en Sample Desk</span></div>':'';
+ const emptyConsole=!visible.length?'<div class="android-canvas-empty" role="group" aria-label="Comenzar una mezcla"><div class="android-canvas-emblem" aria-hidden="true"><span>◉</span><i></i><span>⌁</span><i></i><span>◎</span></div><small>NO HAY SEÑAL / PATCH 000</small><strong>Enciende tu flujo de sonido</strong><p>Graba una voz o importa una pista para crear el primer módulo. Después conecta su salida y abre sus efectos.</p><div><button type="button" data-flow-add-voice>● GRABAR VOZ</button><button type="button" data-flow-add-track>＋ IMPORTAR AUDIO</button></div></div>':'';
  const transport='<div class="flow-mini-transport"><button type="button" data-flow-play aria-label="Reproducir o pausar">▶</button><button type="button" data-flow-stop aria-label="Detener">■</button><label><span>MASTER</span><input type="range" min="0" max="100" data-flow-master-volume value="'+(Number(masterVolume)||0)+'" aria-label="Volumen Master"></label></div>';
+ const floating=[...expanded].filter(id=>id==='master'||visible.some(t=>t.id===id)).map(id=>{
+  const track=visible.find(t=>t.id===id),p=fxWindows?.[id]||{x:80,y:100},max=fxMaximized===id;
+  const content=id==='master'?masterFxDrawer(masterFx):trackFxDrawer(track,presets);
+  return '<div class="flow-floating-panel '+(max?'is-maximized':'')+'" data-flow-fx-window="'+esc(id)+'" style="left:'+Math.max(0,Number(p.x)||0)+'px;top:'+Math.max(0,Number(p.y)||0)+'px">'+content+'</div>';
+ }).join('');
+ const viewControls='<div class="flow-view-tools" aria-label="Navegación del canvas"><button type="button" data-flow-zoom-out aria-label="Alejar">−</button><output id="flowZoomLabel">100%</output><button type="button" data-flow-zoom-in aria-label="Acercar">+</button><button type="button" data-flow-fit title="Ver todos los nodos">Ajustar</button><span>Arrastra el fondo para moverte</span></div>';
  return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+transport+dock+'</div>'+guide+
-  '<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
-  '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div>'+
+  '<div class="flow-board-scroller" id="flowCanvasScroller"><div class="flow-canvas-space" id="flowCanvasSpace" style="width:'+boardWidth+'px;height:'+boardHeight+'px"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
+  '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div></div>'+emptyConsole+viewControls+'<div class="flow-fx-layer" id="flowFxLayer">'+floating+'</div>'+
   '<p class="flow-footnote"><strong>Empieza:</strong> añade una voz o pista, abre FX para modificar solo ese sonido y conecta su salida con otra entrada. MASTER FX modifica toda la mezcla. Arrastra el icono ♫ de cualquier nodo a SAMPLE DESK para guardar una copia original o procesada.</p></div>';
 }
 export function wireCurve(ax,ay,bx,by,energy=0,time=0){
@@ -130,9 +149,9 @@ const flowGeometryCache=new WeakMap();
 export function invalidateFlowWireGeometry(root){const board=root?.querySelector('#flowBoard');if(board)flowGeometryCache.delete(board);}
 function getFlowGeometry(board,svg){
  const cached=flowGeometryCache.get(board);if(cached)return cached;
- const rect=board.getBoundingClientRect(),entries=[];
- svg.setAttribute('viewBox','0 0 '+Math.round(rect.width)+' '+Math.round(rect.height));
- const point=(el,side)=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:(side==='right'?r.right:r.left)-rect.left,y:r.top-rect.top+r.height/2};};
+ const rect=board.getBoundingClientRect(),entries=[],width=board.offsetWidth||rect.width,height=board.offsetHeight||rect.height,scale=rect.width/Math.max(1,width)||1;
+ svg.setAttribute('viewBox','0 0 '+Math.round(width)+' '+Math.round(height));
+ const point=(el,side)=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:((side==='right'?r.right:r.left)-rect.left)/scale,y:(r.top-rect.top+r.height/2)/scale};};
  const add=(id,from,to,owner,busId)=>{if(from&&to)entries.push({id,from,to,owner,busId,level:0,path:null});};
  const findInput=el=>el?.querySelector?.('[data-flow-in]')||el;
  const master=board.querySelector('#flowMaster');

@@ -1,0 +1,118 @@
+/* V3 — Quiet, full-bleed graph. One canvas, one transport, floating FX.
+ * Supersedes legacy console and Red Velvet CSS only inside Signal Flow.
+ */
+:root{--v3-bg:#10151c;--v3-surface:#1b2430;--v3-line:#394654;--v3-text:#f4f7fb;--v3-muted:#c1ccd7;--v3-cyan:#69c8e7;--v3-rose:#f18eaf}
+#flowArea.flow-studio{position:relative;padding:0;margin:18px 0;border:1px solid #354352;border-radius:12px;background:var(--v3-bg);box-shadow:none;backdrop-filter:none;overflow:hidden;color:var(--v3-text)}
+#flowArea .soft-section-heading{display:flex;align-items:center;gap:12px;padding:9px 16px;margin:0;background:#18202a;border-bottom:1px solid #364251}
+#flowArea .soft-section-heading .section-overline{display:none}
+#flowArea .soft-section-heading h2{margin:0;font-size:17px;letter-spacing:-.3px}
+#flowArea .soft-section-heading p{font-size:11px;color:var(--v3-muted);max-width:390px;margin:3px 0 0}
+#flowArea .flow-heading-actions{margin-left:auto;gap:5px}
+#flowArea .flow-heading-actions .mini-action{background:transparent;border:1px solid #45525f;border-radius:7px;box-shadow:none;color:#e5ebf2;padding:7px 10px;font-size:10px}
+#flowArea .flow-heading-actions .mini-action:hover{border-color:var(--v3-cyan);background:#243442}
+#flowArea.is-fullscreen{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;border:0;border-radius:0;margin:0;padding:0;background:var(--v3-bg)}
+#flowArea.is-fullscreen .soft-section-heading{flex:none}
+#flowArea.is-fullscreen #flowBody{flex:1;min-height:0;display:flex}
+#flowArea .patch-main{position:relative;flex:1;display:flex;flex-direction:column;min-height:0;width:100%;gap:0}
+#flowArea .patch-toolbar{display:flex;align-items:center;flex:none;gap:10px;margin:0;padding:8px 13px;border:0;border-bottom:1px solid #354251;border-radius:0;min-height:50px;background:#19212c;box-shadow:none;backdrop-filter:none}
+#flowArea .patch-toolbar>span:nth-of-type(2){font-size:10px;color:#b4c4d1}
+#flowArea .patch-toolbar strong{font-size:11px;color:#edf3f8}
+#flowArea .patch-sample-dock{margin-left:auto;border:1px solid #466778;border-radius:8px;background:#20323a;box-shadow:none;min-width:190px}
+#flowArea .patch-sample-dock small{color:#c9d8dd}
+#flowArea .flow-board-scroller{position:relative;flex:1;min-height:430px;max-height:calc(100vh - 240px);border:0;border-radius:0;overflow:auto;background:#10151d;cursor:grab;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#4b6170 #141d26}
+#flowArea.is-fullscreen .flow-board-scroller{min-height:0;max-height:none}
+#flowArea .flow-board-scroller.is-panning{cursor:grabbing;user-select:none}
+#flowArea .flow-canvas-space{position:relative}
+#flowArea .flow-board{position:absolute;left:0;top:0;transform-origin:0 0;min-width:0;will-change:transform;background:repeating-linear-gradient(0deg,#71869c12 0 1px,transparent 1px 26px),repeating-linear-gradient(90deg,#71869c12 0 1px,transparent 1px 26px),#121923}
+#flowArea .flow-board:before{border-color:#5c708022}
+#flowArea .flow-node{background:#202c38;border:1px solid #526475;border-radius:10px;box-shadow:0 7px 20px #0007;backdrop-filter:none;padding:11px}
+#flowArea .flow-node-selected{border-color:#a7dfef;box-shadow:0 0 0 1px #a7dfef77,0 7px 20px #0007}
+#flowArea .flow-node.is-playing{box-shadow:0 0 0 1px var(--flow-accent),0 0 15px #69c8e72d}
+#flowArea .flow-node-wave{background:#151e28}
+#flowArea .flow-node-actions button{background:#2d3d4a;border:1px solid #506170;box-shadow:none;color:#e5eef5}
+#flowArea .flow-node-actions button:hover{border-color:#8ccfe4}
+#flowArea .flow-node-actions .flow-fx-trigger{background:#29404c;border-color:#5a99ad;color:#d3f4fe}
+#flowArea .flow-node-route select{background:#16232e;color:#e9f3fa;border-color:#64788a}
+#flowArea .flow-source-icon,#flowArea .flow-bus-orb,#flowArea .flow-master-orb{box-shadow:none;border-radius:9px}
+#flowArea .flow-bus-node{background:#223140;border:1px solid #587080;border-radius:10px;box-shadow:0 5px 15px #0007}
+#flowArea .flow-master{background:#263542;border:1px solid #89b8c6;border-radius:12px;box-shadow:0 8px 18px #0007}
+#flowArea .flow-master-fx{background:#31485a;border:1px solid #7399ac;color:#e2f6fc}
+#flowArea .flow-lane-empty{color:#b0c0ce}
+#flowArea .flow-view-tools{position:absolute;right:12px;bottom:43px;display:flex;align-items:center;gap:4px;z-index:12;border:1px solid #435260;border-radius:9px;padding:4px;background:#1d2935f2;box-shadow:0 6px 18px #0007;color:#e9f3f9}
+#flowArea .flow-view-tools button{background:#2c3b49;border:1px solid #546677;border-radius:6px;color:#f2f7fb;padding:6px 10px;font-size:12px}
+#flowArea .flow-view-tools button:hover{border-color:#8dd5e9}
+#flowArea .flow-view-tools output{min-width:47px;text-align:center;font-size:11px}
+#flowArea .flow-view-tools span{font-size:10px;color:#bfd0dc;padding:0 7px}
+#flowArea .flow-footnote{margin:0;padding:8px 13px;flex:none;background:#19212c;color:#c6d3dd;border-top:1px solid #344251;font-size:10px;line-height:1.4}
+#flowArea .flow-onboarding{background:#192632;border-color:#334451;color:#d7e5ee}
+#flowArea .flow-fx-layer{position:absolute;inset:50px 0 0 0;z-index:25;pointer-events:none;overflow:hidden}
+#flowArea .flow-floating-panel{position:absolute;display:flex;flex-direction:column;width:min(680px,calc(100% - 24px));min-height:360px;height:min(640px,calc(100% - 30px));max-height:calc(100% - 20px);border:1px solid #536a7e;border-radius:12px;background:#1a2530eb;box-shadow:0 18px 55px #000b;backdrop-filter:blur(14px);color:#f1f7fb;pointer-events:auto;overflow:auto;resize:vertical}
+#flowArea .flow-floating-panel.is-maximized{left:4%!important;top:3%!important;width:92%!important;height:94%!important;max-height:94%!important;resize:none}
+#flowArea .flow-fx-drawer,#flowArea .master-fx-drawer{position:static!important;display:flex;flex-direction:column;flex:1;gap:12px;width:100%;min-height:0;padding:0 18px 18px;background:transparent;border:0;border-radius:0;box-shadow:none;overflow-y:auto}
+#flowArea .flow-floating-handle{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 -18px 8px;padding:14px 18px!important;background:#243342;border-bottom:1px solid #4b6272;cursor:grab;touch-action:none}
+#flowArea .flow-floating-handle:active{cursor:grabbing}
+#flowArea .flow-floating-handle strong{font-size:14px;color:#fff;letter-spacing:0}
+#flowArea .flow-floating-handle small{font-size:10px;color:#c7d5df}
+#flowArea .flow-floating-actions,#flowArea .master-fx-head-actions{display:flex;align-items:center;gap:7px;flex:none}
+#flowArea .flow-floating-actions button,#flowArea .master-fx-head-actions button{border:1px solid #657b8a;border-radius:7px;background:#324454;color:#f2f7fb;padding:6px 10px;font-size:11px;cursor:pointer}
+#flowArea .flow-floating-actions button:hover,#flowArea .master-fx-head-actions button:hover{border-color:#9bddea}
+#flowArea .flow-fx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#flowArea .flow-fx-subnode{min-height:45px;background:#2b3b4b;border:1px solid #4f6474;padding:9px;border-radius:7px;box-shadow:none;color:#e8f4f8}
+#flowArea .flow-fx-subnode.is-active{border-color:#6ebbcf;background:#2d4957}
+#flowArea .flow-fx-subnode strong{color:#fff;font-size:12px}
+#flowArea .flow-fx-subnode small{color:#c4d8e1;font-size:10px}
+#flowArea .flow-fx-knob{display:flex;align-items:center;gap:6px;padding:4px 4px 13px;min-width:0;color:#cbdbe5;font-size:10px}
+#flowArea .flow-fx-knob span{flex:0 0 55px}
+#flowArea .flow-fx-knob input{flex:1;min-width:0;accent-color:#74cde5}
+#flowArea .flow-fx-knob output{min-width:24px;color:#eaf6fc;text-align:right}
+#flowArea .flow-fx-fixed{display:block;color:#b9cbd7;font-size:10px;padding:10px}
+#flowArea .flow-fx-presets{display:flex;flex-wrap:wrap;gap:8px}
+#flowArea .flow-fx-preset{border-radius:7px;background:#2e4050;color:#e2f1fb;border-color:#637f91}
+#flowArea .master-fx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}
+#flowArea .master-fx-control{padding:12px;border-radius:8px;background:#253644}
+#flowArea .master-fx-control strong{font-size:12px}
+#flowArea .master-fx-control small{font-size:10px;color:#bacee0}
+#flowArea .master-fx-control output{color:#95dbf3}
+#flowArea .master-fx-control input{accent-color:#73c9e5}
+#flowArea .master-fx-bypass{color:#d9eaf5}
+#flowArea .flow-mini-transport>button:first-child{background:#4e96aa;border-color:#73c9df;color:#111d26;box-shadow:none}
+@media(max-width:700px){
+ #flowArea .soft-section-heading{flex-wrap:wrap}
+ #flowArea .soft-section-heading p{display:none}
+ #flowArea .flow-heading-actions{width:100%;justify-content:flex-start;flex-wrap:wrap}
+ #flowArea .patch-toolbar>span:nth-of-type(2){display:none}
+ #flowArea .patch-sample-dock{min-width:0}
+ #flowArea .flow-view-tools span{display:none}
+ #flowArea .flow-floating-panel{width:calc(100% - 16px);max-height:calc(100% - 16px)}
+ #flowArea .flow-fx-grid,#flowArea .master-fx-grid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+ #flowArea .flow-node-wave i{animation:none!important}
+}
+
+/* FX live in independent, complete channel strips rather than orphan controls. */
+#flowArea .flow-fx-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:12px}
+#flowArea .flow-fx-unit{display:flex;flex-direction:column;min-width:0;border:1px solid #475a6a;border-radius:10px;background:#22313f;padding:9px;gap:10px}
+#flowArea .flow-fx-unit.is-active{border-color:#6abacb;background:#253d49}
+#flowArea .flow-fx-unit.is-bypassed{opacity:.82}
+#flowArea .flow-fx-unit .flow-fx-subnode{display:flex;align-items:center;gap:9px;min-height:54px;width:100%;border:none;border-bottom:1px solid #4d6272;border-radius:0;background:transparent;padding:4px;color:#f6f8fa;box-shadow:none}
+#flowArea .flow-fx-unit .flow-fx-subnode:hover{color:#fff}
+#flowArea .flow-fx-unit .flow-fx-state{margin-left:auto;min-width:30px;border-radius:5px;padding:4px 5px;background:#3c4853;color:#cbd8e0;font-size:10px;font-weight:750;text-align:center}
+#flowArea .flow-fx-unit.is-active .flow-fx-state{background:#305c64;color:#c9fffc}
+#flowArea .flow-fx-controls{display:flex;flex-direction:column;gap:12px;padding:3px 2px 5px}
+#flowArea .flow-fx-knob{display:grid;grid-template-columns:72px minmax(0,1fr) 27px;align-items:center;gap:8px;margin:0;padding:0;color:#e0eaf2;font-size:10px}
+#flowArea .flow-fx-knob span{min-width:0}
+#flowArea .flow-fx-knob input{width:100%;min-width:0}
+#flowArea .flow-fx-fixed{padding:4px 0;margin:0;font-size:10px}
+#flowArea .flow-fx-copy{min-width:0}
+#flowArea .flow-fx-copy small{line-height:1.4;white-space:normal}
+#flowArea .flow-floating-panel.is-maximized{width:94%!important;left:3%!important;top:2%!important;height:96%!important;max-height:96%!important}
+@media(max-width:650px){
+ #flowArea .flow-fx-grid{grid-template-columns:1fr;gap:9px}
+ #flowArea .flow-floating-panel{height:calc(100% - 16px);min-height:0}
+ #flowArea .flow-fx-knob{grid-template-columns:70px minmax(0,1fr) 28px}
+}
+
+/* The background is a draggable touch surface; controls retain their own touch handling. */
+#flowArea .flow-board-scroller{touch-action:pan-x pan-y}
+#flowArea .flow-node input,#flowArea .flow-node select,#flowArea .flow-floating-panel input{touch-action:auto}

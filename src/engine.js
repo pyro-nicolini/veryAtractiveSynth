@@ -1,7 +1,9 @@
 import {clamp,effectiveDuration,projectDuration,encodeWav,defaults} from './dsp.js';
+import {normaliseAutomation,sampleAutomation} from './automation.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
+import {loudnessStats} from './loudness.js';
 import {clipsOf,clipDuration,validLoop} from './track-clips.js';
 import {assembleSessionStereo} from './session-recording.js';
 import {loopBoundaryFades} from './loop-guard.js';
@@ -108,6 +110,18 @@ function setParams(graph,track,ctx){
   graph.voice.parameters.get('clean').setTargetAtTime(disabled.clean?0:clamp(track.clean,0,100)/100,now,.013);
   graph.voice.parameters.get('key').setValueAtTime(clamp(track.key,0,11),now);
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
+  const noteMask=Number.isInteger(track.tuneNoteMask)&&track.tuneNoteMask>0&&track.tuneNoteMask<=4095?track.tuneNoteMask:null;
+  if(graph.lastTuneNoteMask!==noteMask){graph.voice.port?.postMessage({type:'note-mask',mask:noteMask});graph.lastTuneNoteMask=noteMask;}
+  const calibration=clamp(track.pitchCalibration??0,-12,12);
+  if(graph.lastPitchCalibration!==calibration){graph.voice.port?.postMessage({type:'pitch-calibration',semitones:calibration});graph.lastPitchCalibration=calibration;}
+}
+function scheduleTrackAutomation(graph,track,ctx,from,startCtx){
+  const points=normaliseAutomation(track?.automation?.pitchShift,-12,12),param=graph?.voice?.parameters?.get('shift');
+  const drivePoints=normaliseAutomation(track?.automation?.drive,0,100),driveParam=graph?.voice?.parameters?.get('drive');
+  if(!param&&!driveParam)return;
+  const duration=Math.max(0,projectDuration([track]));
+  if(param&&points.length){const initial=sampleAutomation(points,from,-12,12);param.cancelScheduledValues(startCtx);param.setValueAtTime(initial,startCtx);for(const point of points){if(point.time<=from||point.time>from+duration)continue;param.linearRampToValueAtTime(point.value,startCtx+point.time-from);}}
+  if(driveParam&&drivePoints.length){const initial=sampleAutomation(drivePoints,from,0,100);driveParam.cancelScheduledValues(startCtx);driveParam.setValueAtTime(initial,startCtx);for(const point of drivePoints){if(point.time<=from||point.time>from+duration)continue;driveParam.linearRampToValueAtTime(point.value,startCtx+point.time-from);}}
 }
 function createGraph(ctx,track,destination,ir){
   const input=ctx.createGain();
@@ -165,7 +179,7 @@ function fadeValue(track,at,total){
   if(fadeOut>0)v=Math.min(v,Math.max(0,(total-at)/fadeOut));
   return v;
 }
-function scheduleClip(ctx,track,graph,from,timeOrigin){
+export function scheduleClip(ctx,track,graph,from,timeOrigin){
   const total=effectiveDuration(track);
   if(total<=.002)return null;
   const start=track.offset||0,end=start+total;
@@ -233,7 +247,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.masterFx={...MASTER_FX_DEFAULTS};this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.masterFx={...MASTER_FX_DEFAULTS};this.lastExportStats=null;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -369,6 +383,7 @@ export class AudioEngine {
     for(const track of tracks){
       if(solo&&!track.solo)continue;
       const graph=this.graphs.get(track.id);
+      scheduleTrackAutomation(graph,track,ctx,this.from,this.startCtxTime);
       for(const clip of clipsOf(track).filter(c=>clipDuration(c)>=.002)){
         const source=scheduleClip(ctx,clip,graph,this.from,this.startCtxTime);
         if(source)this.sources.push(source);
@@ -623,6 +638,7 @@ export class AudioEngine {
         scheduleClip(offline,dry?{...clip,pitchRegions:[],pitchShift:0}:clip,graph,0,0);
     }
     const rendered=await offline.startRendering();
+    this.lastExportStats=loudnessStats(rendered);
     return encodeWav(rendered,depth);
   }
 }

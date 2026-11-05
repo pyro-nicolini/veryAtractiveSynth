@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, DesignPhase]
   pull_request:
-    branches: [main, DesignPhase, feat/red-velvet-flow-export]
+    branches: [main, DesignPhase, feat/red-velvet-flow-export, feat/signal-flow-rework-v2]
 permissions:
   contents: read
 jobs:
@@ -41,6 +41,7 @@ jobs:
           node --check src/studio-library.js
           node --check src/library-ui.js
           node --check src/flow-studio.js
+          node --check src/flow-viewport.js
           node --check src/loop-guard.js
           node --check src/clip-edit.js
           node --check src/pitch-coach.js

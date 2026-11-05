@@ -6,23 +6,23 @@ Esta aplicación usa archivos estáticos y Web Audio: no necesita backend ni Nod
 
 Abre https://github.com/pyro-nicolini/veryAtractiveSynth/settings/pages
 
-En **Build and deployment → Source** elige **GitHub Actions** (no Deploy from a branch). El workflow de publicación está incluido en DesignPhase.
+En **Build and deployment → Source** elige **GitHub Actions** (no Deploy from a branch). El workflow de publicación se ejecuta desde `main`.
 
-Si no se despliega inmediatamente al habilitar Pages, abre https://github.com/pyro-nicolini/veryAtractiveSynth/actions/workflows/publish-pages.yml y ejecuta **Run workflow → DesignPhase**.
+Si no se despliega inmediatamente al habilitar Pages, abre https://github.com/pyro-nicolini/veryAtractiveSynth/actions/workflows/publish-pages.yml y ejecuta **Run workflow → main**.
 
 La URL prevista tras confirmar GitHub la publicación es https://pyro-nicolini.github.io/veryAtractiveSynth/
 
 ## 🚀 Actualizaciones
 
-Cada push a **DesignPhase** ejecuta tests, crea el paquete público y lo publica. **main no se cambia ni se publica**.
+Cada push a **main** ejecuta tests, crea el paquete público y lo publica. El entorno `github-pages` ya permite despliegues desde esa rama.
 
 El paquete contiene solo la web, el service worker y assets declarados; no incluye server.js, pruebas, documentos ni archivos Git.
 
 ## 💻 Actualizar Windows
 
     cd C:\Users\thres\Desktop\veryatractivesynth\veryAtractiveSynth
-    git switch DesignPhase
-    git pull --ff-only origin DesignPhase
+    git switch main
+    git pull --ff-only origin main
     npm test
     npm start
 
