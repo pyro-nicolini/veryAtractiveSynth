@@ -57,10 +57,10 @@ test('additional stylized vocal presets use parameters of the existing audio eng
   }
 });
 
-test('Red Velvet startup, per-track export and samples are connected and included offline',()=>{
+test('Android Synth startup, per-track export and samples are connected and included offline',()=>{
   const html=file('index.html'),app=file('src/app.js'),deck=file('src/sample-deck.js'),
     theme=file('src/signal-flow-v2.css'),sw=file('sw.js'),engine=file('src/engine.js'),portable=file('src/portable-project.js');
-  assert.match(html,/Bienvenue\./);
+  assert.match(html,/ANDROID SYNTH/);
   assert.match(html,/id="splashSkip"/);
   assert.match(html,/id="flowArrange"/);assert.match(html,/id="flowFullscreen"/);
   assert.match(html,/src\/studio-console\.css/);assert.match(html,/src\/signal-flow-v2\.css/);

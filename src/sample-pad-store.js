@@ -38,18 +38,33 @@ export async function savePad(index,pad){
   tx.onerror=()=>{db.close();reject(tx.error||Error('Error de almacenamiento'))};
  });
 }
-export async function loadPads(){
+export async function loadPads({strict=false}={}){
  const db=await open();
  return new Promise((resolve,reject)=>{
-  const pads=Array(12).fill(null),tx=db.transaction(STORE,'readonly'),store=tx.objectStore(STORE);
+  const pads=Array(12).fill(null),tx=db.transaction(STORE,'readonly'),store=tx.objectStore(STORE);let invalid=false;
   const req=store.openCursor();
   req.onsuccess=()=>{
    const cursor=req.result;if(!cursor)return;
    const key=cursor.key;
-   if(Number.isInteger(key)&&key>=0&&key<12){try{pads[key]=reviveSample(cursor.value);}catch{}}
+   if(Number.isInteger(key)&&key>=0&&key<12){try{pads[key]=reviveSample(cursor.value);}catch{invalid=true;}}
    cursor.continue();
   };
-  tx.oncomplete=()=>{db.close();resolve(pads);};
+  tx.oncomplete=()=>{db.close();if(strict&&invalid)reject(Error('No se pudo leer un pad guardado; revisa Sample Desk antes de respaldar'));else resolve(pads);};
   tx.onerror=()=>{db.close();reject(tx.error||Error('No se pudieron leer los samples'))};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Se canceló la lectura de samples'))};
+ });
+}
+
+/** Replace all pads in a single transaction, so a quota failure cannot leave a partial restore. */
+export async function replacePads(pads){
+ if(!Array.isArray(pads)||pads.length!==12)throw Error('Respaldo de pads inválido');
+ const records=pads.map(pad=>pad?storageRecord(pad.buffer,pad.name,pad.from,pad.to,pad.fx):null);
+ const db=await open();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  for(let i=0;i<12;i++)if(records[i])store.put(records[i],i);else store.delete(i);
+  tx.oncomplete=()=>{db.close();resolve();};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('No se pudieron restaurar los pads'));};
+  tx.onerror=()=>{};
  });
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#161c24">
+  <meta name="theme-color" content="#11171b">
   <meta name="description" content="Very Atractive Synth — estudio de voz y pistas por capas, privado y local.">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
@@ -14,15 +14,17 @@
   <link rel="stylesheet" href="./src/studio-console.css">
   <link rel="stylesheet" href="./src/signal-flow-v2.css">
   <link rel="stylesheet" href="./src/flow-canvas-v3.css">
-  <title>Very Atractive Synth | Laboratorio de sonido</title>
+  <link rel="stylesheet" href="./src/android-synth.css">
+  <link rel="stylesheet" href="./src/android-surfaces.css">
+  <title>Android Synth | Very Atractive Synth</title>
 </head>
 <body>
-<div class="splash-scene" id="introSplash" role="status" aria-label="Bienvenue · Bienvenido al estudio"><div class="splash-content"><div class="splash-gem" aria-hidden="true">V</div><p>VERY ATRACTIVE SYNTH · SIGNAL CONSOLE</p><h2>Bienvenue.</h2><p>VOTRE STUDIO. VOTRE SON.</p><div class="splash-progress" aria-hidden="true"></div></div><button class="splash-skip" id="splashSkip" type="button">Entrar ahora ↗</button></div>
+<div class="splash-scene" id="introSplash" role="status" aria-label="Iniciando Android Synth"><div class="splash-content"><div class="splash-gem" aria-hidden="true">V</div><p>VERY ATRACTIVE / UNIT-01</p><h2>ANDROID SYNTH</h2><p>INICIALIZANDO SISTEMA DE AUDIO</p><div class="splash-progress" aria-hidden="true"></div></div><button class="splash-skip" id="splashSkip" type="button">ENTRAR AL INSTRUMENTO ↗</button></div>
 <div class="app-shell">
   <header class="topbar">
     <a class="brand" href="#" aria-label="Very Atractive Synth, inicio">
       <span class="brand-mark">V<span class="brand-pulse"></span></span>
-      <span class="brand-text">VERY<span>ATRACTIVE</span><small>S Y N T H &nbsp; / &nbsp; S T U D I O</small></span>
+      <span class="brand-text">VERY<span>ATRACTIVE</span><small>ANDROID SYNTH / SIGNAL STUDIO</small></span>
     </a>
     <div class="top-actions">
       <span class="local-indicator"><span class="dot"></span> LOCAL / PRIVADO</span>
@@ -37,13 +39,14 @@
   </header>
   <main>
     <section class="intro">
-      <div><div class="eyebrow"><span class="pulse-line"></span> CREA · CONECTA · ESCUCHA · SIGNAL CONSOLE 2.0</div>
-        <h1>Tu música, <em>a tu manera.</em></h1>
-        <p>Construye tu sonido conectando pistas, abre sus efectos cuando los necesites y guarda tus mejores samples.</p>
+      <div><div class="eyebrow"><span class="pulse-line"></span> UNIT-01 / INTERFAZ DE AUDIO</div>
+        <h1>ANDROID <em>SYNTH</em><span class="android-title-index"> / 01</span></h1>
+        <p>Conecta pistas, moldea tu voz y construye una mezcla con tu propio flujo de señal.</p>
       </div>
-      <div class="intro-decoration" aria-hidden="true"><span>/// 48K</span><span>WAVEFORM</span></div>
+      <div class="intro-decoration" aria-hidden="true"><span>VERY ATRACTIVE</span><span>SONIC SYSTEM / V1.5</span></div>
     </section>
     <section class="quick-start" aria-label="Comenzar">
+      <div class="android-rail-title"><span>01 / MÓDULOS</span><small>INSERTAR EN EL SISTEMA</small></div>
       <button type="button" class="action-tile action-import" id="importBtn">
         <span class="action-symbol">＋</span><span class="tile-copy"><strong>Agregar sonido</strong><small>MP3, WAV, M4A y más</small></span><span class="tile-arrow">↗</span>
       </button>
@@ -53,7 +56,27 @@
       <button type="button" class="action-tile action-demo" id="demoBtn">
         <span class="action-symbol">♫</span><span class="tile-copy"><strong>Explorar ritmos</strong><small>10 bases originales para probar</small></span><span class="tile-arrow">↗</span>
       </button>
+      <button type="button" class="action-tile android-rail-action" data-android-target="voiceLabBtn"><span class="action-symbol">◈</span><span class="tile-copy"><strong>Voice Lab</strong><small>Afinación en vivo</small></span><span class="tile-arrow">↗</span></button>
+      <button type="button" class="action-tile android-rail-action" data-android-target="sampleToggle"><span class="action-symbol">▦</span><span class="tile-copy"><strong>Sample Desk</strong><small>12 pads táctiles</small></span><span class="tile-arrow">↗</span></button>
+      <button type="button" class="action-tile android-rail-action" data-android-target="mixerToggle"><span class="action-symbol">☷</span><span class="tile-copy"><strong>Mezclador</strong><small>Buses y canales</small></span><span class="tile-arrow">↗</span></button>
+      <button type="button" class="action-tile android-rail-action" data-android-target="soundLibrary"><span class="action-symbol">♫</span><span class="tile-copy"><strong>Biblioteca</strong><small>Ritmos y estilos</small></span><span class="tile-arrow">↗</span></button>
+      <div class="android-rail-foot"><span class="android-rail-led" aria-hidden="true"></span> AUDIO LOCAL / LISTO</div>
     </section>
+    <aside class="android-sidecar" aria-label="Monitor androide y controles de pista">
+      <section class="android-monitor" id="androidMonitor" data-state="idle" aria-label="Estado del instrumento">
+        <div class="android-monitor-top"><span>UNIT-01 / ECHO</span><span>CORE ONLINE <i aria-hidden="true"></i></span></div>
+        <div class="android-portrait"><img src="./assets/android/characters/unit-01-echo.png" alt="Retrato original de ECHO, androide del sintetizador" loading="eager" width="1261" height="1247"><span class="android-reticle" aria-hidden="true"></span></div>
+        <div class="android-monitor-readout"><div><small>ESTADO DEL SISTEMA</small><strong id="androidStateText">EN ESPERA</strong></div><span class="android-status-dot" aria-hidden="true"></span></div>
+        <div class="android-signal"><span>SEÑAL MASTER</span><div role="meter" aria-label="Nivel de salida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="androidSignal"><i id="androidSignalFill"></i></div><output id="androidSignalValue">0%</output></div>
+      </section>
+      <aside class="inspector" id="inspector" aria-label="Controles de pista">
+        <div class="section-heading inspector-heading">
+          <div><div class="section-overline">CANAL SELECCIONADO</div><h2>Inspector</h2></div>
+          <button class="mini-action" id="inspectorInfo" aria-label="Información de controles">i</button>
+        </div>
+        <div id="inspectorBody"><div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div></div>
+      </aside>
+    </aside>
     <section class="flow-studio" id="flowArea" aria-label="Laboratorio de conexiones musicales">
       <div class="soft-section-heading"><div><div class="section-overline">FLOW STUDIO · TU MAPA MUSICAL</div><h2>Signal Flow</h2><p>Conecta voces y pistas. Cada sonido tiene sus propios FX; MASTER FX procesa toda la mezcla. Guarda o reutiliza samples desde una mesa independiente.</p></div><div class="flow-heading-actions"><button type="button" class="mini-action" id="flowChain" title="Conectar en serie las pistas de cada tipo hasta su bus">⇢ AUTO CONECTAR</button><button type="button" class="mini-action" id="flowArrange" title="Ordenar los nodos sin cambiar el sonido">⊞ ORDENAR</button><button type="button" class="mini-action" id="flowFullscreen" aria-pressed="false" title="Usar el canvas a pantalla completa">⛶ PANTALLA COMPLETA</button><button type="button" class="mini-action" id="flowHelp" aria-label="Cómo funciona el mapa musical">?</button></div></div>
       <div id="flowBody"></div>
@@ -79,13 +102,6 @@
         </div>
         <div class="timeline-footer"><span><span class="green-dot"></span> Arrastra ↔ para mover cada clip. La línea verde aparece dentro de cada onda.</span><button class="mini-action" id="timelineInfo">i</button></div>
       </div>
-      <aside class="inspector" id="inspector" aria-label="Controles de pista">
-        <div class="section-heading inspector-heading">
-          <div><div class="section-overline">TU VOZ · AJUSTES</div><h2>Tu sonido</h2></div>
-          <button class="mini-action" id="inspectorInfo" aria-label="Información de controles">i</button>
-        </div>
-        <div id="inspectorBody"><div class="inspector-placeholder"><div class="orb"></div><strong>Selecciona una capa</strong><p>Su volumen, voz y efectos aparecerán aquí.</p></div></div>
-      </aside>
     </section>
     <section class="studio-mixer" id="mixerArea" aria-label="Consola del mezclador" hidden>
       <div class="studio-mixer-head"><div><div class="section-overline">MEZCLA DETALLADA</div><h2>Studio Mixer</h2><p>Control independiente de canales, posición y buses · todo llega al master.</p></div><div><button type="button" class="mini-action" id="mixerHelp" aria-label="Ayuda de Studio Mixer">i</button> <button type="button" class="mini-action mix-close" id="mixerClose">✕ CERRAR</button></div></div>

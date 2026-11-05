@@ -11,14 +11,16 @@ class VoiceProcessor extends AudioWorkletProcessor {
     {name:'scale',defaultValue:0,minValue:0,maxValue:2,automationRate:'k-rate'},
     {name:'clean',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'},
     {name:'shift',defaultValue:0,minValue:-12,maxValue:12,automationRate:'k-rate'}
+    ,{name:'drive',defaultValue:0,minValue:0,maxValue:100,automationRate:'k-rate'}
   ];}
   constructor(){
     super();this.buffers=[new Float32Array(RING_SIZE),new Float32Array(RING_SIZE)];
     this.mono=new Float32Array(RING_SIZE);this.pos=0;this.phase=0;this.grain=1536;
     this.counter=0;this.ratio=1;this.targetRatio=1;this.envelope=0;this.gate=1;
-    this.telemetry=false;this.telemetrySeq=0;
+    this.telemetry=false;this.telemetrySeq=0;this.noteMask=null;
     if(this.port)this.port.onmessage=event=>{
       if(event.data?.type==='monitor')this.telemetry=!!event.data.enabled;
+      if(event.data?.type==='note-mask')this.noteMask=Number.isInteger(event.data.mask)&&event.data.mask>0&&event.data.mask<=4095?event.data.mask:null;
     };
   }
   reportPitch(data){
@@ -54,10 +56,11 @@ class VoiceProcessor extends AudioWorkletProcessor {
     const pitch=sampleRate/bestLag,midi=69+12*Math.log2(pitch/440);
     const notes=scale===1?MINOR:scale===2?null:MAJOR;
     let target=Math.round(midi);
-    if(notes){
+    if(notes||this.noteMask!==null){
       let distance=Infinity;
-      for(let n=Math.floor(midi)-7;n<=Math.ceil(midi)+7;n++){
-        if(!notes.includes(((n-key)%12+12)%12))continue;
+      for(let n=Math.floor(midi)-12;n<=Math.ceil(midi)+12;n++){
+        const pitchClass=((n%12)+12)%12;
+        if(this.noteMask!==null?!(this.noteMask&(1<<pitchClass)):!notes.includes(((n-key)%12+12)%12))continue;
         const d=Math.abs(n-midi);if(d<distance){distance=d;target=n;}
       }
     }
@@ -72,7 +75,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
   process(inputs,outputs,params){
     const input=inputs[0],output=outputs[0];if(!output||!output.length)return true;
     const strength=params.strength[0],retune=params.retune[0],key=Math.round(params.key[0]),scale=Math.round(params.scale[0]),clean=params.clean[0];
-    const shift=params.shift?.[0]||0;
+    const shift=params.shift?.[0]||0,drive=params.drive?.[0]||0;
     const len=output[0].length;
     for(let i=0;i<len;i++){
       const l=input?.[0]?.[i]||0,r=input?.[1]?.[i]??l;
@@ -96,6 +99,9 @@ class VoiceProcessor extends AudioWorkletProcessor {
         voiceL=l*(1-mix)+(a1*w1+a2*w2)*mix;
         voiceR=r*(1-mix)+(b1*w1+b2*w2)*mix;
       }
+      const amount=drive/100*.085,denom=1+amount;
+      voiceL=amount?((denom*voiceL)/(1+amount*Math.abs(voiceL))):voiceL;
+      voiceR=amount?((denom*voiceR)/(1+amount*Math.abs(voiceR))):voiceR;
       output[0][i]=voiceL*this.gate;
       if(output[1])output[1][i]=voiceR*this.gate;
       this.phase+=1/this.grain;if(this.phase>=1)this.phase-=1;

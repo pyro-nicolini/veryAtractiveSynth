@@ -117,6 +117,15 @@ h1 em{color:#58b78d;text-shadow:none}
 .library-copy small{font-size:10px;color:#7b8ba0;line-height:1.5}
 .library-add{font-size:19px;color:#74b995}
 .library-help{margin-top:13px;color:#71849d;font-size:11px}
+.library-tile{min-width:0;display:flex;flex-direction:column;gap:5px}
+.library-tile .library-card{width:100%;height:100%}
+.library-filters,.library-tile-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.library-filters{margin:0 0 14px}
+.library-filters label{font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px}
+.library-filters select,.library-filters button,.library-tile-actions button{border:1px solid #66788a;border-radius:9px;padding:6px 10px;background:#26313d;color:#f5f7fa;font-size:11px}
+.library-filters button[aria-pressed=true],.library-tile-actions button[aria-pressed=true]{background:#32675c;color:#fff;border-color:#80cfb2}
+.library-tile-actions{justify-content:flex-end}
+.library-empty{grid-column:1/-1;font-size:12px}
 .flow-studio[hidden]{display:none}
 .flow-palette{display:flex;flex-direction:column;gap:13px;margin-bottom:12px}
 .flow-palette-copy{display:flex;gap:9px;align-items:center;flex-wrap:wrap;color:#334663}

@@ -34,6 +34,8 @@ Los cables NO representan aún patches arbitrarios entre procesadores. El flujo 
 - [x] Tests de módulos, biblioteca, transiciones, grafo y smoke de interfaz.
 
 ## Prioridades pendientes
+
+Nota de estado: esta sección conserva el plan histórico. Las versiones posteriores ya incluyen conexiones entre pistas y buses, rechazo de ciclos, pan/zoom del canvas y edición de múltiples clips. Sigue pendiente validar estas funciones en dispositivos reales; el orden de FX y las demás mejoras indicadas requieren trabajo adicional.
 ### P0 — Calidad y estabilidad
 - [ ] QA real en Chromium/Edge, Firefox y Safari iOS/Android con micrófono, interfaces y auriculares.
 - [ ] Comparar WAV offline contra playback con nuevos estilos y transiciones.
@@ -49,7 +51,7 @@ Los cables NO representan aún patches arbitrarios entre procesadores. El flujo 
 - [ ] Pan/zoom de canvas, cableado con teclado y pruebas touch.
 
 ### P1 — Live Loop y voz
-- [ ] Loops indefinidos cuantizados al BPM, overdub y comping.
+- [ ] Loops indefinidos y comping. Overdub y cuantización de posición de clips ya están disponibles.
 - [ ] Pitch shifting con preservación de formantes y denoising avanzado.
 - [ ] Automatizar movimientos XY y exportar stems procesados aislados.
 

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "path": "characters/unit-01-echo.png",
+      "role": "UNIT-01 / ECHO status monitor portrait",
+      "format": "PNG with alpha",
+      "pixels": "1261 x 1247",
+      "loaded": "initial interface"
+    }
+  ]
+}

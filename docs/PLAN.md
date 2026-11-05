@@ -66,7 +66,7 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 - [x] Tests de funciones puras, fuentes compartidas, WAV estéreo y procesador AudioWorklet.
 - [ ] QA de escucha y latencia real en navegadores/auriculares distintos.
 - [ ] Crossfade antipop entre iteraciones y cuantización de loops por BPM.
-- [ ] Overdub, comping, loop infinito de interpretación, grabación de stems por separado y automatización de gestos XY.
+- [ ] Comping avanzado y loop infinito de interpretación dedicado a tomas. Exportación por pista y exportación batch de stems (ZIP), overdub, repetición global y automatización interactiva XY disponibles.
 - [ ] Protección adicional contra interrupciones, suspensión de navegador y memoria agotada.
 
 ### Fase 0.9 — Voice Playground y FX independientes
@@ -92,7 +92,7 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 - [x] Guardado de clips y fuentes en IndexedDB v2 y respaldo .vasproject versión 2 (lectura v1 preservada).
 - [x] Undo/redo de metadatos por clip, conservando las referencias compartidas de AudioBuffer.
 - [ ] QA real de arrastre, selección, división y exportación de múltiples clips.
-- [ ] Crossfades visuales, copy/paste entre pistas, comping, punch in/out, zoom y automatizaciones.
+- [ ] Crossfades visuales, comping, punch in/out, zoom y automatizaciones. Copy/paste entre pistas implementado.
 - [ ] Escalado con archivos largos, guardado y exportación por streaming.
 
 ### Fase 0.7 — Studio Core / mixer no destructivo
@@ -105,7 +105,7 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 - [x] Exportación WAV de 32-bit float preserva rango flotante completo.
 - [x] Un proyecto sin pistas también puede autoguardarse, evitando resucitar la sesión anterior.
 - [ ] Verificación e2e con interfaz y hardware reales para faders, captura, audio y exportación.
-- [ ] Edición con múltiples clips por pista, bus sends, automatizaciones, medición LUFS/true peak.
+- [ ] Bus sends y automatizaciones. Edición con múltiples clips, overdub y medición LUFS/true peak implementadas.
 - [ ] Latencia automática, pitch DSP profesional, supresión avanzada de ruido y códecs móviles.
 
 ### Fase 0.6 — Medición de tono y grabación asistida

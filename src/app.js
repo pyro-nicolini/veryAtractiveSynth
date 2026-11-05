@@ -7,6 +7,7 @@ import {zipStore} from './zip-store.js';
 import {TUNE_POINTS,normalizeTune,tunePointFromManual,applyTunePoint,findTunePreset} from './tune-lab.js';
 import {pitchReadout} from './pitch-display.js';
 import {tuneLabMarkup,updateTuneLabView,loadUserTunes,saveUserTune,customTuneMarkup} from './tune-lab-ui.js';
+import {effectiveTuneNoteMask,toggleTuneNote} from './tune-targets.js';
 import {timelineSpan,pointerTime,setOffset,splitClip} from './timeline.js';
 import {BUS_IDS,BUS_LABELS,busForTrack,sanitiseBuses,formatDb} from './studio-mixer.js';
 import {mixerMarkup,updateMixerMeters} from './studio-mixer-ui.js';
@@ -17,21 +18,30 @@ import {libraryMarkup} from './library-ui.js';
 import {flowMarkup,flowHeight,flowPosition,updateFlowWires,invalidateFlowWireGeometry,wireCurve} from './flow-studio.js';
 import {clampFlowZoom,graphViewportSize,screenToGraph,fitFlowZoom,zoomAroundPoint,flowWorkspaceMetrics} from './flow-viewport.js';
 import {canConnect,chainLane} from './flow-routing.js';
-import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample} from './sample-library.js';
+import {listLibrarySamples,loadLibrarySample,deleteLibrarySample,saveLibrarySample,addLibrarySamples} from './sample-library.js';
 import {copySample,sampleEffect} from './sample-bank.js';
 import {listPatchPresets,savePatchPreset,deletePatchPreset,applyPatchPreset} from './patch-presets.js';
 import {MASTER_FX_DEFAULTS,sanitiseMasterFx} from './master-fx.js';
 import {clipSpeed,setClipSpeed,trimClip,moveClip} from './clip-edit.js';
+import {copyClip,pasteClip,pasteAfterClip} from './clip-clipboard.js';
+import {extractCompTake} from './comping.js';
+import {addAutomationPoint} from './automation.js';
+import {quantizeClip} from './loop-quantize.js';
 import {estimateNote,solfege,noteRegions,autoTuneSegments,setNoteMask,AUTO_TUNE_MODES} from './pitch-coach.js';
 import {VOICE_CHARACTERS,applyVoiceCharacter,characterCoordinates} from './voice-characters.js';
 import {pitchReviewMarkup,drawPitchWave,selectionPercent,sourceTimeFromPointer} from './pitch-review-ui.js';
 import {SampleDeck} from './sample-deck.js';
+import {loadPads,replacePads} from './sample-pad-store.js';
 import {signalQuality} from './sample-bank.js';
+import {formatLoudness} from './loudness.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
 const engine=new AudioEngine();
-const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPanReady:false,flowCanvasOrigin:{x:0,y:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
+const state={tracks:[],selected:null,selectedClip:null,clipImportTrack:null,clipClipboard:null,position:0,recording:null,tuneMode:'track',liveTuneTrack:null,liveMicActive:false,liveMicBusy:false,liveMicToken:0,liveMeterFrame:0,preview:null,recordMeterHistory:[],meterFrame:0,preferredInput:'',scrubbing:false,dragClip:null,bpm:104,metronome:false,snap:false,loop:false,recordShiftMs:0,countingIn:null,inputGain:100,monitorGain:75,master:85,masterFx:{...MASTER_FX_DEFAULTS},buses:sanitiseBuses(),mixerOpen:false,busy:false,sessionRecording:null,loopEdit:null,scrollX:0,libraryTab:'rhythms',flowOpen:true,flowFullscreen:false,flowExpandedFx:[],flowFxWindows:{},flowFxMaximized:null,flowCanvasZoom:1,flowPan:{left:0,top:0},flowPanReady:false,flowCanvasOrigin:{x:0,y:0},flowPositions:{},flowArmedEffect:null,flowArmedPreset:null,flowArmedOutput:null,flowCableDrag:null,flowDrag:null,sampleAssets:[],zoom:1,recordNoteLast:0,micSignal:false,noteHistory:[],sampleDeck:null,pendingSampleTrackId:null,liveRecording:null,liveNoteLast:0};
+const rhythmFilters={category:'all',tempo:'all',favoritesOnly:false,favorites:[],previewId:null};
+try{const saved=JSON.parse(localStorage.getItem('vas-rhythm-favorites')||'[]');if(Array.isArray(saved))rhythmFilters.favorites=saved.filter(id=>GROOVES.some(g=>g.id===id));}catch{}
+let rhythmPreview=null,rhythmPreviewToken=0;
 const HELP={
   flowStudio:['Signal Flow','Cada tarjeta representa una pista real. Abre FLOW para trabajar a pantalla completa. Arrastra el fondo para desplazarte, usa + / − para hacer zoom y conecta puertos de salida y entrada. Pulsa FX para abrir una mesa flotante que puedes mover o maximizar, sin perder el grafo de fondo. MASTER FX procesa toda la mezcla. SAMPLE DESK es una mesa independiente: arrastra el pequeño icono musical de un nodo hasta el botón SAMPLE DESK para guardar una copia. Desde la biblioteca o el editor de pads puedes enviarla al SAMPLE BUS, a la pista seleccionada o directamente a MASTER.'],
   masterFx:['Efectos globales','Estos controles se aplican después de sumar las voces, pistas y samples. LOW y HIGH ajustan el tono general; DRIVE añade saturación; COMP controla la dinámica; DELAY y REVERB añaden espacio. BYPASS desactiva estos efectos sin borrar sus ajustes. El limitador de seguridad permanece activo.'],
@@ -133,8 +143,10 @@ function saveStatus(label,kind=''){
   const el=$('#saveStatus');if(!el)return;
   el.textContent=label;el.className='save-status '+kind;
 }
+let autosaveEnabled=false,editRevision=0,savedRevision=0;
 function queueAutosave(){
-  if(state.recording)return;
+  if(!autosaveEnabled||state.recording)return;
+  editRevision++;
   clearTimeout(autosaveTimer);
   saveStatus('CAMBIOS SIN GUARDAR','saving');
   autosaveTimer=setTimeout(async()=>{
@@ -142,9 +154,11 @@ function queueAutosave(){
     if(autosaveBusy){autosaveQueued=true;return;}
     autosaveBusy=true;
     saveStatus('GUARDANDO EN ESTE EQUIPO...','saving');
+    const savingRevision=editRevision;
     try{
       await saveSession(state.tracks,state.master,getProjectOptions());
-      saveStatus('✓ RESPALDO AUTOMÁTICO LOCAL','saved');
+      savedRevision=savingRevision;
+      saveStatus(editRevision===savedRevision?'✓ RESPALDO AUTOMÁTICO LOCAL':'CAMBIOS SIN GUARDAR',editRevision===savedRevision?'saved':'saving');
     }catch(error){
       saveStatus('ERROR AL GUARDAR','failed');
       toast('Guardado automático: '+error.message);
@@ -165,7 +179,7 @@ function help(key){
 }
 function modal(title,content,actions=[]){
   if($('#modalRoot').innerHTML)modalStack.push($('#modalRoot').innerHTML);
-  $('#modalRoot').innerHTML='<div class="modal-backdrop" id="modalBackdrop"><section class="focus-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"><div class="focus-header"><div><div class="section-overline">VERY ATRACTIVE / FOCUS MODE</div><h2 id="modalTitle">'+html(title)+'</h2></div><button type="button" class="focus-close" data-action="close-modal" title="Cerrar">×</button></div><div class="focus-content">'+content+'</div><div class="focus-footer">'+actions.map(a=>'<button class="button '+(a.primary?'button-primary':'button-muted')+'" type="button" data-action="'+a.type+'">'+html(a.label)+'</button>').join('')+'</div></section></div>';
+  $('#modalRoot').innerHTML='<div class="modal-backdrop" id="modalBackdrop"><section class="focus-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"><div class="focus-header"><div><div class="section-overline">ANDROID SYNTH / CONTROL SURFACE</div><h2 id="modalTitle">'+html(title)+'</h2></div><button type="button" class="focus-close" data-action="close-modal" title="Cerrar">×</button></div><div class="focus-content">'+content+'</div><div class="focus-footer">'+actions.map(a=>'<button class="button '+(a.primary?'button-primary':'button-muted')+'" type="button" data-action="'+a.type+'">'+html(a.label)+'</button>').join('')+'</div></section></div>';
   $('.focus-panel')?.focus();
 }
 function closeModal(){
@@ -222,11 +236,30 @@ function render(){
         '<button type="button" class="clip-edge clip-right" data-clip-control="end" data-clip-track="'+html(t.id)+'" data-clip-id="'+html(clip.id)+'" title="Recortar final · arrastrar">❯</button></div>').join('')+'</div></div>'+
       '<div class="track-tail"><button type="button" class="mini-action track-bounce" data-track-action="export-track" data-id="'+html(t.id)+'" title="Guardar o exportar esta pista · original o con FX" aria-label="Exportar pista '+html(t.name)+'">↓ WAV</button><button type="button" class="mini-action" data-track-action="move-track" data-id="'+html(t.id)+'" title="Mover pista completa en el tiempo" aria-label="Mover toda la pista">↠</button><button type="button" class="mini-action track-trash" data-track-action="delete" data-id="'+html(t.id)+'" aria-label="Eliminar pista '+html(t.name)+'" title="Eliminar pista">×</button>'+(t.flowHidden?'<button type="button" class="mini-action" data-track-action="restore-flow" data-id="'+html(t.id)+'" title="Restaurar en Flow Studio">↗</button>':'')+'<button type="button" class="mini-action loop-entry" data-track-action="clip-loop" data-id="'+html(t.id)+'" aria-label="Crear o editar loop de '+html(t.name)+'" title="Repetir fragmento del clip seleccionado">⟳</button><button type="button" class="mini-action" data-track-action="add-clip" data-id="'+html(t.id)+'" aria-label="Añadir clip a '+html(t.name)+'" title="Añadir clip a esta pista">＋</button><button type="button" class="mini-action" data-track-action="edit" data-id="'+html(t.id)+'" aria-label="Opciones de la capa">⋯</button><span class="track-number">'+String(i+1).padStart(2,'0')+'</span></div></article>';
   }).join('');
-  renderInspector();renderMixer();renderFlow();requestAnimationFrame(()=>{drawWaves();alignWaveRuler();updateTransport();});updateTransport();queueAutosave();
+  renderInspector();renderMixer();renderFlow();requestAnimationFrame(()=>{drawWaves();alignWaveRuler();updateTransport();});updateTransport();updateAndroidStatus();queueAutosave();
 }
 
 function renderLibrary(){
-  if($('#libraryBody'))$('#libraryBody').innerHTML=libraryMarkup(state.libraryTab);
+  if($('#libraryBody'))$('#libraryBody').innerHTML=libraryMarkup(state.libraryTab,rhythmFilters);
+}
+function stopRhythmPreview(){
+  rhythmPreviewToken++;if(rhythmPreview){try{rhythmPreview.stop();}catch{}rhythmPreview=null;}
+  rhythmFilters.previewId=null;renderLibrary();
+}
+async function previewRhythm(id){
+  if(state.recording||state.sessionRecording||state.liveRecording)return toast('Termina la grabación antes de escuchar una muestra');
+  if(rhythmFilters.previewId===id){stopRhythmPreview();return;}
+  stopRhythmPreview();const token=rhythmPreviewToken;
+  try{
+    const ctx=await engine.ready();if(token!==rhythmPreviewToken)return;
+    const result=makeGroove(id,ctx.sampleRate,2),buffer=ctx.createBuffer(2,result.channels[0].length,ctx.sampleRate);
+    result.channels.forEach((channel,index)=>buffer.copyToChannel(channel,index));
+    const source=ctx.createBufferSource(),gain=ctx.createGain();
+    source.buffer=buffer;gain.gain.value=.6;source.connect(gain);gain.connect(engine.output.gain);
+    rhythmPreview=source;rhythmFilters.previewId=id;renderLibrary();
+    source.onended=()=>{try{source.disconnect();gain.disconnect();}catch{}if(rhythmPreview===source){rhythmPreview=null;rhythmFilters.previewId=null;renderLibrary();}};
+    source.start();
+  }catch(error){if(token===rhythmPreviewToken){stopRhythmPreview();toast('No se pudo escuchar el ritmo: '+error.message);}}
 }
 function syncFlowTransport(){
   const button=$('[data-flow-play]');if(!button)return;
@@ -619,9 +652,23 @@ function setupFlow(){
   $('#libraryHelp').onclick=()=>help('library');
   library.addEventListener('click',event=>{
     const tab=event.target.closest('[data-library-tab]');
-    if(tab){state.libraryTab=tab.dataset.libraryTab;renderLibrary();return;}
+    if(tab){stopRhythmPreview();state.libraryTab=tab.dataset.libraryTab;renderLibrary();return;}
+    const preview=event.target.closest('[data-library-preview]');
+    if(preview){previewRhythm(preview.dataset.libraryPreview);return;}
+    const favorite=event.target.closest('[data-library-favorite]');
+    if(favorite){const id=favorite.dataset.libraryFavorite;
+      if(!GROOVES.some(g=>g.id===id))return;
+      rhythmFilters.favorites=rhythmFilters.favorites.includes(id)?rhythmFilters.favorites.filter(value=>value!==id):[...rhythmFilters.favorites,id];
+      try{localStorage.setItem('vas-rhythm-favorites',JSON.stringify(rhythmFilters.favorites));}catch{toast('Favorito disponible solo durante esta sesión');}
+      renderLibrary();library.querySelector('[data-library-favorite="'+id+'"]')?.focus();return;
+    }
+    if(event.target.closest('[data-library-favorites]')){rhythmFilters.favoritesOnly=!rhythmFilters.favoritesOnly;renderLibrary();return;}
     const item=event.target.closest('[data-library-item]');
-    if(item)chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);
+    if(item){stopRhythmPreview();chooseLibraryItem(item.dataset.libraryKind,item.dataset.libraryItem);}
+  });
+  library.addEventListener('change',event=>{
+    const filter=event.target.dataset.libraryFilter;
+    if(filter==='category'||filter==='tempo'){rhythmFilters[filter]=event.target.value;renderLibrary();library.querySelector('[data-library-filter="'+filter+'"]')?.focus();}
   });
   body.addEventListener('click',event=>{
     if(event.target.closest('[data-flow-play]')){Promise.resolve(playPause()).finally(syncFlowTransport);return;}
@@ -920,6 +967,15 @@ function setupFlow(){
   document.addEventListener('pointerup',finishCable);
   document.addEventListener('pointercancel',finishCable);
   document.addEventListener('keydown',event=>{
+    const editable=event.target?.matches?.('input,textarea,select,[contenteditable="true"]');
+    if(!editable&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='c'){
+      const track=state.tracks.find(item=>item.id===state.selected);
+      if(track&&state.selectedClip){const copied=copyClip(track,state.selectedClip);if(copied){state.clipClipboard=copied;toast('Clip copiado');event.preventDefault();return;}}
+    }
+    if(!editable&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='v'){
+      const track=state.tracks.find(item=>item.id===state.selected);
+      if(track&&state.clipClipboard){checkpoint();const pasted=state.selectedClip?pasteAfterClip(track,state.clipClipboard,state.selectedClip,()=>uid('clip')):pasteClip(track,state.clipClipboard,state.position,()=>uid('clip'));if(pasted){state.selectedClip=pasted.id;engine.updateTrack(track);render();if(engine.playing)restartPlayback();queueAutosave();toast('Clip pegado');event.preventDefault();return;}}
+    }
     if(event.key!=='Escape')return;
     if($('#modalBackdrop')){closeModal();event.preventDefault();return;}
     if($('#sampleDeck')?.classList.contains('is-fullscreen')){closeSampleDesk();event.preventDefault();return;}
@@ -939,7 +995,7 @@ function alignWaveRuler(){
   rulerViewport.style.width=Math.max(30,r.width)+'px';
   ruler.style.left='0px';ruler.style.width=(state.zoom*100)+'%';
   rulerViewport.scrollLeft=state.scrollX;
-  for(const element of $('.wave-viewport'))element.scrollLeft=state.scrollX;
+  for(const element of $$('.wave-viewport'))element.scrollLeft=state.scrollX;
 }
 function renderMixer(){
   const area=$('#mixerArea'),body=$('#mixerBody');
@@ -1081,11 +1137,23 @@ function updateTransport(){
   $('#playhead').style.left=percent+'%';$('#playhead').style.opacity=state.tracks.length?1:0;
   for(const line of $$('.wave-playhead')){line.style.left=percent+'%';line.style.opacity=state.tracks.length?1:0;}
 }
+function updateAndroidStatus(level=0){
+  const monitor=$('#androidMonitor');if(!monitor)return;
+  const mode=state.recording||state.sessionRecording||state.liveRecording?'recording':state.liveMicActive?'listening':engine.playing?'playing':'idle';
+  monitor.dataset.state=mode;
+  $('#androidStateText').textContent={recording:'GRABANDO',listening:'ESCUCHANDO',playing:'REPRODUCIENDO',idle:'EN ESPERA'}[mode];
+  const value=Math.round(clamp(level,0,1)*100);
+  const signal=$('#androidSignal');signal?.setAttribute('aria-valuenow',String(value));
+  const fill=$('#androidSignalFill');if(fill)fill.style.width=value+'%';
+  const output=$('#androidSignalValue');if(output)output.textContent=value+'%';
+  monitor.classList.toggle('is-peak',level>.94);
+}
 function updateMasterMeter(){
   const {peak,rms}=engine.getMasterMeter();
   const fill=$('#masterMeter'),label=$('#masterPeak');
   if(fill)fill.style.height=Math.round(Math.min(1,Math.sqrt(rms)*1.8)*100)+'%';
   if(label){label.textContent=peak>.94?'ALTO':Math.round(peak*100)+'%';label.classList.toggle('clip-warning',peak>.94);}
+  updateAndroidStatus(Math.sqrt(Math.max(0,rms))*1.8);
 }
 /** Capture the actual audible MASTER in real time, stereo local PCM.
  * The audio can include the live Voice Playground microphone if monitoring
@@ -1103,6 +1171,7 @@ function sessionButton(){
     secondary.textContent=active?'■ DETENER Y GUARDAR WAV':'● GRABAR LO QUE ESCUCHO';
     secondary.setAttribute('aria-pressed',String(active));
   }
+  updateAndroidStatus();
 }
 function finishSessionBuffer(session,buffer){
   if(state.sessionRecording!==session)return;
@@ -1118,6 +1187,7 @@ async function startSessionRecording(){
   if(state.sessionRecording)return;
   if(state.recording)return toast('Finaliza la toma del micrófono antes de capturar la mezcla');
   if(!state.tracks.length&&!state.liveMicActive)return toast('Agrega pistas o activa tu voz en Voice Lab');
+  stopRhythmPreview();
   try{
     if(!engine.playing&&state.tracks.length){
       if(state.position>=projectDuration(state.tracks)-.02)state.position=0;
@@ -1275,6 +1345,7 @@ function stopLiveTuneMic(){
   if(state.liveRecording){toast('Detén primero la grabación de Voice Lab');return;}
   state.liveMicToken++;
   state.liveMicActive=false;
+  updateAndroidStatus();
   cancelAnimationFrame(state.liveMeterFrame);
   state.liveMeterFrame=0;
   engine.watchMicPitch(null);
@@ -1300,6 +1371,7 @@ function runLiveTuneMeter(){
       bar.style.background=peak>.9?'var(--pink)':'var(--green)';
       if(peak>.9){const label=$('#labLiveStatus');if(label)label.textContent='ENTRADA ALTA · BAJA LA GANANCIA PARA EVITAR SATURACIÓN';}
     }
+    if(!engine.playing)updateMasterMeter();
     state.liveMeterFrame=requestAnimationFrame(tick);
   };
   state.liveMeterFrame=requestAnimationFrame(tick);
@@ -1342,6 +1414,7 @@ async function startLiveTuneMic(){
     }
     engine.setMicGain(clamp($('#labLiveInputGain')?.value??state.inputGain,0,150));
     state.liveMicActive=true;
+    updateAndroidStatus();
     stream.getAudioTracks()[0]?.addEventListener('mute',()=>{
       if($('#micStatus'))$('#micStatus').textContent='⚠ Micrófono silenciado por el sistema o navegador';
     });
@@ -1368,6 +1441,7 @@ async function startLiveTuneMic(){
 async function startLiveRecording(){
   if(state.liveRecording||!state.liveMicActive||!engine.mic)return toast('Primero activa y autoriza el micrófono');
   if(engine.capture||state.recording)return toast('Ya hay una grabación en curso');
+  stopRhythmPreview();
   try{
     const settings={...state.liveTuneTrack,fxBypass:{...state.liveTuneTrack.fxBypass}};
     const offset=engine.playing?engine.position():state.position;
@@ -1376,6 +1450,7 @@ async function startLiveRecording(){
       if(seconds>=MAX_RECORDING_SECONDS&&state.liveRecording&&!state.liveRecording.stopping)stopLiveRecording();
     });
     state.liveRecording={settings,offset,seconds:0,capture,stopping:false};
+    updateAndroidStatus();
     const status=$('#labLiveStatus');
     if(status)status.textContent='● GRABANDO · conserva el original y aplica efectos al reproducir';
     const start=$('[data-action="tune-live-record"]'),stop=$('[data-action="tune-live-save"]');
@@ -1397,6 +1472,7 @@ async function stopLiveRecording(){
   }catch(error){toast('No se guardó: '+error.message);}
   finally{
     state.liveRecording=null;
+    updateAndroidStatus();
     const start=$('[data-action="tune-live-record"]'),stop=$('[data-action="tune-live-save"]');
     if(start)start.disabled=false;if(stop)stop.disabled=true;
     const status=$('#labLiveStatus');
@@ -1415,7 +1491,7 @@ function switchTuneSource(mode){
     const from=current();
     if(from)Object.assign(state.liveTuneTrack,{
       tuneX:from.tuneX,tuneY:from.tuneY,autotune:from.autotune,retune:from.retune,
-      key:from.key,scale:from.scale,brightness:from.brightness,warmth:from.warmth,drive:from.drive
+      key:from.key,scale:from.scale,tuneNoteMask:from.tuneNoteMask,brightness:from.brightness,warmth:from.warmth,drive:from.drive
     });
   }
   engine.watchPitch(mode==='track'?(current()?.id??null):null,mode==='track'?onTunePitch:null);
@@ -1468,6 +1544,7 @@ function characterPoint(event){
 function changeCharacter(x,y,save=false){
   const track=getTuneTrack();if(!track)return;
   characterCoordinates(track,x,y);refreshCharacterPad(track);
+  if(state.tuneMode==='track'&&engine.playing){const time=Math.max(0,engine.position());track.automation=track.automation||{};track.automation.pitchShift=addAutomationPoint(track.automation.pitchShift,time,track.pitchShift,-12,12);track.automation.drive=addAutomationPoint(track.automation.drive,time,track.drive,0,100);}
   if(state.tuneMode==='live')engine.updateMic(track);
   else{engine.updateTrack(track);if(save){renderInspector();queueAutosave();}}
 }
@@ -1545,6 +1622,10 @@ function tuneAction(action){
   const track=getTuneTrack();if(!track)return;
   if(action==='tune-source-live'){switchTuneSource('live');return;}
   if(action==='tune-source-track'){switchTuneSource('track');return;}
+  if(action==='tune-notes-reset'){
+    if(state.tuneMode==='track')checkpoint();track.tuneNoteMask=null;tuneRefresh(track);
+    if(state.tuneMode==='track')queueAutosave();return;
+  }
   if(action==='tune-live-start'){startLiveTuneMic();return;}
   if(action==='tune-live-record'){startLiveRecording();return;}
   if(action==='tune-live-save'){stopLiveRecording();return;}
@@ -1554,7 +1635,7 @@ function tuneAction(action){
     checkpoint();
     const target=current(),source=state.liveTuneTrack;
     Object.assign(target,{tuneX:source.tuneX,tuneY:source.tuneY,autotune:source.autotune,retune:source.retune,
-      brightness:source.brightness,warmth:source.warmth,drive:source.drive,pitchShift:source.pitchShift,voiceCharacter:source.voiceCharacter,tunePreset:source.tunePreset,preset:'custom'});
+      key:source.key,scale:source.scale,tuneNoteMask:source.tuneNoteMask,brightness:source.brightness,warmth:source.warmth,drive:source.drive,pitchShift:source.pitchShift,voiceCharacter:source.voiceCharacter,tunePreset:source.tunePreset,preset:'custom'});
     engine.updateTrack(target);renderInspector();queueAutosave();
     toast('Configuración de Voice Playground aplicada a '+target.name);
     return;
@@ -1724,7 +1805,13 @@ function openClipLoop(trackId=state.selected){
       '<label for="clipLoopCopies">DUPLICAR PATRÓN<input id="clipLoopCopies" type="number" min="1" max="16" step="1" value="1"></label>'+
     '</div>'+
     '<p class="hint">Ejemplo: un fragmento de 2 segundos × 8 = 16 segundos de loop. Elige cortes cercanos a cruces por cero para evitar clics.</p>',
-    [{label:'QUITAR LOOP',type:'loop-remove'},{label:'DUPLICAR →',type:'loop-duplicate'},{label:'APLICAR LOOP',type:'loop-apply',primary:true}]);
+    [{label:'CUANTIZAR',type:'loop-quantize'},{label:'QUITAR LOOP',type:'loop-remove'},{label:'DUPLICAR →',type:'loop-duplicate'},{label:'APLICAR LOOP',type:'loop-apply',primary:true}]);
+}
+function quantizeLoop(){
+  const track=state.tracks.find(t=>t.id===state.loopEdit?.trackId),clip=track&&getEditableClip(track,state.loopEdit.clipId);
+  if(!track||!clip)return toast('No se encontró el clip');
+  checkpoint();Object.assign(clip,quantizeClip(clip,state.bpm,4));
+  modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Clip ajustado a la rejilla de '+state.bpm+' BPM');
 }
 function editLoop(action){
   if(state.sessionRecording)return toast('Finaliza la grabación de sesión antes de modificar loops');
@@ -1789,7 +1876,7 @@ function openTrackActions(id){
   modal('Opciones de la capa',
     '<div class="field"><label>Nombre de la capa</label><input type="text" id="renameInput" maxlength="80" value="'+html(t.name)+'" style="background:#1b222b;border:1px solid #495362;border-radius:7px;padding:11px;color:white"></div>'+
     '<p style="margin-top:14px">Un canal puede contener varias tomas. DIVIDIR corta el clip seleccionado, sin crear otro canal.</p>',
-    [{label:'ELIMINAR',type:'delete-track'},{label:'⟳ LOOP DEL CLIP',type:'loop-editor'},{label:'✂ DIVIDIR CLIP',type:'split-track'},{label:'＋ AÑADIR CLIP',type:'add-clip'},{label:'DUPLICAR CANAL',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
+    [{label:'ELIMINAR',type:'delete-track'},{label:'⟳ LOOP DEL CLIP',type:'loop-editor'},{label:'✂ DIVIDIR CLIP',type:'split-track'},{label:'▣ EXTRAER COMP',type:'comp-take'},{label:'＋ AÑADIR CLIP',type:'add-clip'},{label:'DUPLICAR CANAL',type:'duplicate-track'},{label:'GUARDAR NOMBRE',type:'rename-track',primary:true}]);
 }
 
 async function listMicrophones(){
@@ -1905,6 +1992,7 @@ async function prepareSelectedMic(){
 }
 async function openRecording(){
   if(state.recording)return;
+  stopRhythmPreview();
   if(!navigator.mediaDevices?.getUserMedia){
     modal('Micrófono no disponible','<p>Para grabar desde el teléfono, abre el estudio en HTTPS. En computador utiliza http://127.0.0.1:4173. Revisa también los permisos del navegador.</p>',[{label:'ENTENDIDO',type:'close',primary:true}]);
     return;
@@ -1912,19 +2000,21 @@ async function openRecording(){
   modal('Grabar tu voz',
     '<p>Elige tu micrófono, pruébalo y comprueba que llega señal. Después graba sobre tu base.</p>'+
     '<div class="field"><label for="micSelect">MICRÓFONO '+buttonInfo('microphone')+'</label><select id="micSelect" class="modal-select"><option value="">Micrófono predeterminado</option></select></div>'+
-    '<div class="mic-permission-explainer"><strong>① Autorizar micrófono</strong><span>Presiona PERMITIR MICRÓFONO y acepta el permiso del navegador. Habla para comprobar la onda antes de grabar. No se enviará audio a internet.</span></div>'+ 
+    '<div class="mic-permission-explainer"><strong>① Autorizar micrófono</strong><span>Presiona PERMITIR MICRÓFONO y acepta el permiso del navegador. Habla para comprobar la onda antes de grabar. No se enviará audio a internet.</span></div>'+
     '<div id="micStatus" class="mic-status" role="status">Esperando permiso · micrófono apagado</div>'+
     '<div class="record-visual record-visual-v2"><div class="rec-title"><span id="recordTimer">LISTO PARA GRABAR</span><span id="recordPeak">SIN SEÑAL</span></div><canvas id="recordWave" class="record-wave" aria-label="Onda de entrada del micrófono"></canvas><div class="record-meter-shell"><span id="recordMeter"></span></div></div>'+    '<section class="singing-coach" aria-label="Entrenador de notas en vivo"><div><strong>CALENTAMIENTO VOCAL · NOTA ACTUAL</strong><span id="singingNote" aria-live="off">—</span><small id="singingCents">Canta una nota para comenzar · aproximado</small></div><div class="note-steps" id="noteSteps">'+['DO','RE','MI','FA','SOL','LA','SI','DO'].map(n=>'<span data-note="'+n+'">'+n+'</span>').join('')+'</div></section>'+
-    '<details class="record-advanced"><summary>⚙ Opciones avanzadas · efectos, sincronía y monitor</summary>'+ 
+    '<details class="record-advanced"><summary>⚙ Opciones avanzadas · efectos, sincronía y monitor</summary>'+
     '<div class="control-row"><label for="recordGain">GANANCIA DE ENTRADA</label><input id="recordGain" type="range" min="0" max="200" step="5" value="'+state.inputGain+'"><output id="recordGainValue">'+state.inputGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorGain">VOLUMEN DE MONITOREO</label><input id="monitorGain" type="range" min="0" max="100" step="5" value="'+state.monitorGain+'"><output id="monitorGainValue">'+state.monitorGain+'%</output></div>'+
     '<div class="control-row"><label for="monitorToggle">Escucharme con efectos (auriculares)</label><input type="checkbox" class="toggle-switch" id="monitorToggle">'+buttonInfo('monitor')+'</div>'+
     '<div class="control-row"><label for="recordTune">Afinación al escucharme</label><input type="range" min="0" max="100" value="80" id="recordTune">'+buttonInfo('autotune')+'</div>'+
     '<div class="control-row"><label for="recordClean">Limpieza al escucharme</label><input type="range" min="0" max="100" value="35" id="recordClean">'+buttonInfo('clean')+'</div>'+
     '<div class="control-row"><label for="recordBacking">Reproducir base al grabar</label><input type="checkbox" class="toggle-switch" id="recordBacking" '+(state.tracks.length?'checked':'')+'></div>'+
+    '<div class="control-row"><label for="recordOverdub">Añadir toma a la pista de voz seleccionada (overdub)</label><input type="checkbox" class="toggle-switch" id="recordOverdub" '+(state.tracks.find(t=>t.id===state.selected&&t.type==="voice")?"checked":"")+'></div>'+
     '<div class="control-row"><label for="recordCountIn">Cuenta de 4 pulsos antes de grabar</label><input type="checkbox" id="recordCountIn" class="toggle-switch" checked>'+buttonInfo('countIn')+'</div>'+
     '<div class="control-row"><label for="recordShift">Ajuste de sincronía de tu voz</label><input id="recordShift" type="range" min="-300" max="300" step="25" value="'+state.recordShiftMs+'"><output id="recordShiftValue">'+(state.recordShiftMs===0?'Sin ajuste':state.recordShiftMs+' ms')+'</output>'+buttonInfo('alignment')+'</div>'+
-    '</details>'+ 
+    '<div class="control-row"><label for="recordPunchOut">Punch-out (segundos, 0 = manual)</label><input id="recordPunchOut" type="number" min="0" max="'+MAX_RECORDING_SECONDS+'" step="0.1" value="0" style="width:90px"></div>'+
+    '</details>'+
     '<div class="note">Grabación PCM sin compresión intermedia. Si tu voz queda desfasada al escucharla, puedes adelantarla o retrasarla con el ajuste de sincronía. Duración máxima: 5 minutos.</div>',
     [{label:'🎙 PERMITIR MICRÓFONO',type:'test-mic'},{label:'● GRABAR',type:'start-record',primary:true}]);
   const start=$('[data-action="start-record"]');if(start)start.disabled=true;
@@ -1938,6 +2028,8 @@ async function startRecording(){
   state.preview.monitorTrack.autotune=tune;state.preview.monitorTrack.clean=clean;
   engine.updateMic(state.preview.monitorTrack);
   const backing=!!$('#recordBacking')?.checked && state.tracks.length>0;
+  const overdub=!!$('#recordOverdub')?.checked && !!state.tracks.find(t=>t.id===state.selected&&t.type==='voice');
+  const punchOut=Math.max(0,Math.min(MAX_RECORDING_SECONDS,Number($('#recordPunchOut')?.value||0)));
   if($('#recordCountIn')?.checked && !engine.playing){
     const count={cancelled:false};state.countingIn=count;
     const actions=$('.focus-footer');
@@ -1966,22 +2058,23 @@ async function startRecording(){
     catch(error){toast('No se pudo reproducir la base: '+error.message);}
   }
   const offset=engine.playing?engine.position():state.position;
-  const data={offset,started:performance.now(),seconds:0,tune,clean,stopping:false};
+  const data={offset,started:performance.now(),seconds:0,tune,clean,overdub,punchOut,stopping:false};
   try{
     state.recording=data;
     const capture=await engine.startCapture(seconds=>{
       if(state.recording)state.recording.seconds=seconds;
-      if(seconds>=MAX_RECORDING_SECONDS&&!state.recording?.stopping)stopRecording();
+      if((seconds>=MAX_RECORDING_SECONDS||state.recording?.punchOut>0&&seconds>=state.recording.punchOut)&&!state.recording?.stopping)stopRecording();
     });
     // Align against the shared AudioContext clock, not a wall-clock stopwatch.
     const clockOffset=engine.playing?engine.from+capture.startedAt-engine.startCtxTime:data.offset;
     state.recording={...data,capture,offset:Math.max(0,clockOffset),recordShiftMs:state.recordShiftMs};
+    updateAndroidStatus();
     if($('#recordTimer'))$('#recordTimer').textContent='● 00:00 · GRABANDO';
     if($('#micStatus'))$('#micStatus').textContent='GRABACIÓN ACTIVA · LA ONDA SE ESTÁ DIBUJANDO';
     const select=$('#micSelect');if(select)select.disabled=true;
     const actions=$('.focus-footer');
     if(actions)actions.innerHTML='<button class="button button-primary" data-action="stop-record">■ DETENER Y AGREGAR</button>';
-  }catch(error){state.recording=null;toast('No se pudo comenzar: '+error.message);}
+  }catch(error){state.recording=null;updateAndroidStatus();toast('No se pudo comenzar: '+error.message);}
 }
 async function stopRecording(){
   const recording=state.recording;
@@ -1995,7 +2088,9 @@ async function stopRecording(){
     if(!quality.valid)throw Error('La grabación está en silencio. No se agregó una pista vacía. Revisa la entrada seleccionada, el permiso del navegador y el medidor; luego graba otra vez.');
     state.recording=null; // capture is finished; allow undo of the newly created take
     const adjustedStart=recording.offset+(recording.recordShiftMs||0)/1000;
-    const track=addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',Math.max(0,adjustedStart));
+    const overdubTrack=recording.overdub&&state.tracks.find(t=>t.id===state.selected&&t.type==='voice');
+    const track=overdubTrack||addTrack(buffer,'Mi voz '+(state.tracks.filter(t=>t.type==='voice').length+1),'voice',Math.max(0,adjustedStart));
+    if(overdubTrack){addTrackClip(overdubTrack,buffer,Math.max(0,adjustedStart),globalThis.crypto?.randomUUID?.()||'overdub-'+Date.now(),'Overdub');state.selected=overdubTrack.id;state.selectedClip=overdubTrack.clips.at(-1)?.id;engine.updateTrack(overdubTrack);render();}
     if(adjustedStart<0)track.trimStart=Math.min(buffer.duration-.02,-adjustedStart);
     Object.assign(track,{autotune:recording.tune,clean:recording.clean,retune:70,space:12,preset:'custom'});
     toast('¡Toma grabada! La capa de voz ya aparece en tu mezcla.');
@@ -2009,6 +2104,7 @@ async function stopRecording(){
   }
   finally{
     state.recording=null;
+    updateAndroidStatus();
     if(!$('#recordTimer')||$('#recordTimer').textContent!=='TOMA NO GUARDADA'){
       cancelAnimationFrame(state.meterFrame);
       engine.stopMic();state.preview=null;
@@ -2061,12 +2157,12 @@ async function performTrackExport(asTrack=false){
 function openExport(){
   if(!state.tracks.length)return toast('Agrega un sonido antes de exportar');
   modal('Exportar mi canción',
-    '<p>Elige cómo quieres recibir tu sonido. Se crea un archivo WAV local con tus efectos.</p>'+
-    '<div class="field"><label>Qué quieres exportar</label><select id="exportScope" class="modal-select"><option value="mix">Toda la mezcla WAV</option><option value="stems">Pistas separadas (ZIP)</option><option value="project">Proyecto editable (.vasproject)</option>'+(current()?'<option value="selected">Solo capa: '+html(current().name)+'</option>':'')+'</select></div>'+
-    '<div class="field"><label>Calidad</label><select id="exportDepth" class="modal-select"><option value="24">WAV 24-bit · Producción (recomendado)</option><option value="16">WAV 16-bit · Compatible</option><option value="32">WAV 32-bit float · Continuar mezclando</option></select></div>'+
-    '<div class="field"><label>Frecuencia</label><select id="exportRate" class="modal-select"><option value="48000">48 kHz · Video y producción</option><option value="44100">44.1 kHz · Música</option></select></div>'+
+    '<p>Elige una mezcla WAV, pistas separadas o un respaldo editable. Los archivos se crean en este dispositivo.</p>'+
+    '<div class="field"><label for="exportScope">Qué quieres exportar</label><select id="exportScope" class="modal-select"><option value="mix">Toda la mezcla WAV</option><option value="stems">Pistas separadas (ZIP)</option><option value="project">Proyecto editable (.vasproject)</option>'+(current()?'<option value="selected">Solo capa: '+html(current().name)+'</option>':'')+'</select></div>'+
+    '<div class="field"><label for="exportDepth">Calidad WAV</label><select id="exportDepth" class="modal-select"><option value="24">WAV 24-bit · Producción (recomendado)</option><option value="16">WAV 16-bit · Compatible</option><option value="32">WAV 32-bit float · Continuar mezclando</option></select></div>'+
+    '<div class="field"><label for="exportRate">Frecuencia WAV</label><select id="exportRate" class="modal-select"><option value="48000">48 kHz · Video y producción</option><option value="44100">44.1 kHz · Música</option></select></div>'+
     '<div class="note" style="margin-top:16px">No se puede convertir una grabación de baja calidad en una fuente realmente profesional solo aumentando los bits. Se respetarán los efectos que escuchas.</div>',
-    [{label:'CREAR MI WAV',type:'do-export',primary:true}]);
+    [{label:'EXPORTAR ARCHIVO',type:'do-export',primary:true}]);
 }
 async function performExport(){
   if(state.busy)return;
@@ -2076,9 +2172,14 @@ async function performExport(){
   try{
     const scope=$('#exportScope')?.value||'mix';
     if(scope==='project'){
-      const blob=await exportProject(state.tracks,state.master,getProjectOptions());
+      const pads=await loadPads({strict:true});
+      const assets=await listLibrarySamples();
+      if(assets.length>500)throw Error('La biblioteca supera el límite de 500 samples para el respaldo');
+      const library=[];
+      for(const asset of assets)library.push(await loadLibrarySample(asset.id));
+      const blob=await exportProject(state.tracks,state.master,getProjectOptions(),pads,library);
       downloadBlob(blob,'veryAtractiveSynth-proyecto.vasproject');
-      toast('Proyecto editable respaldado con los audios originales.');
+      toast('Proyecto, pads y biblioteca respaldados con los audios originales.');
     }else if(scope==='stems'){
       const entries=[];
       for(let i=0;i<state.tracks.length;i++){
@@ -2091,16 +2192,16 @@ async function performExport(){
     }else{
       const blob=await engine.exportMix(state.tracks,{depth,rate,onlyId});
       downloadBlob(blob,safeFilename(onlyId?current().name:'veryAtractiveSynth-mi-mezcla')+'-'+rate/1000+'k-'+depth+'bit.wav');
-      toast('Tu WAV está listo.');
+      toast('Tu WAV está listo · '+formatLoudness(engine.lastExportStats));
     }
     modalStack.length=0;$('#modalRoot').innerHTML='';
   }catch(e){toast('Exportación: '+e.message);}
-  finally{state.busy=false;if(btn)btn.textContent='CREAR MI WAV';}
+  finally{state.busy=false;if(btn)btn.textContent='EXPORTAR ARCHIVO';}
 }
 async function save(){
   if(state.busy)return;
   if(!state.tracks.length)return toast('No hay pistas para guardar');
-  try{state.busy=true;clearTimeout(autosaveTimer);saveStatus('GUARDANDO...','saving');await saveSession(state.tracks,state.master,getProjectOptions());saveStatus('✓ GUARDADO LOCAL','saved');toast('Sesión guardada en este navegador');}
+  try{state.busy=true;clearTimeout(autosaveTimer);const savingRevision=editRevision;saveStatus('GUARDANDO...','saving');await saveSession(state.tracks,state.master,getProjectOptions());savedRevision=savingRevision;saveStatus(editRevision===savedRevision?'✓ GUARDADO LOCAL':'CAMBIOS SIN GUARDAR',editRevision===savedRevision?'saved':'saving');toast('Sesión guardada en este navegador');}
   catch(e){toast('No se pudo guardar: '+e.message);}
   finally{state.busy=false;}
 }
@@ -2181,12 +2282,23 @@ async function loadPortable(file){
     state.position=0;state.master=bundle.master;engine.setMaster(state.master);applyProjectOptions(bundle.options);
     $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
     modalStack.length=0;$('#modalRoot').innerHTML='';render();
-    toast('Proyecto recuperado desde tu respaldo.');
+    let sampleError='';
+    if(bundle.pads&&confirm('¿Reemplazar los 12 pads actuales por los de este respaldo? Cancelar conserva tus pads actuales.')){
+      try{await replacePads(bundle.pads);if(state.sampleDeck){state.sampleDeck.pads=bundle.pads;state.sampleDeck.selected=null;state.sampleDeck.draft=null;state.sampleDeck.render();}}
+      catch(error){sampleError=' No se restauraron los pads: '+error.message;}
+    }
+    if(bundle.sampleLibrary?.length&&confirm('¿Añadir '+bundle.sampleLibrary.length+' samples del respaldo a tu biblioteca? Los existentes se conservarán; importar dos veces crea duplicados.')){
+      try{await addLibrarySamples(bundle.sampleLibrary);await state.sampleDeck?.refreshAssets();}
+      catch(error){sampleError+=' No se restauró la biblioteca: '+error.message;}
+    }
+    await refreshFlowAssets();
+    toast('Proyecto recuperado desde tu respaldo.'+sampleError);
   }catch(error){toast('No se pudo abrir el proyecto: '+error.message);}
 }
 async function setSetting(key,value,element){
   const t=current();if(!t||!(key in defaults()))return;
   t[key]=clamp(value,key==='pan'?-100:0,key==='pan'?100:key==='key'?11:key==='scale'?2:100);
+  if(key==='key'||key==='scale')t.tuneNoteMask=null;
   t.preset='custom';
   if(key==='retune'||key==='autotune'){
     const point=tunePointFromManual(t.autotune,t.retune);
@@ -2253,8 +2365,10 @@ function handleModalAction(action){
     toast(t.bypassEffects?'Escuchando audio original':'Escuchando efectos de esta capa');return;
   }
   if(action==='timing'){openTiming();return;}
+  if(action==='loop-quantize'){quantizeLoop();return;}
   if(['loop-apply','loop-remove','loop-duplicate'].includes(action)){editLoop(action);return;}
   if(action==='loop-editor'){openClipLoop();return;}
+  if(action==='comp-take'){const track=current(),source=track&&getEditableClip(track,state.selectedClip),start=source?.offset||0,end=Math.min(projectDuration(state.tracks),state.position);if(!track||!source||end-start<.02)return toast('Coloca el cabezal dentro de la toma para extraer un comp');checkpoint();const take=extractCompTake(track,source.id,start,end,()=>uid('comp'));state.selectedClip=take.id;engine.updateTrack(track);closeModal();render();queueAutosave();toast('Toma comp extraída como clip independiente');return;}
   if(action==='add-clip'){const t=current();if(t){state.clipImportTrack=t.id;closeModal();$('#clipFileInput').click();}return;}
   if(action==='save-named'){saveNewNamed();return;}
   if(action==='confirm-save-named'){confirmSaveNamed();return;}
@@ -2447,6 +2561,12 @@ function setupSamples(){
 
 function wire(){
   setupMixer();setupFlow();setupSamples();
+  $('.quick-start')?.addEventListener('click',event=>{
+    const button=event.target.closest('[data-android-target]');if(!button)return;
+    const target=button.dataset.androidTarget;
+    if(target==='soundLibrary'){$('#soundLibrary')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+    document.getElementById(target)?.click();
+  });
   installTuneGestures();setupCharacterGestures();
   setupScrubber();
   setupClipDragging();
@@ -2518,11 +2638,29 @@ function wire(){
   });
   $('#tracks').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.track-card')){e.preventDefault();state.selected=e.target.dataset.track;state.selectedClip=null;render();}});
   document.addEventListener('change',event=>{
+    if(event.target.matches('[data-tune-key]')){
+      const track=getTuneTrack();if(!track)return;
+      if(state.tuneMode==='track')checkpoint();
+      track[event.target.dataset.tuneKey]=Number(event.target.value);
+      track.tuneNoteMask=null;tuneRefresh(track);
+      if(state.tuneMode==='track'){renderInspector();queueAutosave();}
+      return;
+    }
     if(event.target.id==='labMicSelect'&&state.liveMicActive){
       stopLiveTuneMic();startLiveTuneMic();
     }
   });
   document.addEventListener('click',e=>{
+    const note=e.target.closest('[data-tune-note]');
+    if(note){
+      const track=getTuneTrack();if(!track)return;
+      const mask=toggleTuneNote(effectiveTuneNoteMask(track),Number(note.dataset.tuneNote));
+      if(mask===effectiveTuneNoteMask(track))return toast('Deja al menos una nota activa');
+      if(state.tuneMode==='track')checkpoint();
+      track.tuneNoteMask=mask;tuneRefresh(track);
+      if(state.tuneMode==='track')queueAutosave();
+      return;
+    }
     const opening=e.target.closest('[data-project-open]');if(opening){openNamed(opening.dataset.projectOpen);return;}
     const deletion=e.target.closest('[data-project-delete]');if(deletion){removeNamed(deletion.dataset.projectDelete);return;}
     const info=e.target.closest('[data-info]');if(info){help(info.dataset.info);return;}
@@ -2595,7 +2733,7 @@ function wire(){
       const out=$('#labLiveMonitorValue');if(out)out.textContent=e.target.value+'%';
     }
     if(e.target.matches('[data-tune-axis]')){
-      const t=current();if(t){
+      const t=getTuneTrack();if(t){
         const x=e.target.dataset.tuneAxis==='x'?Number(e.target.value)/100:t.tuneX;
         const y=e.target.dataset.tuneAxis==='y'?Number(e.target.value)/100:t.tuneY;
         tuneChange(x,y);
@@ -2688,12 +2826,12 @@ function wire(){
   window.addEventListener('resize',()=>requestAnimationFrame(()=>{drawWaves();alignWaveRuler();invalidateFlowWireGeometry($('#flowArea'));paintFlow();}));
   document.addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files'))e.preventDefault();});
   document.addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();importFiles(e.dataTransfer.files);}});
-  window.addEventListener('beforeunload',e=>{if(state.recording){e.preventDefault();e.returnValue='';}});
+  window.addEventListener('beforeunload',e=>{if(state.recording||state.liveRecording||state.sessionRecording||editRevision!==savedRevision){e.preventDefault();e.returnValue='';}});
 }
 async function restartPlaybackAtZero(){
   try{await engine.play(state.tracks,0);render();runTicker();}catch(err){toast(err.message);}
 }
-wire();render();historyUI();
+wire();render();historyUI();autosaveEnabled=true;
 if('serviceWorker' in navigator&&window.isSecureContext){
   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }

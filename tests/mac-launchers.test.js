@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 test('Finder scripts are syntax-safe, portable Bash, and work from repository folder',()=>{
  for(const name of ['Iniciar.command','Actualizar.command']){
@@ -9,8 +10,6 @@ test('Finder scripts are syntax-safe, portable Bash, and work from repository fo
   assert.match(content,/^#!\/bin\/bash/);
   assert.match(content,/cd "\$\(dirname "\$0"\)"/);
   assert.match(content,/\/opt\/homebrew\/bin:\/usr\/local\/bin/);
-  const syntax=spawnSync('bash',['-n',new URL('../'+name,import.meta.url).pathname],{encoding:'utf8'});
-  assert.equal(syntax.status,0,name+' syntax: '+syntax.stderr);
  }
  const start=read('Iniciar.command'),update=read('Actualizar.command');
  assert.match(start,/npm start/);assert.match(start,/open "http:\/\/127\.0\.0\.1:4173\/"/);
@@ -23,4 +22,13 @@ test('Finder scripts are syntax-safe, portable Bash, and work from repository fo
  assert.match(readme,/Iniciar\.command/);
  assert.match(readme,/Actualizar\.command/);
  assert.match(readme,/chmod \+x Iniciar\.command Actualizar\.command/);
+});
+
+test('Finder launchers pass Bash syntax checks when Bash is available',t=>{
+ const probe=spawnSync('bash',['-c','exit 0'],{encoding:'utf8'});
+ if(probe.status!==0){t.skip('Bash no está disponible en este entorno; validar sintaxis en macOS o con Bash funcional');return;}
+ for(const name of ['Iniciar.command','Actualizar.command']){
+  const syntax=spawnSync('bash',['-n',fileURLToPath(new URL('../'+name,import.meta.url))],{encoding:'utf8'});
+  assert.equal(syntax.status,0,name+' syntax: '+syntax.stderr);
+ }
 });

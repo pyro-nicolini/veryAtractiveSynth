@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {makeGroove,GROOVES,VOICE_STYLES,applyVoiceStyle,applyAutoTransition} from '../src/studio-library.js';
+import {clipDuration} from '../src/track-clips.js';
 test('ten procedural rhythm styles render original deterministic stereo sources',()=>{
  assert.ok(GROOVES.length>=8);
  for(const groove of GROOVES){
@@ -9,6 +10,15 @@ test('ten procedural rhythm styles render original deterministic stereo sources'
   assert.ok(a.channels[0].some(n=>n!==0));
   assert.equal(a.channels[0][450],b.channels[0][450]);
  }
+});
+
+test('crossfades align to actual playback duration for speed and repeating clips',()=>{
+ const buffer={duration:8},a={id:'a',offset:2,buffer,speed:2,loop:{from:1,to:3,repeats:3}},
+  b={id:'b',offset:12,buffer,speed:.5,loop:{from:0,to:1,repeats:2}};
+ applyAutoTransition({clips:[a,b]},'a','cross',120);
+ assert.equal(clipDuration(a),3);assert.equal(clipDuration(b),4);
+ assert.equal(a.fadeOut,.5);assert.equal(b.fadeIn,.5);assert.equal(b.offset,4.5);
+ assert.equal(b.offset+a.fadeOut,a.offset+clipDuration(a));
 });
 test('voice presets map to existing DSP settings and keep no external assets',()=>{
  const t={autotune:0,retune:20};applyVoiceStyle(t,'robot');

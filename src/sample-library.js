@@ -3,7 +3,7 @@
  * of assets never loads every AudioBuffer into RAM. Nothing is uploaded.
  */
 import {padBounds} from './sample-bank.js';
-import {reviveSample} from './sample-pad-store.js';
+import {reviveSample,storageRecord} from './sample-pad-store.js';
 const DB='vas-sample-library',ENTRIES='entries',AUDIO='audio';
 function openLibrary(){
  return new Promise((resolve,reject)=>{
@@ -53,7 +53,7 @@ export async function loadLibrarySample(id){
  const db=await openLibrary();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(AUDIO,'readonly'),req=tx.objectStore(AUDIO).get(id);
-  req.onsuccess=()=>{try{if(!req.result)throw Error('Sample ya no disponible');resolve(reviveSample(req.result));}catch(e){reject(e);}};
+  req.onsuccess=()=>{try{if(!req.result)throw Error('Sample ya no disponible');resolve({...reviveSample(req.result),name:String(req.result.name||'Sample').slice(0,60)});}catch(e){reject(e);}};
   req.onerror=()=>reject(req.error||Error('No se pudo leer el sample'));
   tx.oncomplete=()=>db.close();tx.onabort=()=>db.close();
  });
@@ -66,5 +66,25 @@ export async function deleteLibrarySample(id){
   tx.objectStore(ENTRIES).delete(id);tx.objectStore(AUDIO).delete(id);
   tx.oncomplete=()=>{db.close();resolve();};
   tx.onabort=()=>{db.close();reject(tx.error||Error('No se pudo eliminar el sample'));};
+ });
+}
+
+/** Import as new entries without overwriting the current library. */
+export async function addLibrarySamples(samples){
+ if(!Array.isArray(samples)||samples.length>500)throw Error('Biblioteca de respaldo inválida');
+ const items=samples.map(sample=>{
+  const record=storageRecord(sample.buffer,sample.name,sample.from,sample.to,sample.fx);
+  record.name=String(sample.name||'Sample').slice(0,60);
+  const id=makeId();
+  return {id,record,metadata:{id,name:record.name,duration:record.to-record.from,fx:record.fx,createdAt:new Date().toISOString()}};
+ });
+ if(!items.length)return;
+ const db=await openLibrary();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction([ENTRIES,AUDIO],'readwrite');
+  for(const item of items){tx.objectStore(ENTRIES).add(item.metadata);tx.objectStore(AUDIO).add(item.record,item.id);}
+  tx.oncomplete=()=>{db.close();resolve();};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('No se pudo restaurar la biblioteca'));};
+  tx.onerror=()=>{};
  });
 }

@@ -94,7 +94,7 @@ Para detener el servidor, pulsa **Ctrl + C** en la ventana de Terminal que abri�
 
 ## 🔒 Privacidad y límites
 
-Todos los sonidos, proyectos y samples se manejan **en tu dispositivo**. El Sample Deck se guarda en el almacenamiento local de **este navegador y dirección web**; por ahora los pads no están dentro del respaldo `.vasproject`. Exporta tus originales si cambias de equipo. El navegador debe conceder permisos para el micrófono; en internet necesitas HTTPS.
+Todos los sonidos, proyectos y samples se manejan **en tu dispositivo**. Los respaldos `.vasproject` incluyen los 12 pads y hasta 500 samples de la biblioteca. Al abrirlos puedes elegir si reemplazar los pads y si añadir los samples a la biblioteca existente; volver a importarlos crea duplicados. El respaldo está limitado a 550 MB. El almacenamiento local pertenece a este navegador y dirección web. El navegador debe conceder permisos para el micrófono; en internet necesitas HTTPS.
 
 El detector de notas y el autotune son **experimentales y monofónicos**; no sustituyen afinación de estudio. Las pruebas automatizadas no garantizan funcionamiento con todos los micrófonos y teléfonos.
 
