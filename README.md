@@ -2,6 +2,8 @@
 
 **Un estudio musical creativo que funciona en tu navegador.** Graba voces, crea ritmos, edita pistas y juega con efectos sin subir tus audios a internet.
 
+**Abrir la aplicación:** [veryAtractiveSynth en GitHub Pages](https://pyro-nicolini.github.io/veryAtractiveSynth/).
+
 ## ✨ ¿Qué puedes hacer?
 
 - 🎙️ **Grabar tu voz:** permite el micrófono, mira el nivel de entrada y graba. Si no llega audio, evita crear pistas vacías.

@@ -112,6 +112,8 @@ function setParams(graph,track,ctx){
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
   const noteMask=Number.isInteger(track.tuneNoteMask)&&track.tuneNoteMask>0&&track.tuneNoteMask<=4095?track.tuneNoteMask:null;
   if(graph.lastTuneNoteMask!==noteMask){graph.voice.port?.postMessage({type:'note-mask',mask:noteMask});graph.lastTuneNoteMask=noteMask;}
+  const calibration=clamp(track.pitchCalibration??0,-12,12);
+  if(graph.lastPitchCalibration!==calibration){graph.voice.port?.postMessage({type:'pitch-calibration',semitones:calibration});graph.lastPitchCalibration=calibration;}
 }
 function scheduleTrackAutomation(graph,track,ctx,from,startCtx){
   const points=normaliseAutomation(track?.automation?.pitchShift,-12,12),param=graph?.voice?.parameters?.get('shift');
@@ -177,7 +179,7 @@ function fadeValue(track,at,total){
   if(fadeOut>0)v=Math.min(v,Math.max(0,(total-at)/fadeOut));
   return v;
 }
-function scheduleClip(ctx,track,graph,from,timeOrigin){
+export function scheduleClip(ctx,track,graph,from,timeOrigin){
   const total=effectiveDuration(track);
   if(total<=.002)return null;
   const start=track.offset||0,end=start+total;

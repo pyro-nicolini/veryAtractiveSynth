@@ -17,10 +17,11 @@ class VoiceProcessor extends AudioWorkletProcessor {
     super();this.buffers=[new Float32Array(RING_SIZE),new Float32Array(RING_SIZE)];
     this.mono=new Float32Array(RING_SIZE);this.pos=0;this.phase=0;this.grain=1536;
     this.counter=0;this.ratio=1;this.targetRatio=1;this.envelope=0;this.gate=1;
-    this.telemetry=false;this.telemetrySeq=0;this.noteMask=null;
+    this.telemetry=false;this.telemetrySeq=0;this.noteMask=null;this.calibration=0;
     if(this.port)this.port.onmessage=event=>{
       if(event.data?.type==='monitor')this.telemetry=!!event.data.enabled;
       if(event.data?.type==='note-mask')this.noteMask=Number.isInteger(event.data.mask)&&event.data.mask>0&&event.data.mask<=4095?event.data.mask:null;
+      if(event.data?.type==='pitch-calibration')this.calibration=Number.isFinite(event.data.semitones)?Math.max(-12,Math.min(12,event.data.semitones)):0;
     };
   }
   reportPitch(data){
@@ -53,7 +54,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
       if(strongestShortPeriod)bestLag=strongestShortPeriod.lag;
     }
     if(!bestLag){this.targetRatio=1;this.reportPitch({voiced:false});return;}
-    const pitch=sampleRate/bestLag,midi=69+12*Math.log2(pitch/440);
+    const pitch=sampleRate/bestLag,midi=69+12*Math.log2(pitch/440)+this.calibration;
     const notes=scale===1?MINOR:scale===2?null:MAJOR;
     let target=Math.round(midi);
     if(notes||this.noteMask!==null){

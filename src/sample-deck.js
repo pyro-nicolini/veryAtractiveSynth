@@ -36,7 +36,7 @@ export class SampleDeck{
      (pad?padWaveSVG(pad.buffer,pad.from,pad.to):'<span class="sample-empty-wave">⌁</span>')+
      '<span class="sample-duration">'+(pad?(pad.to-pad.from).toFixed(2)+' s':'＋ Añadir')+'</span></button>'+
      '<button type="button" class="sample-pad-edit" data-pad-edit="'+i+'" aria-label="Editar pad '+(i+1)+'">✎</button></div>').join('')+'</div>'+
-   '<section class="sample-library"><header><div><strong>MI BIBLIOTECA</strong><small>Samples guardados · elige dónde insertarlos</small></div><span>'+this.assets.length+' sonidos</span></header><div class="sample-library-list">'+library+'</div></section>'+
+   '<section class="sample-library"><header><div><strong>PORTAPAPELES DE SAMPLES</strong><small>Sonidos guardados · escucha o envía a SAMPLE BUS, pista o MASTER</small></div><span>'+this.assets.length+' sonidos</span></header><div class="sample-library-list">'+library+'</div></section>'+
    '<div class="sample-editor" id="sampleEditor">'+(this.selected===null?'Elige un pad para cargar audio, recortar o guardar un sonido.':this.editorMarkup())+'</div>'+
    '<input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" hidden>';
  }

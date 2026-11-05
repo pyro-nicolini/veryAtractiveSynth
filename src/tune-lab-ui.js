@@ -39,8 +39,8 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
   const mask=effectiveTuneNoteMask(track);
   const noteButtons=KEYS.map((name,i)=>'<button type="button" class="android-note-key'+((mask&(1<<i))?' is-active':'')+'" data-tune-note="'+i+'" aria-pressed="'+!!(mask&(1<<i))+'" aria-label="'+escapeHTML(name)+' permitida">'+escapeHTML(name)+'</button>').join('');
   return '<section class="tune-lab" id="tuneLab">'+
-    '<div class="lab-intro"><div><div class="section-overline">EXPERIMENTAL / LOCAL AUDIO</div>'+
-    '<p>Juega con el nodo en vivo: canta con un micrófono y auriculares, o transforma una pista mientras suena.</p></div>'+
+    '<div class="lab-intro"><div><div class="section-overline">AFINAR VOZ / PASO A PASO</div>'+
+    '<p>1. Activa tu micrófono y usa auriculares. 2. Canta una nota y calibra la lectura si hace falta. 3. Elige las notas permitidas y ajusta la intensidad. 4. Graba tu toma o aplícala a una pista.</p></div>'+
     '<button type="button" class="mini-action" data-info="tuneLab" aria-label="Información sobre Tune Lab">i</button></div>'+
     '<div class="lab-mode-switch" role="group" aria-label="Fuente del Voice Playground">'+
       '<button type="button" class="lab-mode '+(mode==='track'?'active':'')+'" data-action="tune-source-track" aria-pressed="'+(mode==='track')+'" '+(!hasTrack?'disabled':'')+'>♫ PISTA</button>'+
@@ -53,17 +53,24 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
       '<button type="button" class="lab-action" data-action="tune-live-stop">■ DETENER MICRÓFONO</button>'+ 
       '<button type="button" class="lab-action lab-play" data-action="tune-live-record">● GRABAR TOMA</button>'+ 
       '<button type="button" class="lab-action" data-action="tune-live-save" disabled>■ GUARDAR VOZ</button>'+
+      '<button type="button" class="lab-action" data-action="tune-backing" '+(!hasTrack?'disabled':'')+'>▶ REPRODUCIR / PAUSAR BASE</button>'+
       '<div class="lab-live-gains"><label>ENTRADA <input id="labLiveInputGain" type="range" min="0" max="150" step="5" value="100" aria-label="Ganancia de entrada"></label><output id="labLiveInputValue">100%</output>'+
       '<label>MONITOR <input id="labLiveMonitor" type="range" min="0" max="80" step="5" value="'+Math.min(80,track.volume??60)+'" aria-label="Volumen de escucha en vivo"></label><output id="labLiveMonitorValue">'+Math.min(80,track.volume??60)+'%</output></div>'+
       '<div class="lab-live-meter"><span id="labLiveMeter"></span></div>'+
       '<p id="labLiveStatus" role="status">Usa auriculares. Presiona activar para escuchar tu voz procesada; no se graba nada automáticamente.</p>'+
+      '<div class="lab-take-actions"><strong>ÚLTIMA TOMA</strong><span>La toma se agrega a la mezcla con sus efectos editables.</span>'+
+      '<button type="button" class="lab-action" data-action="tune-take-sample" disabled>▣ GUARDAR SAMPLE CON FX</button>'+
+      '<button type="button" class="lab-action" data-action="tune-take-export" disabled>↓ EXPORTAR WAV CON FX</button></div>'+
     '</div>'+
     '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview" '+(mode==='live'?'hidden':'')+'>▶ ESCUCHAR CAMBIOS</button>'+
       '<button type="button" class="lab-action" data-action="tune-apply" '+(mode==='live'&&hasTrack?'':'hidden')+'>⇢ APLICAR A PISTA</button>'+
     '<button type="button" class="lab-action" data-action="tune-ab">'+(track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL')+'</button>'+
     '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button>'+
     '<button type="button" class="lab-action lab-session-record" data-action="session-record" aria-pressed="false">● GRABAR LO QUE ESCUCHO</button></div>'+
-    '<section class="android-note-matrix" aria-label="Notas objetivo del autotune"><div class="android-note-head"><div><small>VOICE ENGINE / TARGET MATRIX</small><strong>Notas permitidas</strong><p>La voz se afina hacia la nota iluminada más cercana.</p></div><span id="tuneNoteCount" aria-live="polite">'+countNotes(mask)+' / 12 ACTIVAS</span></div>'+
+    '<section class="android-note-matrix" aria-label="Calibración del reconocimiento"><div class="android-note-head"><div><small>01 / RECONOCIMIENTO</small><strong>Calibrar notas</strong><p>Canta una nota conocida. Si cantas Do y aparece Mi, ajusta −4. Esto desplaza la referencia de reconocimiento y de afinación; la frecuencia en Hz sigue siendo la medida real.</p></div><span id="labCalibrationValue">'+(Number(track.pitchCalibration)||0)+' semitonos</span></div>'+
+      '<label class="calibration-control" for="labCalibration">AJUSTE DE REFERENCIA <input type="range" id="labCalibration" min="-12" max="12" step="1" value="'+(Number(track.pitchCalibration)||0)+'" data-tune-calibration aria-label="Calibración del reconocimiento en semitonos"></label>'+
+      '<button type="button" class="lab-action" data-action="tune-calibration-reset">↺ RESTABLECER A CERO</button></section>'+
+    '<section class="android-note-matrix" aria-label="Notas objetivo del autotune"><div class="android-note-head"><div><small>02 / NOTAS DE DESTINO</small><strong>Notas permitidas</strong><p>La voz se afina hacia la nota iluminada más cercana.</p></div><span id="tuneNoteCount" aria-live="polite">'+countNotes(mask)+' / 12 ACTIVAS</span></div>'+
       '<div class="android-note-config"><label for="labTuneKey">TONALIDAD <select id="labTuneKey" data-tune-key="key">'+KEYS.map((name,i)=>'<option value="'+i+'"'+(track.key===i?' selected':'')+'>'+escapeHTML(name)+'</option>').join('')+'</select></label>'+
       '<label for="labTuneScale">ESCALA <select id="labTuneScale" data-tune-key="scale">'+SCALES.map((name,i)=>'<option value="'+i+'"'+(track.scale===i?' selected':'')+'>'+escapeHTML(name)+'</option>').join('')+'</select></label>'+
       '<button type="button" class="lab-action" data-action="tune-notes-reset">↺ USAR ESCALA</button></div>'+
@@ -83,7 +90,7 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
     '<div class="lab-pitch-labels"><span>NOTA DETECTADA <button class="mini-action info-button" data-info="pitchReading" type="button" title="Cómo leer el indicador">i</button></span><span id="labPitchStatus">PULSA ESCUCHAR CAMBIOS</span></div>'+
     '<div class="lab-pitch-main"><strong id="labPitchNote">—</strong><small id="labPitchHz">—</small><span>NOTA MÁS CERCANA</span><strong id="labPitchTarget">—</strong></div>'+
     '<div class="lab-pitch-scale"><span>♭</span><div class="lab-pitch-scale-line"><i id="labPitchNeedle" style="left:50%"></i></div><span>♯</span></div>'+
-    '<div class="lab-pitch-cents" id="labPitchCents">—</div>'+
+    '<div class="lab-pitch-cents" id="labPitchCents">—</div><div class="lab-pitch-cents" id="labPitchConfidence">SIN SEÑAL</div>'+
     '</div>'+
     '<div class="lab-mood"><span class="lab-mood-spark">✦</span><div><strong id="labMoodTitle"></strong><p id="labMoodDetail"></p></div></div>'+
     '<div class="lab-axes-controls"><label for="labXInput">Natural <span>↔</span> Robótico</label>'+
@@ -132,6 +139,9 @@ export function updateTuneLabView(root,track){
   });
   put('#tuneNoteCount',countNotes(mask)+' / 12 ACTIVAS');
   put('#tuneNoteMode',track.tuneNoteMask?'MODO PERSONALIZADO':'SIGUIENDO TONALIDAD Y ESCALA');
+  const calibration=Number(track.pitchCalibration)||0;
+  put('#labCalibrationValue',(calibration>0?'+':'')+calibration+' semitonos');
+  const calibrationInput=root.querySelector('#labCalibration');if(calibrationInput&&document.activeElement!==calibrationInput)calibrationInput.value=String(calibration);
   for(const [id,value] of [['#labTuneKey',track.key],['#labTuneScale',track.scale]]){
     const select=root.querySelector(id);if(select&&document.activeElement!==select)select.value=String(value);
   }

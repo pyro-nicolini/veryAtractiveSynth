@@ -9,6 +9,7 @@ export function patchValues(track){
  for(const key of FX_PATCH_FIELDS)out[key]=key==='pitchShift'?clamp(track?.[key],-12,12):key==='key'?clamp(track?.[key],0,11):key==='scale'?clamp(track?.[key],0,2):clamp(track?.[key],0,100);
  out.fxBypass=normaliseFxBypass(track?.fxBypass);
  out.tuneNoteMask=normaliseTuneNoteMask(track?.tuneNoteMask);
+ out.pitchCalibration=clamp(track?.pitchCalibration??0,-12,12);
  out.bypassEffects=!!track?.bypassEffects;
  return out;
 }

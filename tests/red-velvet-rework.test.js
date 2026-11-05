@@ -66,7 +66,7 @@ test('Android Synth startup, per-track export and samples are connected and incl
   assert.match(html,/src\/studio-console\.css/);assert.match(html,/src\/signal-flow-v2\.css/);
   assert.match(app,/data-track-action="export-track"/);
   assert.match(app,/async function performTrackExport/);
-  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#modalBackdrop'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
+  assert.match(app,/data-flow-destination/);assert.match(app,/async function saveTrackAsSample/);assert.match(app,/engine\.setMasterFx/);assert.match(app,/function addTrack\(buffer,name,type='audio',offset=0,bus=null,chain=true,deferRender=false\)/);assert.match(app,/options\.route\|\|'samples'/);assert.match(app,/if\(\$\('#workspacePanel'\)\)\{closeModal\(\);event\.preventDefault\(\);return;\}/);
   assert.match(deck,/data-pad-export="dry"/);
   assert.match(deck,/data-pad-export="wet"/);assert.match(deck,/const wav=processed\s*\?await this\.engine\.exportMix/);assert.match(deck,/sample-library-item/);assert.doesNotMatch(deck,/data-saved-sample/);
   assert.match(deck,/data-library-route="samples"/);assert.match(deck,/data-library-route="selected"/);assert.match(deck,/data-library-route="master"/);
