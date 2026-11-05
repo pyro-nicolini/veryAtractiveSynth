@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {replacePads,loadPads} from '../src/sample-pad-store.js';
 import {addLibrarySamples,listLibrarySamples,loadLibrarySample} from '../src/sample-library.js';
+import {SampleDeck} from '../src/sample-deck.js';
 
 // Model transactions as a staged copy: an aborted transaction commits nothing.
 function fakeDB(){
@@ -42,4 +43,26 @@ test('sample restoration preserves existing data when a transaction aborts',asyn
  assert.equal((await loadLibrarySample(entries[0].id)).name,sample.name);
  globalThis.indexedDB.fail();await assert.rejects(addLibrarySamples([sample]),/quota/);
  assert.equal((await listLibrarySamples()).length,1);
+});
+test('clipboard sample can be copied to a free pad and removal needs an inline confirmation',async()=>{
+ globalThis.indexedDB=fakeDB();globalThis.AudioBuffer=FakeBuffer;
+ const buffer=new FakeBuffer({numberOfChannels:1,length:8000,sampleRate:8000});buffer.data[0][3]=.7;
+ await addLibrarySamples([{buffer,name:'Voz afinada',fx:'rendered',from:0,to:1}]);
+ const root={innerHTML:'',addEventListener(){}},messages=[];
+ const deck=new SampleDeck({root,engine:{},onMessage:message=>messages.push(message)});
+ await deck.load();
+ const id=deck.assets[0].id;
+ await deck.copyLibraryToPad(id);
+ const pads=await loadPads();
+ assert.equal(pads[0].name,'Voz afinada');assert.ok(Math.abs(pads[0].buffer.data[0][3]-.7)<1e-5);
+ const event=(attribute,dataset)=>({target:{closest(){return this;},hasAttribute:name=>name===attribute,dataset}});
+ await deck.click(event('data-library-delete',{libraryDelete:id}));
+ assert.equal((await listLibrarySamples()).length,1);
+ assert.match(root.innerHTML,/data-library-confirm-delete/);
+ await deck.click(event('data-library-cancel-delete',{}));
+ assert.equal((await listLibrarySamples()).length,1);
+ await deck.click(event('data-library-delete',{libraryDelete:id}));
+ await deck.click(event('data-library-confirm-delete',{libraryConfirmDelete:id}));
+ assert.equal((await listLibrarySamples()).length,0);
+ assert.equal((await loadPads())[0].name,'Voz afinada');
 });

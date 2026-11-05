@@ -36,6 +36,8 @@ import {signalQuality} from './sample-bank.js';
 import {formatLoudness} from './loudness.js';
 import {openWorkspace,restoreWorkspace} from './workspace.js';
 import {retimeProject} from './project-tempo.js';
+import {saveProcessedVoiceSample} from './voice-sample.js';
+import {inlineQuestion} from './inline-question.js';
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
@@ -182,6 +184,13 @@ function setTuneCalibration(track,value){
   if(state.tuneMode==='track')queueAutosave();
 }
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200);}
+async function askConfirm(message){return (await inlineQuestion($('#questionRoot'),{message,acceptLabel:'Sí, continuar'}))===true;}
+async function askName(message,initialValue){return inlineQuestion($('#questionRoot'),{message,initialValue,acceptLabel:'Guardar'});}
+function canReplaceAfterQuestion(revision){
+  if(state.recording||state.liveRecording||state.sessionRecording){toast('Termina la grabación antes de reemplazar la mezcla');return false;}
+  if(editRevision!==revision){toast('La mezcla cambió mientras esperabas. Vuelve a abrir el proyecto para confirmar.');return false;}
+  return true;
+}
 function buttonInfo(key){return '<button class="mini-action info-button" type="button" data-info="'+key+'" title="¿Cómo funciona?">i</button>';}
 function help(key){
   const [title,body]=HELP[key]||HELP.studio;
@@ -191,6 +200,13 @@ function modal(title,content,actions=[]){
   if((state.recording||state.liveRecording)&&$('#workspacePanel')){toast('Detén y guarda la grabación antes de abrir otra herramienta');return;}
   const markup='<div class="workspace-surface" id="workspacePanel"><section class="focus-panel" role="region" aria-labelledby="modalTitle" tabindex="-1"><div class="focus-header"><div><div class="section-overline">ANDROID SYNTH / HERRAMIENTA ABIERTA</div><h2 id="modalTitle">'+html(title)+'</h2></div><button type="button" class="focus-close" data-action="close-modal" aria-label="Cerrar herramienta" title="Cerrar herramienta">×</button></div><div class="focus-content">'+content+'</div><div class="focus-footer">'+actions.map(a=>'<button class="button '+(a.primary?'button-primary':'button-muted')+'" type="button" data-action="'+a.type+'">'+html(a.label)+'</button>').join('')+'</div></section></div>';
   openWorkspace($('#modalRoot'),modalStack,title,markup);
+}
+function clearWorkspaces(){
+  if(state.countingIn){state.countingIn.cancelled=true;state.countingIn=null;}
+  if(state.liveMicActive||state.liveMicBusy)stopLiveTuneMic();
+  cancelAnimationFrame(state.meterFrame);state.preview=null;
+  if(!state.recording&&!state.liveRecording)engine.stopMic();
+  engine.watchPitch(null,null);modalStack.length=0;$('#modalRoot').replaceChildren();
 }
 function closeModal(){
   if(state.liveRecording)return toast('Detén y guarda la toma antes de cerrar Voice Lab');
@@ -410,7 +426,7 @@ async function saveTrackAsSample(trackId,processed,name,{keepWorkspace=false}={}
     const buffer=await engine.decode(new File([wav],safeFilename(sampleName)+'.wav',{type:'audio/wav'}));
     const saved=await saveLibrarySample({buffer,from:0,to:buffer.duration,name:sampleName,fx:processed?'rendered':'original'});
     state.pendingSampleTrackId=null;
-    if(!keepWorkspace){modalStack.length=0;$('#modalRoot').innerHTML='';}
+    if(!keepWorkspace){clearWorkspaces();}
     await state.sampleDeck?.refreshAssets?.();await refreshFlowAssets();
     toast('Guardado en el portapapeles de samples: '+saved.name);
   }catch(error){toast('No se pudo guardar el sample: '+error.message);}
@@ -552,14 +568,16 @@ function deleteFlowNode(id){
     });
   }else requestAnimationFrame(()=>$('#flowToggle')?.focus({preventScroll:true}));
 }
-function deleteTrack(id){
-  if(state.recording||state.sessionRecording)return toast('Detén la grabación antes de borrar');
+async function deleteTrack(id){
+  if(state.recording||state.liveRecording||state.sessionRecording)return toast('Detén la grabación antes de borrar');
   const t=state.tracks.find(x=>x.id===id);if(!t)return;
-  if(!window.confirm('¿Eliminar la pista "'+t.name+'"? Puedes deshacer con Ctrl+Z.'))return;
+  if(!await askConfirm('¿Eliminar la pista "'+t.name+'"? Puedes deshacer con Ctrl+Z.'))return;
+  if(!state.tracks.includes(t)||state.recording||state.liveRecording||state.sessionRecording)return toast('La pista o la grabación cambiaron; vuelve a intentarlo');
   checkpoint();for(const source of state.tracks)if(source.id!==id&&source.flowTo==='track:'+id){source.flowTo='bus:'+busForTrack(t);engine.updateTrack(source);}state.tracks=state.tracks.filter(x=>x.id!==id);delete state.flowPositions[id];state.flowExpandedFx=state.flowExpandedFx.filter(key=>key!==id);
   state.selected=state.tracks[0]?.id||null;state.selectedClip=null;
   if(engine.playing){engine.stop();state.position=0;cancelAnimationFrame(raf);}
-  modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Pista eliminada. Puedes deshacer.');
+  if(!state.preview&&!state.liveMicActive&&!state.liveMicBusy){clearWorkspaces();}
+  render();toast('Pista eliminada. Puedes deshacer.');
 }
 
 function toggleFlowTrackLink(id){
@@ -687,7 +705,7 @@ function setupFlow(){
     const filter=event.target.dataset.libraryFilter;
     if(filter==='category'||filter==='tempo'){rhythmFilters[filter]=event.target.value;renderLibrary();library.querySelector('[data-library-filter="'+filter+'"]')?.focus();}
   });
-  body.addEventListener('click',event=>{
+  body.addEventListener('click',async event=>{
     if(event.target.closest('[data-flow-play]')){Promise.resolve(playPause()).finally(syncFlowTransport);return;}
     if(event.target.closest('[data-flow-stop]')){stop();syncFlowTransport();return;}
     if(event.target.closest('[data-flow-zoom-in]')){setFlowZoom(state.flowCanvasZoom*1.2);return;}
@@ -733,18 +751,18 @@ function setupFlow(){
     const fxSave=event.target.closest('[data-flow-save-fx]');
     if(fxSave){
       const track=state.tracks.find(t=>t.id===fxSave.dataset.flowSaveFx);if(!track)return;
-      const name=prompt('Nombre para esta cadena de efectos:',track.name+' · FX');
-      if(name!==null)try{savePatchPreset(name,track);renderFlow();toast('Preset guardado en este equipo.');}
+      const name=await askName('Nombre para esta cadena de efectos:',track.name+' · FX');
+      if(name!==null&&state.tracks.includes(track))try{savePatchPreset(name,track);renderFlow();toast('Preset guardado en este equipo.');}
       catch(error){toast(error.message);}return;
     }
     const fxDelete=event.target.closest('[data-flow-delete-preset]');
-    if(fxDelete){if(confirm('¿Eliminar este preset?')){deletePatchPreset(fxDelete.dataset.flowDeletePreset);renderFlow();}return;}
+    if(fxDelete){const id=fxDelete.dataset.flowDeletePreset;if(await askConfirm('¿Eliminar este preset?')){deletePatchPreset(id);renderFlow();}return;}
     const fxPreset=event.target.closest('[data-flow-preset]');
     if(fxPreset){if(fxPreset.dataset.flowOwner||state.selected)useFlowPreset(fxPreset.dataset.flowPreset,fxPreset.dataset.flowOwner||state.selected);else toast('Selecciona primero una pista.');return;}
     const sampleSave=event.target.closest('[data-flow-export-sample]');
     if(sampleSave){openTrackSampleDialog(sampleSave.dataset.flowExportSample);return;}
     const savedDelete=event.target.closest('[data-flow-remove-sample]');
-    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!confirm('¿Eliminar este sample guardado?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
+    if(savedDelete){const id=savedDelete.dataset.flowRemoveSample;if(!await askConfirm('¿Eliminar este sample guardado?'))return;deleteLibrarySample(id).then(refreshFlowAssets).catch(error=>toast(error.message));return;}
     const sample=event.target.closest('[data-flow-sample]');
     if(sample){insertFlowSample(sample.dataset.flowSample);return;}
     const deletion=event.target.closest('[data-flow-delete]');
@@ -1453,20 +1471,23 @@ async function startLiveTuneMic(){
 
 async function startLiveRecording(){
   if(state.liveRecording||!state.liveMicActive||!engine.mic)return toast('Primero activa y autoriza el micrófono');
+  if(state.liveSampleBusy)return toast('Espera a que termine de guardarse el sample');
   if(engine.capture||state.recording)return toast('Ya hay una grabación en curso');
   stopRhythmPreview();
   try{
     const settings={...state.liveTuneTrack,fxBypass:{...state.liveTuneTrack.fxBypass}};
+    const destination=$('#labTakeDestination')?.value==='sample'?'sample':'track';
+    const maxSeconds=destination==='sample'?26:MAX_RECORDING_SECONDS;
     const offset=engine.playing?engine.position():state.position;
     const capture=await engine.startCapture(seconds=>{
       if(state.liveRecording)state.liveRecording.seconds=seconds;
-      if(seconds>=MAX_RECORDING_SECONDS&&state.liveRecording&&!state.liveRecording.stopping)stopLiveRecording();
+      if(seconds>=maxSeconds&&state.liveRecording&&!state.liveRecording.stopping)stopLiveRecording();
     });
     const clockOffset=engine.playing?engine.from+capture.startedAt-engine.startCtxTime:offset;
-    state.liveRecording={settings,offset:Math.max(0,clockOffset),seconds:0,capture,stopping:false};
+    state.liveRecording={settings,destination,offset:Math.max(0,clockOffset),seconds:0,capture,stopping:false};
     updateAndroidStatus();
     const status=$('#labLiveStatus');
-    if(status)status.textContent='● GRABANDO · conserva el original y aplica efectos al reproducir';
+    if(status)status.textContent=destination==='sample'?'● GRABANDO SAMPLE · MÁXIMO 26 SEGUNDOS':'● GRABANDO VOZ · conserva el original y aplica efectos al reproducir';
     const start=$('[data-action="tune-live-record"]'),stop=$('[data-action="tune-live-save"]');
     if(start)start.disabled=true;if(stop)stop.disabled=false;
   }catch(error){toast('No se pudo comenzar: '+error.message);}
@@ -1478,12 +1499,25 @@ async function stopLiveRecording(){
     const buffer=await engine.stopCapture();
     if(!signalQuality(buffer).valid)throw Error('El micrófono no entregó voz; no se creó una pista vacía');
     state.liveRecording=null;
-    const t=addTrack(buffer,'Voz Lab '+(state.tracks.filter(x=>x.type==='voice').length+1),'voice',rec.offset);
-    const keep={id:t.id,buffer:t.buffer,name:t.name,type:t.type,color:t.color,offset:t.offset,bus:t.bus};
-    Object.assign(t,rec.settings,keep);
-    state.lastLiveTrackId=t.id;
-    engine.updateTrack(t);queueAutosave();render();
-    toast('Toma guardada: voz original y efectos editables');
+    let savedSample=false;
+    if(rec.destination==='sample'){
+      state.liveSampleBusy=true;
+      try{
+        const name='Voz afinada '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+        const saved=await saveProcessedVoiceSample(engine,buffer,rec.settings,name);
+        await state.sampleDeck?.refreshAssets?.();await refreshFlowAssets();
+        savedSample=true;toast('Sample afinado guardado en el portapapeles: '+saved.name);
+      }catch(error){toast('No se pudo guardar como sample; la toma se conservará como pista. '+error.message);}
+      finally{state.liveSampleBusy=false;}
+    }
+    if(!savedSample){
+      const t=addTrack(buffer,'Voz Lab '+(state.tracks.filter(x=>x.type==='voice').length+1),'voice',rec.offset);
+      const keep={id:t.id,buffer:t.buffer,name:t.name,type:t.type,color:t.color,offset:t.offset,bus:t.bus};
+      Object.assign(t,rec.settings,keep);
+      state.lastLiveTrackId=t.id;
+      engine.updateTrack(t);queueAutosave();render();
+      if(rec.destination!=='sample')toast('Toma guardada: voz original y efectos editables');
+    }
   }catch(error){toast('No se guardó: '+error.message);}
   finally{
     state.liveRecording=null;
@@ -1498,7 +1532,7 @@ async function stopLiveRecording(){
 
 function syncLiveTakeActions(){
   const exists=state.tracks.some(track=>track.id===state.lastLiveTrackId);
-  for(const button of $$('[data-action="tune-take-sample"],[data-action="tune-take-export"]'))button.disabled=!exists;
+  for(const button of $$('[data-action="tune-take-review"],[data-action="tune-take-sample"],[data-action="tune-take-export"]'))button.disabled=!exists;
   const backing=$('[data-action="tune-backing"]');if(backing)backing.disabled=!state.tracks.length;
 }
 function switchTuneSource(mode){
@@ -1659,10 +1693,12 @@ function tuneAction(action){
   if(action==='tune-live-record'){startLiveRecording();return;}
   if(action==='tune-live-save'){stopLiveRecording();return;}
   if(action==='tune-live-stop'){stopLiveTuneMic();return;}
+  if(action==='tune-open-clipboard'){openSampleDesk();return;}
   if(action==='tune-backing'){playPause();return;}
-  if(action==='tune-take-sample'||action==='tune-take-export'){
+  if(action==='tune-take-review'||action==='tune-take-sample'||action==='tune-take-export'){
     const take=state.tracks.find(item=>item.id===state.lastLiveTrackId);
     if(!take)return toast('Primero graba una toma en Afinar voz');
+    if(action==='tune-take-review'){state.selected=take.id;state.selectedClip=null;render();openPitchReview();return;}
     if(action==='tune-take-sample'){saveTrackAsSample(take.id,true,take.name,{keepWorkspace:true});return;}
     (async()=>{try{const wav=await engine.exportMix([isolatedSampleTrack(take)],{depth:24,rate:48000});downloadBlob(wav,safeFilename(take.name)+'-afinado.wav');toast('WAV de la toma exportado con efectos');}catch(error){toast('No se pudo exportar: '+error.message);}})();
     return;
@@ -1848,7 +1884,7 @@ function quantizeLoop(){
   const track=state.tracks.find(t=>t.id===state.loopEdit?.trackId),clip=track&&getEditableClip(track,state.loopEdit.clipId);
   if(!track||!clip)return toast('No se encontró el clip');
   checkpoint();ensureClips(track);Object.assign(getEditableClip(track,state.loopEdit.clipId),quantizeClip(clip,state.bpm,4));queueAutosave();restartPlayback();
-  modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Clip ajustado a la rejilla de '+state.bpm+' BPM');
+  clearWorkspaces();render();toast('Clip ajustado a la rejilla de '+state.bpm+' BPM');
 }
 function editLoop(action){
   if(state.sessionRecording)return toast('Finaliza la grabación de sesión antes de modificar loops');
@@ -1875,7 +1911,7 @@ function editLoop(action){
         globalThis.crypto?.randomUUID?.()||'loop-copy-'+Date.now()+'-'+i);
       state.selectedClip=added.at(-1).id;
     }else setClipLoop(source,from,to,repeats);
-    modalStack.length=0;$('#modalRoot').innerHTML='';
+    clearWorkspaces();
     render();restartPlayback();
     toast(removing?'Loop desactivado':duplicating?'Loops duplicados a la derecha':'Loop aplicado; las demás pistas conservan su ritmo');
   }catch(error){toast(error.message);}
@@ -2148,7 +2184,7 @@ async function stopRecording(){
     if(!$('#recordTimer')||$('#recordTimer').textContent!=='TOMA NO GUARDADA'){
       cancelAnimationFrame(state.meterFrame);
       engine.stopMic();state.preview=null;
-      modalStack.length=0;$('#modalRoot').innerHTML='';
+      clearWorkspaces();
       const ghost=$('#recordingGhost');if(ghost)ghost.innerHTML='';
       render();
     }else{
@@ -2183,11 +2219,11 @@ async function performTrackExport(asTrack=false){
       const added=addTrack(buffer,track.name+(dry?' · original':' · con FX'),track.type,0);
       added.bypassEffects=true;added.bus=track.bus;added.volume=100;
       engine.updateTrack(added);if(engine.playing)restartPlayback();
-      modalStack.length=0;$('#modalRoot').innerHTML='';
+      clearWorkspaces();
       render();toast('Nueva pista renderizada sin modificar la fuente.');
     }else{
       downloadBlob(blob,safeFilename(track.name)+(dry?'-original':'-con-fx')+'-'+depth+'bit.wav');
-      modalStack.length=0;$('#modalRoot').innerHTML='';
+      clearWorkspaces();
       toast('WAV individual descargado.');
     }
   }catch(error){toast('Pista: '+error.message);}
@@ -2234,7 +2270,7 @@ async function performExport(){
       downloadBlob(blob,safeFilename(onlyId?current().name:'veryAtractiveSynth-mi-mezcla')+'-'+rate/1000+'k-'+depth+'bit.wav');
       toast('Tu WAV está listo · '+formatLoudness(engine.lastExportStats));
     }
-    modalStack.length=0;$('#modalRoot').innerHTML='';
+    clearWorkspaces();
   }catch(e){toast('Exportación: '+e.message);}
   finally{state.busy=false;if(btn)btn.textContent='EXPORTAR ARCHIVO';}
 }
@@ -2246,10 +2282,14 @@ async function save(){
   finally{state.busy=false;}
 }
 async function load(){
-  if(state.tracks.length&&!confirm('¿Reemplazar las capas actuales por la última sesión guardada?'))return;
+  const revision=editRevision;
+  if(state.tracks.length&&!await askConfirm('¿Reemplazar las capas actuales por la última sesión guardada?'))return;
+  if(!canReplaceAfterQuestion(revision))return;
   try{
-    engine.stop();const ctx=await engine.ready(),data=await loadSession(ctx);
+    const ctx=await engine.ready(),data=await loadSession(ctx);
     if(!data)return toast('Todavía no tienes una sesión guardada');
+    if(!canReplaceAfterQuestion(revision))return;
+    engine.stop();
     checkpoint();state.tracks=data.tracks;state.selected=state.tracks[0]?.id||null;state.master=data.master??85;applyProjectOptions(data.options);
     engine.setMaster(state.master);$('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
     state.position=0;render();toast('Sesión recuperada. Todo está en este dispositivo.');
@@ -2289,45 +2329,51 @@ async function confirmSaveNamed(){
   try{
     await saveNamedProject(state.tracks,state.master,getProjectOptions(),name);
     toast('Proyecto "'+name+'" guardado en este dispositivo');
-    modalStack.length=0;$('#modalRoot').innerHTML='';
+    clearWorkspaces();
   }catch(error){toast('No se pudo guardar: '+error.message);}
   finally{state.busy=false;}
 }
 async function openNamed(id){
   if(state.recording)return toast('Termina la grabación primero');
-  if(state.tracks.length&&!confirm('¿Abrir el proyecto y reemplazar la mezcla actual? Guarda un respaldo si lo necesitas.'))return;
+  const revision=editRevision;
+  if(state.tracks.length&&!await askConfirm('¿Abrir el proyecto y reemplazar la mezcla actual? Guarda un respaldo si lo necesitas.'))return;
+  if(!canReplaceAfterQuestion(revision))return;
   try{
     const ctx=await engine.ready();
     const data=await loadSession(ctx,id);
     if(!data)throw Error('Proyecto no encontrado');
+    if(!canReplaceAfterQuestion(revision))return;
     checkpoint();clearTimeout(autosaveTimer);
     engine.stop();state.tracks=data.tracks;state.selected=data.tracks[0]?.id||null;
     state.position=0;state.master=data.master??85;
     engine.setMaster(state.master);applyProjectOptions(data.options);
     $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
-    modalStack.length=0;$('#modalRoot').innerHTML='';render();toast('Proyecto cargado correctamente');
+    clearWorkspaces();render();toast('Proyecto cargado correctamente');
   }catch(error){toast('No se pudo cargar: '+error.message);}
 }
 async function removeNamed(id){
-  if(!confirm('¿Eliminar este proyecto guardado? La sesión actual y tus archivos exportados no se eliminan.'))return;
+  if(!await askConfirm('¿Eliminar este proyecto guardado? La sesión actual y tus archivos exportados no se eliminan.'))return;
   try{await deleteNamedProject(id);await openProjectMenu();toast('Proyecto eliminado');}
   catch(error){toast('No se pudo eliminar: '+error.message);}
 }
 async function loadPortable(file){
   if(!file)return;
-  if(state.tracks.length&&!confirm('¿Reemplazar la mezcla actual por el proyecto de respaldo?'))return;
+  const revision=editRevision;
+  if(state.tracks.length&&!await askConfirm('¿Reemplazar la mezcla actual por el proyecto de respaldo?'))return;
+  if(!canReplaceAfterQuestion(revision))return;
   try{
     const ctx=await engine.ready(),bundle=await importProject(file,ctx);
+    if(!canReplaceAfterQuestion(revision))return;
     checkpoint();engine.stop();state.tracks=bundle.tracks;state.selected=bundle.tracks[0]?.id||null;
     state.position=0;state.master=bundle.master;engine.setMaster(state.master);applyProjectOptions(bundle.options);
     $('#masterVolume').value=state.master;$('#volumeValue').textContent=state.master+'%';
-    modalStack.length=0;$('#modalRoot').innerHTML='';render();
+    clearWorkspaces();render();
     let sampleError='';
-    if(bundle.pads&&confirm('¿Reemplazar los 12 pads actuales por los de este respaldo? Cancelar conserva tus pads actuales.')){
+    if(bundle.pads&&await askConfirm('¿Reemplazar los 12 pads actuales por los de este respaldo? Cancelar conserva tus pads actuales.')){
       try{await replacePads(bundle.pads);if(state.sampleDeck){state.sampleDeck.pads=bundle.pads;state.sampleDeck.selected=null;state.sampleDeck.draft=null;state.sampleDeck.render();}}
       catch(error){sampleError=' No se restauraron los pads: '+error.message;}
     }
-    if(bundle.sampleLibrary?.length&&confirm('¿Añadir '+bundle.sampleLibrary.length+' samples del respaldo a tu biblioteca? Los existentes se conservarán; importar dos veces crea duplicados.')){
+    if(bundle.sampleLibrary?.length&&await askConfirm('¿Añadir '+bundle.sampleLibrary.length+' samples del respaldo a tu biblioteca? Los existentes se conservarán; importar dos veces crea duplicados.')){
       try{await addLibrarySamples(bundle.sampleLibrary);await state.sampleDeck?.refreshAssets();}
       catch(error){sampleError+=' No se restauró la biblioteca: '+error.message;}
     }
@@ -2419,7 +2465,7 @@ function handleModalAction(action){
   if(action==='add-clip'){const t=current();if(t){state.clipImportTrack=t.id;closeModal();$('#clipFileInput').click();}return;}
   if(action==='save-named'){saveNewNamed();return;}
   if(action==='confirm-save-named'){confirmSaveNamed();return;}
-  if(action==='load-local'){modalStack.length=0;$('#modalRoot').innerHTML='';load();return;}
+  if(action==='load-local'){clearWorkspaces();load();return;}
   if(action==='browse-project'){$('#projectInput').click();return;}
   if(action==='cancel-countin'){
     if(state.countingIn)state.countingIn.cancelled=true;
@@ -2437,7 +2483,7 @@ function handleModalAction(action){
   if(action==='do-track-export'){performTrackExport(false);return;}
   if(action==='do-track-bounce'){performTrackExport(true);return;}
   const t=current();if(!t)return;
-  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');checkpoint();t.name=name.slice(0,80);modalStack.length=0;$('#modalRoot').innerHTML='';render();}
+  if(action==='rename-track'){const name=$('#renameInput')?.value.trim();if(!name)return toast('Escribe un nombre');checkpoint();t.name=name.slice(0,80);clearWorkspaces();render();}
   if(action==='split-track'){
     try{
       const id=globalThis.crypto?.randomUUID?.()||'split-'+Date.now();
@@ -2445,7 +2491,7 @@ function handleModalAction(action){
       const clipId=getEditableClip(t,state.selectedClip)?.id;
       const [left,right]=splitTrackClip(t,clipId,state.position,id);
       state.selected=t.id;state.selectedClip=right.id;
-      modalStack.length=0;$('#modalRoot').innerHTML='';
+      clearWorkspaces();
       render();restartPlayback();
       toast('Clip dividido dentro del mismo canal, sin alterar el original.');
     }catch(error){toast(error.message);}
@@ -2453,7 +2499,7 @@ function handleModalAction(action){
   }
   if(action==='duplicate-track'){
     const clone={...cloneTrackMetadata(t),id:globalThis.crypto?.randomUUID?.()||'copy-'+Date.now(),name:t.name+' · copia',color:COLORS[state.tracks.length%COLORS.length]};
-    checkpoint();state.tracks.push(clone);state.selected=clone.id;modalStack.length=0;$('#modalRoot').innerHTML='';render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
+    checkpoint();state.tracks.push(clone);state.selected=clone.id;clearWorkspaces();render();restartPlayback();toast('Capa duplicada. Puedes darle otros efectos.');
   }
   if(action==='delete-track'){
     deleteTrack(t.id);

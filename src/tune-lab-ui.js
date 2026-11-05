@@ -51,16 +51,19 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
       '<select id="labMicSelect" aria-label="Elegir micrófono para Voice Playground"><option value="">Micrófono predeterminado</option></select>'+
       '<button type="button" class="lab-action lab-play" data-action="tune-live-start">◉ ACTIVAR MI VOZ</button>'+
       '<button type="button" class="lab-action" data-action="tune-live-stop">■ DETENER MICRÓFONO</button>'+ 
+      '<label for="labTakeDestination">DESTINO DE LA GRABACIÓN</label><select id="labTakeDestination"><option value="track">Añadir voz a la canción</option><option value="sample">Guardar sample procesado en el portapapeles</option></select>'+
       '<button type="button" class="lab-action lab-play" data-action="tune-live-record">● GRABAR TOMA</button>'+ 
       '<button type="button" class="lab-action" data-action="tune-live-save" disabled>■ GUARDAR VOZ</button>'+
       '<button type="button" class="lab-action" data-action="tune-backing" '+(!hasTrack?'disabled':'')+'>▶ REPRODUCIR / PAUSAR BASE</button>'+
       '<div class="lab-live-gains"><label>ENTRADA <input id="labLiveInputGain" type="range" min="0" max="150" step="5" value="100" aria-label="Ganancia de entrada"></label><output id="labLiveInputValue">100%</output>'+
       '<label>MONITOR <input id="labLiveMonitor" type="range" min="0" max="80" step="5" value="'+Math.min(80,track.volume??60)+'" aria-label="Volumen de escucha en vivo"></label><output id="labLiveMonitorValue">'+Math.min(80,track.volume??60)+'%</output></div>'+
       '<div class="lab-live-meter"><span id="labLiveMeter"></span></div>'+
-      '<p id="labLiveStatus" role="status">Usa auriculares. Presiona activar para escuchar tu voz procesada; no se graba nada automáticamente.</p>'+
+      '<p id="labLiveStatus" role="status">Usa auriculares. Activa el micrófono, elige el destino y graba; no se graba nada automáticamente. Para cantar sobre la canción, reproduce la base antes de grabar. Los samples usan los ajustes activos al empezar y admiten hasta 26 segundos.</p>'+
       '<div class="lab-take-actions"><strong>ÚLTIMA TOMA</strong><span>La toma se agrega a la mezcla con sus efectos editables.</span>'+
+      '<button type="button" class="lab-action" data-action="tune-take-review" disabled>♩ EDITAR FRAGMENTOS DE VOZ</button>'+
       '<button type="button" class="lab-action" data-action="tune-take-sample" disabled>▣ GUARDAR SAMPLE CON FX</button>'+
-      '<button type="button" class="lab-action" data-action="tune-take-export" disabled>↓ EXPORTAR WAV CON FX</button></div>'+
+      '<button type="button" class="lab-action" data-action="tune-take-export" disabled>↓ EXPORTAR WAV CON FX</button>'+
+      '<button type="button" class="lab-action" data-action="tune-open-clipboard">▦ ABRIR PORTAPAPELES</button></div>'+
     '</div>'+
     '<div class="lab-play-tools"><button type="button" class="lab-action lab-play" data-action="tune-preview" '+(mode==='live'?'hidden':'')+'>▶ ESCUCHAR CAMBIOS</button>'+
       '<button type="button" class="lab-action" data-action="tune-apply" '+(mode==='live'&&hasTrack?'':'hidden')+'>⇢ APLICAR A PISTA</button>'+

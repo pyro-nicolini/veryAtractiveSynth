@@ -14,6 +14,15 @@
 - 🔗 **Signal Flow:** conecta la salida de una pista con la entrada de otra, usa buses reales y arrastra procesadores o samples al editor.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
 
+## Afinar y grabar una voz
+
+1. Abre **AFINAR VOZ**, conecta auriculares y activa el micrófono. La nota detectada, los Hz y la confianza provienen del procesador que corrige la voz.
+2. Canta una nota de referencia. Si la lectura aparece desplazada, mueve **Calibrar notas**: por ejemplo, si cantas Do y aparece Mi, prueba −4 semitonos. Este ajuste cambia la referencia de notas y el objetivo del corrector; los Hz siguen mostrando la frecuencia medida.
+3. Selecciona las notas permitidas y mueve el control de intensidad. Si quieres cantar con la canción, pulsa **REPRODUCIR / PAUSAR BASE** antes de grabar.
+4. En **Destino de la grabación**, elige añadir una pista editable o guardar un sample procesado en el portapapeles. Los samples duran hasta 26 segundos y se procesan con los ajustes activos al iniciar la toma. Abre **Samples** para escucharlos, copiarlos a un pad, añadirlos a la mezcla o exportar su audio guardado.
+
+El control BPM cambia la velocidad y las posiciones de todos los clips para mantenerlos sincronizados. Este método también cambia el tono del audio; cada clip admite entre 0,5× y 2×. El autotune y la detección siguen siendo experimentales y están diseñados para una voz a la vez.
+
 ## 🧭 Flow V3 · canvas libre y FX flotantes
 
 - **Pantalla completa desde FLOW:** el mapa ocupa el navegador como entorno de trabajo, no como una tarjeta dentro de la landing.
