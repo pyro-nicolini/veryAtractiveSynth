@@ -1,119 +1,206 @@
-/* Voice Flow: lightweight, accessible map of REAL mixer tracks and effect bypass.
- * Nodes/edges are a presentation of existing audio routing, not a separate
- * pretend sound engine. Dragging FX tiles onto a track enables WebAudio DSP.
+/* Signal Flow V2: only sources, buses and master live on the main graph.
+ * Track FX are expandable child controls; master FX belong to the master node.
+ * Cable geometry follows actual WebAudio destinations, never decorative inserts.
  */
 import {FX_CHAIN,isFxBypassed} from './fx-rack.js';
-import {formatDb} from './studio-mixer.js';
-export const FLOW_MIN_WIDTH=830;
-export const FLOW_NODE_WIDTH=220;
-export function flowPosition(track,index,positions={}){
-  const stored=positions?.[track.id];
-  return stored&&Number.isFinite(stored.x)&&Number.isFinite(stored.y)?
-    {x:Math.max(12,Math.min(540,stored.x)),y:Math.max(12,Math.min(3000,stored.y))}:
-    {x:45+(index%2)*104,y:32+index*160};
+import {MASTER_FX_CHAIN} from './master-fx.js';
+import {formatDb,BUS_IDS,BUS_LABELS,busForTrack} from './studio-mixer.js';
+import {routeFor,canConnect} from './flow-routing.js';
+
+export const FLOW_MIN_WIDTH=1200;
+export const FLOW_NODE_WIDTH=232;
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const FX_ICON={tune:'✦',clean:'◌',eq:'≋',drive:'◈',compressor:'◉',delay:'↺',reverb:'✧'};
+function effectIsActive(track,id){
+ if(track.bypassEffects||isFxBypassed(track,id))return false;
+ return id==='tune'?track.autotune>1:id==='clean'?track.clean>1:
+  id==='eq'?Math.abs(track.brightness-50)>7||Math.abs(track.warmth-20)>7:
+  id==='drive'?track.drive>1:id==='delay'?track.echo>1:
+  id==='reverb'?track.space>1:true;
 }
-export function flowHeight(trackCount){return Math.max(355,trackCount*160+70);}
-export function flowMarkup(tracks,positions={},selectedId=null){
-  const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const names={tune:'Afinación',clean:'Limpieza',eq:'Tono',drive:'Calor',compressor:'Compresión',delay:'Eco',reverb:'Espacio'};
-  const palette='<div class="flow-palette"><div class="flow-palette-copy"><strong>01 · Arrastra un efecto</strong><small>O tócalo y luego elige una pista. Si lo retiras, conservarás su configuración.</small></div>'+
-    '<div class="flow-palette-items">'+FX_CHAIN.map(f=>
-      '<button type="button" draggable="true" data-flow-palette="'+f.id+'" title="'+escape(f.hint)+'" aria-label="Elegir efecto '+escape(f.label)+'" class="flow-effect-tile"><span class="flow-effect-symbol">'+({tune:'✧',clean:'◌',eq:'≋',drive:'♨',compressor:'◈',delay:'↺',reverb:'✦'}[f.id])+'</span><strong>'+names[f.id]+'</strong><small>Arrastrar ＋</small></button>'
-    ).join('')+'</div><div class="flow-remove-zone" id="flowRemoveZone" aria-label="Soltar efecto aquí para desactivarlo">↩ Soltar aquí para quitar un efecto de una pista</div></div>';
-  const visible=tracks.filter(t=>!t.flowHidden);
-  const nodes=visible.map((track,index)=>{
-    const p=flowPosition(track,index,positions),off=track.muted;
-    const effects=FX_CHAIN.filter(f=>!isFxBypassed(track,f.id)&&(
-      f.id==='tune'?track.autotune>1:f.id==='clean'?track.clean>1:
-      f.id==='eq'?Math.abs(track.brightness-50)>7||Math.abs(track.warmth-20)>7:
-      f.id==='drive'?track.drive>1:f.id==='delay'?track.echo>1:
-      f.id==='reverb'?track.space>1:true));
-    return '<article class="flow-node '+(track.id===selectedId?'flow-node-selected ':'')+(off?'flow-node-off':'')+
-      '" data-flow-track="'+escape(track.id)+'" style="left:'+p.x+'px;top:'+p.y+'px;--flow-accent:'+(/^#[0-9a-fA-F]{6}$/.test(track.color)?track.color:'#81a0d3')+'">'+
-      '<div class="flow-node-top" data-flow-drag="'+escape(track.id)+'" tabindex="0" title="Arrastra para mover este nodo" aria-label="Mover nodo '+escape(track.name)+'"><span class="flow-source-icon">'+(track.type==='voice'?'◉':track.type==='demo'?'♫':'≋')+'</span>'+
-      '<div><strong>'+escape(track.name)+'</strong><small>'+(track.type==='voice'?'Tu voz':'Tu sonido')+' · '+formatDb(track.volume)+'</small></div><span class="flow-move-icon">⠿</span></div>'+
-      '<div class="flow-fx-drop" data-flow-drop="'+escape(track.id)+'" tabindex="0" aria-label="Soltar un efecto para '+escape(track.name)+'">'+
-      (effects.length?effects.map(f=>'<button class="flow-fx-pill" draggable="true" data-flow-effect="'+f.id+'" data-flow-owner="'+escape(track.id)+'" title="Retirar '+names[f.id]+' (sin borrar ajustes)">'+names[f.id]+' <span>×</span></button>').join(''):'<span class="flow-fx-placeholder">＋ Suelta aquí un efecto</span>')+
-      '</div>'+
-      '<div class="flow-node-bottom"><button type="button" data-flow-focus="'+escape(track.id)+'" aria-label="Editar '+escape(track.name)+'">Ajustar</button>'+
-      '<button type="button" data-flow-link="'+escape(track.id)+'" aria-pressed="'+(!off)+'">'+(off?'◎ Reconectar':'● Conectada')+'</button><button type="button" data-flow-delete="'+escape(track.id)+'" title="Desconectar y luego retirar" aria-label="Desconectar o retirar nodo">×</button></div>'+
-      '<span class="flow-port" aria-hidden="true"></span></article>';
-  }).join('');
-  const master='<aside class="flow-master" id="flowMaster"><div class="flow-master-orb">◉</div><strong>Tu canción</strong><small>MEZCLA FINAL</small><span>Todas las pistas conectadas llegan aquí</span></aside>';
-  return palette+'<div class="flow-board-scroller"><div class="flow-board" id="flowBoard" style="height:'+flowHeight(visible.length)+'px">'+
-    '<svg id="flowWires" class="flow-wires" aria-hidden="true"></svg>'+nodes+master+
-    (visible.length?'':'<div class="flow-welcome">Tus pistas aparecerán como planetas de sonido. Agrega una voz o un ritmo para empezar.</div>')+
-    '</div></div><p class="flow-footnote">Supr sobre el nodo: primera vez desconecta, segunda lo retira del mapa. La pista queda guardada en Tu mezcla.</p>';
+export function flowPosition(track,index,positions={}){
+ const p=positions?.[track.id];
+ return p&&Number.isFinite(p.x)&&Number.isFinite(p.y)?
+  {x:Math.max(12,Math.min(7000,p.x)),y:Math.max(12,Math.min(3000,p.y))}:
+  {x:70+index*285,y:busForTrack(track)==='vocals'?125:520};
+}
+export function flowHeight(){return 920;}
+function trackFxDrawer(track,presets=[]){
+ const params={
+  tune:[['autotune','Intensidad',0,100],['retune','Velocidad',0,100]],
+  clean:[['clean','Limpieza',0,100]],eq:[['brightness','Brillo',0,100],['warmth','Calidez',0,100]],
+  drive:[['drive','Saturación',0,100]],compressor:[],
+  delay:[['echo','Eco',0,100]],reverb:[['space','Espacio',0,100]]
+ };
+ const fx=FX_CHAIN.map(item=>{
+  const active=effectIsActive(track,item.id);
+  const controls=(params[item.id]||[]).map(([key,label,min,max])=>
+   '<label class="flow-fx-knob"><span>'+label+'</span><input type="range" min="'+min+'" max="'+max+'" value="'+(Number(track[key])||0)+'" data-flow-fx-param="'+key+'" data-flow-owner="'+esc(track.id)+'" data-flow-fx-id="'+item.id+'" aria-label="'+label+' de '+esc(track.name)+'"><output data-flow-fx-value="'+key+'">'+(Number(track[key])||0)+'</output></label>'
+  ).join('');
+  return '<div class="flow-fx-unit '+(active?'is-active':'is-bypassed')+'" data-flow-fx-unit="'+item.id+'">'+
+    '<button type="button" class="flow-fx-subnode '+(active?'is-active':'')+'" data-flow-effect-toggle="'+item.id+'" data-flow-owner="'+esc(track.id)+'" aria-pressed="'+active+'" title="'+esc(item.hint)+'">'+
+      '<span class="flow-fx-icon">'+FX_ICON[item.id]+'</span><span class="flow-fx-copy"><strong>'+esc(item.label)+'</strong><small>'+esc(item.hint)+'</small></span><span class="flow-fx-state">'+(active?'ON':'OFF')+'</span></button>'+
+    '<div class="flow-fx-controls">'+(controls||'<p class="flow-fx-fixed">Procesamiento automático · botón ON / OFF</p>')+'</div></div>';
+ }).join('');
+ const saved=(presets||[]).map(p=>'<button type="button" class="flow-fx-preset" data-flow-preset="'+esc(p.id)+'" data-flow-owner="'+esc(track.id)+'" title="Aplicar este preset a '+esc(track.name)+'">◈ '+esc(p.name)+'</button>').join('');
+ return '<section class="flow-fx-drawer" data-flow-fx-drawer="'+esc(track.id)+'" aria-label="Efectos de '+esc(track.name)+'">'+
+  '<header class="flow-floating-handle" data-flow-fx-move="'+esc(track.id)+'"><div><strong>FX · '+esc(track.name)+'</strong><small>Activa un efecto y ajusta sus parámetros · original intacto</small></div>'+
+   '<div class="flow-floating-actions"><button type="button" data-flow-save-fx="'+esc(track.id)+'" title="Guardar configuración">Guardar</button><button type="button" data-flow-fx-maximize="'+esc(track.id)+'" title="Ampliar o restaurar">⛶</button><button type="button" data-flow-fx-close="'+esc(track.id)+'" aria-label="Cerrar efectos">×</button></div></header>'+
+  '<div class="flow-fx-grid">'+fx+'</div>'+(saved?'<div class="flow-fx-presets"><small>MIS PRESETS</small>'+saved+'</div>':'')+'</section>';
+}
+function masterFxDrawer(settings={}){
+ const controls=MASTER_FX_CHAIN.map(item=>{
+  const value=Number(settings[item.id])||0;
+  const suffix=item.id==='low'||item.id==='high'?' dB':'%';
+  return '<label class="master-fx-control"><span><strong>'+item.label+'</strong><small>'+esc(item.hint)+'</small></span>'+
+   '<output data-master-fx-value="'+item.id+'">'+value+suffix+'</output>'+
+   '<input type="range" data-master-fx="'+item.id+'" min="'+item.min+'" max="'+item.max+'" step="'+item.step+'" value="'+value+'" aria-label="'+esc(item.hint)+'"></label>';
+ }).join('');
+ return '<section class="master-fx-drawer" data-master-fx-panel>'+
+  '<header class="flow-floating-handle" data-flow-fx-move="master"><div><strong>MASTER FX</strong><small>Efectos de toda la mezcla</small></div>'+
+  '<div class="master-fx-head-actions"><button type="button" data-flow-master-help title="Qué hace el procesamiento global">?</button><label class="master-fx-bypass"><input type="checkbox" data-master-fx-bypass '+(settings.bypass?'checked':'')+'> BYPASS</label><button type="button" data-flow-fx-maximize="master" title="Ampliar">⛶</button><button type="button" data-flow-fx-close="master" aria-label="Cerrar efectos">×</button></div></header>'+
+  '<div class="master-fx-grid">'+controls+'</div></section>';
+}
+function nodeMarkup(track,position,destOptions,selectedId,expanded,presets){
+ const dest=routeFor(track,[track,...destOptions.tracks]);
+ const options=['master',...BUS_IDS.map(id=>'bus:'+id),
+  ...destOptions.tracks.filter(other=>other.id!==track.id&&busForTrack(other)===busForTrack(track)&&canConnect(destOptions.tracks,track.id,'track:'+other.id)).map(other=>'track:'+other.id)];
+ const label=to=>to==='master'?'MASTER OUT':to.startsWith('bus:')?'BUS · '+(BUS_LABELS[to.slice(4)]||to.slice(4).toUpperCase()):'PISTA · '+(destOptions.tracks.find(t=>t.id===to.slice(6))?.name||'');
+ const opts=options.map(to=>'<option value="'+esc(to)+'" '+(dest===to?'selected':'')+'>'+esc(label(to))+'</option>').join('');
+ const activeFx=FX_CHAIN.filter(f=>effectIsActive(track,f.id)).length;
+ const isSample=track.sourceKind==='sample'||busForTrack(track)==='samples',isVoice=!isSample&&busForTrack(track)==='vocals';
+ const kind=isVoice?'VOICE':isSample?'SAMPLE':track.type==='demo'?'BEAT':'TRACK';
+ const wave=Array.from({length:18},(_,i)=>'<i style="--bar:'+((i*17+7)%11+3)+'"></i>').join('');
+ return '<article class="flow-node '+(track.id===selectedId?'flow-node-selected ':'')+(track.muted?'flow-node-off ':'')+
+  (isVoice?'flow-node-voice ':isSample?'flow-node-sample ':'flow-node-track ')+(expanded?'fx-expanded':'')+
+  '" data-flow-track="'+esc(track.id)+'" data-flow-route="'+esc(dest)+'" style="left:'+position.x+'px;top:'+position.y+'px;--flow-accent:'+(isVoice?'#f36aa9':isSample?'#a9d88d':'#55c5e5')+'">'+
+  '<button class="patch-port patch-port-in" data-flow-in="'+esc(track.id)+'" type="button" title="Entrada de '+esc(track.name)+'" aria-label="Entrada de '+esc(track.name)+'"></button>'+
+  '<header class="flow-node-top" data-flow-drag="'+esc(track.id)+'" tabindex="0" aria-label="Arrastrar para mover '+esc(track.name)+'">'+
+   '<span class="flow-source-icon">'+(isVoice?'◉':isSample?'▦':'♫')+'</span><span class="flow-node-name"><strong>'+esc(track.name)+'</strong><small>'+kind+' · '+formatDb(track.volume)+'</small></span>'+
+   '<button type="button" class="flow-sample-grip" draggable="true" data-flow-export-sample="'+esc(track.id)+'" title="Arrastra a SAMPLE DESK para guardar este sonido">♫</button>'+
+   '<span class="flow-move-icon" aria-hidden="true">⠿</span></header>'+
+  '<div class="flow-node-wave" aria-label="Medidor de audio">'+wave+'</div>'+
+  '<div class="flow-node-actions"><button type="button" data-flow-focus="'+esc(track.id)+'">Editar</button>'+
+   '<button type="button" class="flow-fx-trigger" data-flow-expand-fx="'+esc(track.id)+'" aria-expanded="'+expanded+'" aria-controls="fx-'+esc(track.id)+'">FX <span>'+activeFx+'</span></button>'+
+   '<button type="button" data-flow-link="'+esc(track.id)+'" aria-pressed="'+(!track.muted)+'">'+(track.muted?'OFF':'ON')+'</button>'+
+   '<button type="button" class="flow-node-more" data-flow-delete="'+esc(track.id)+'" title="Ocultar nodo">⋯</button></div>'+
+  '<label class="flow-node-route"><span>ENVIAR A</span><select data-flow-destination="'+esc(track.id)+'" aria-label="Destino de '+esc(track.name)+'">'+opts+'</select></label>'+
+  '<button class="patch-port patch-port-out" data-flow-out="'+esc(track.id)+'" type="button" title="Arrastra desde aquí para conectar" aria-label="Salida de '+esc(track.name)+'"></button>'+
+  '</article>';
+}
+export function flowMarkup(tracks,positions={},selectedId=null,pads=[],assets=[],presets=[],expandedFx=[],masterFx={},masterVolume=85,fxWindows={},fxMaximized=null){
+ const visible=tracks.filter(t=>!t.flowHidden),expanded=new Set(expandedFx||[]);
+ const voice=visible.filter(t=>busForTrack(t)==='vocals');
+ const music=visible.filter(t=>['music','samples','fx'].includes(busForTrack(t)));
+ const geom=new Map();let maxRight=FLOW_MIN_WIDTH-470;
+ for(const [lane,items] of [['vocals',voice],['music',music]]){
+  items.forEach((track,index)=>{
+   const stored=positions?.[track.id],pos=stored&&Number.isFinite(stored.x)&&Number.isFinite(stored.y)?
+    flowPosition(track,index,positions):{x:70+index*285,y:lane==='vocals'?125:520};
+   geom.set(track.id,pos);maxRight=Math.max(maxRight,pos.x+FLOW_NODE_WIDTH+70);
+  });
+ }
+ const boardWidth=Math.min(12000,Math.max(FLOW_MIN_WIDTH,maxRight+520));
+ const boardHeight=Math.max(flowHeight(),...Array.from(geom.values(),p=>p.y+300));
+ const busX=boardWidth-500,masterX=boardWidth-260;
+ const nodes=visible.map(track=>nodeMarkup(track,geom.get(track.id),{tracks:visible},selectedId,expanded.has(track.id),presets)).join('');
+ const busY={vocals:165,music:535,samples:655,fx:760};
+ const visibleBusIds=BUS_IDS.filter(id=>id!=='fx'||visible.some(t=>busForTrack(t)==='fx'||routeFor(t,visible)==='bus:fx'));
+ const buses=visibleBusIds.map(id=>{
+  const title=id==='fx'?'FX RETURN':id==='samples'?'SAMPLE BUS':BUS_LABELS[id];
+  const sub=id==='samples'?'Samples reutilizables':id==='fx'?'Efectos auxiliares':'Salida del grupo';
+  return '<button type="button" class="flow-bus-node flow-bus-'+id+'" data-flow-bus="'+id+'" data-flow-in="bus:'+id+'" style="left:'+busX+'px;top:'+busY[id]+'px" title="'+title+' recibe las pistas conectadas">'+
+   '<span class="flow-bus-orb">'+(id==='vocals'?'◉':id==='music'?'≋':id==='samples'?'▦':'✧')+'</span><span><small>SUMADOR</small><strong>'+title+'</strong><small>'+sub+'</small></span></button>';
+ }).join('');
+ const master='<article class="flow-master '+(expanded.has('master')?'fx-expanded':'')+'" id="flowMaster" style="left:'+masterX+'px;top:300px">'+
+  '<button type="button" class="patch-port patch-port-in flow-master-in" data-flow-in="master" title="Entrada de la mezcla" aria-label="Entrada de MASTER"></button>'+
+  '<button type="button" class="flow-master-orb" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'" title="Abrir efectos globales">◉</button>'+
+  '<strong>MASTER OUT</strong><small>Salida final · estéreo</small>'+
+  '<button type="button" class="flow-master-fx" data-flow-expand-fx="master" aria-expanded="'+expanded.has('master')+'">MASTER FX</button>'+
+  '</article>';
+ const laneTags='<div class="patch-lane-title" style="top:28px"><span class="patch-lane-dot voices"></span>01 · VOICE SIGNAL <small>Voces · cada pista tiene sus propios FX</small><button type="button" data-flow-add-voice>＋ Añadir voz</button></div>'+
+  '<div class="patch-lane-title" style="top:430px"><span class="patch-lane-dot music"></span>02 · TRACK SIGNAL <small>Instrumentos, loops y samples</small><button type="button" data-flow-add-track>＋ Añadir pista</button></div>';
+ const emptyVoice=!voice.length?'<div class="flow-lane-empty" style="left:70px;top:115px">Importa una grabación vocal o pulsa «Añadir voz».</div>':'';
+ const emptyMusic=!music.length?'<div class="flow-lane-empty" style="left:70px;top:410px">Añade una base, un loop o un sample.</div>':'';
+ const dock='<button type="button" class="patch-sample-dock" data-flow-sample-dock title="Arrastra aquí cualquier nodo para guardar su audio en la biblioteca"><span>▦</span><span><strong>SAMPLE DESK</strong><small>Arrastra un nodo aquí para guardarlo como sample</small></span><b>↗</b></button>';
+ const guide=!visible.length?'<div class="flow-onboarding"><span><b>1</b> Añade una voz o una pista</span><span><b>2</b> Abre FX dentro del nodo</span><span><b>3</b> Conecta OUT → IN o guarda en Sample Desk</span></div>':'';
+ const emptyConsole=!visible.length?'<div class="android-canvas-empty" role="group" aria-label="Comenzar una mezcla"><div class="android-canvas-emblem" aria-hidden="true"><span>◉</span><i></i><span>⌁</span><i></i><span>◎</span></div><small>NO HAY SEÑAL / PATCH 000</small><strong>Enciende tu flujo de sonido</strong><p>Graba una voz o importa una pista para crear el primer módulo. Después conecta su salida y abre sus efectos.</p><div><button type="button" data-flow-add-voice>● GRABAR VOZ</button><button type="button" data-flow-add-track>＋ IMPORTAR AUDIO</button></div></div>':'';
+ const transport='<div class="flow-mini-transport"><button type="button" data-flow-play aria-label="Reproducir o pausar">▶</button><button type="button" data-flow-stop aria-label="Detener">■</button><label><span>MASTER</span><input type="range" min="0" max="100" data-flow-master-volume value="'+(Number(masterVolume)||0)+'" aria-label="Volumen Master"></label></div>';
+ const floating=[...expanded].filter(id=>id==='master'||visible.some(t=>t.id===id)).map(id=>{
+  const track=visible.find(t=>t.id===id),p=fxWindows?.[id]||{x:80,y:100},max=fxMaximized===id;
+  const content=id==='master'?masterFxDrawer(masterFx):trackFxDrawer(track,presets);
+  return '<div class="flow-floating-panel '+(max?'is-maximized':'')+'" data-flow-fx-window="'+esc(id)+'" style="left:'+Math.max(0,Number(p.x)||0)+'px;top:'+Math.max(0,Number(p.y)||0)+'px">'+content+'</div>';
+ }).join('');
+ const viewControls='<div class="flow-view-tools" aria-label="Navegación del canvas"><button type="button" data-flow-zoom-out aria-label="Alejar">−</button><output id="flowZoomLabel">100%</output><button type="button" data-flow-zoom-in aria-label="Acercar">+</button><button type="button" data-flow-fit title="Ver todos los nodos">Ajustar</button><span>Arrastra el fondo para moverte</span></div>';
+ return '<div class="patch-main"><div class="patch-toolbar"><span class="patch-live-dot"></span><strong>SIGNAL FLOW</strong><span>Conecta salida → entrada · los FX viven dentro de cada pista</span>'+transport+dock+'</div>'+guide+
+  '<div class="flow-board-scroller" id="flowCanvasScroller"><div class="flow-canvas-space" id="flowCanvasSpace" style="width:'+boardWidth+'px;height:'+boardHeight+'px"><div class="flow-board" id="flowBoard" style="width:'+boardWidth+'px;height:'+flowHeight()+'px">'+
+  '<svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>'+laneTags+emptyVoice+emptyMusic+nodes+buses+master+'</div></div></div>'+emptyConsole+viewControls+'<div class="flow-fx-layer" id="flowFxLayer">'+floating+'</div>'+
+  '<p class="flow-footnote"><strong>Empieza:</strong> añade una voz o pista, abre FX para modificar solo ese sonido y conecta su salida con otra entrada. MASTER FX modifica toda la mezcla. Arrastra el icono ♫ de cualquier nodo a SAMPLE DESK para guardar una copia original o procesada.</p></div>';
 }
 export function wireCurve(ax,ay,bx,by,energy=0,time=0){
-  const dx=bx-ax,dy=by-ay,length=Math.hypot(dx,dy)||1,amplitude=Math.min(55,Math.max(0,energy)*55);
-  const normalX=-dy/length,normalY=dx/length,segments=9;
-  let d='M '+ax.toFixed(1)+' '+ay.toFixed(1);
-  for(let i=0;i<segments;i++){
-    const u=(i+.5)/segments,v=(i+1)/segments;
-    const envelope=Math.sin(Math.PI*u);
-    const vibration=Math.sin(time*.032+i*1.9+ax*.012)*amplitude*envelope;
-    const cx=ax+dx*u+normalX*vibration,cy=ay+dy*u+normalY*vibration;
-    const ex=ax+dx*v,ey=ay+dy*v;
-    d+=' Q '+cx.toFixed(1)+' '+cy.toFixed(1)+' '+ex.toFixed(1)+' '+ey.toFixed(1);
-  }
-  return d;
+ const dx=bx-ax,dy=by-ay,length=Math.hypot(dx,dy)||1,amp=Math.min(21,Math.max(0,energy)*24);
+ const nx=-dy/length,ny=dx/length;
+ let d='M '+ax.toFixed(1)+' '+ay.toFixed(1);
+ for(let i=0;i<6;i++){const u=(i+.5)/6,v=(i+1)/6,ripple=Math.sin(time*.026+i*1.8+ax*.012)*amp*Math.sin(Math.PI*u);
+  d+=' Q '+(ax+dx*u+nx*ripple).toFixed(1)+' '+(ay+dy*u+ny*ripple).toFixed(1)+' '+(ax+dx*v).toFixed(1)+' '+(ay+dy*v).toFixed(1);}
+ return d;
 }
-// Layout cache is keyed by the current board DOM node. Normal playback only
-// updates existing SVG 'd' attributes and glow transforms, NOT boxes or HTML.
 const flowGeometryCache=new WeakMap();
-export function invalidateFlowWireGeometry(root){
-  const board=root?.querySelector('#flowBoard');
-  if(board)flowGeometryCache.delete(board);
-}
-function getFlowGeometry(board,svg,master){
-  const cached=flowGeometryCache.get(board);
-  if(cached)return cached;
-  const parent=board.getBoundingClientRect(),target=master.getBoundingClientRect();
-  const mx=target.left-parent.left+4,my=target.top-parent.top+target.height/2;
-  svg.setAttribute('viewBox','0 0 '+Math.round(parent.width)+' '+Math.round(parent.height));
-  const existing=new Map(Array.from(svg.querySelectorAll('[data-flow-wire]')).map(el=>[el.dataset.flowWire,el]));
-  const entries=[];
-  for(const node of board.querySelectorAll('[data-flow-track]')){
-    const id=node.dataset.flowTrack,r=node.getBoundingClientRect();
-    let path=existing.get(id);
-    if(!path){
-      path=document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('data-flow-wire',id);
-      path.classList.add('flow-wire');
-      svg.appendChild(path);
-    }
-    entries.push({
-      id,path,node,glow:node.querySelector('.flow-source-icon'),
-      x:r.right-parent.left,y:r.top-parent.top+r.height/2,
-      mx,my,level:0
-    });
-    existing.delete(id);
-  }
-  for(const stale of existing.values())stale.remove();
-  const layout={entries};
-  flowGeometryCache.set(board,layout);
-  return layout;
+export function invalidateFlowWireGeometry(root){const board=root?.querySelector('#flowBoard');if(board)flowGeometryCache.delete(board);}
+function getFlowGeometry(board,svg){
+ const cached=flowGeometryCache.get(board);if(cached)return cached;
+ const rect=board.getBoundingClientRect(),entries=[],width=board.offsetWidth||rect.width,height=board.offsetHeight||rect.height,scale=rect.width/Math.max(1,width)||1;
+ svg.setAttribute('viewBox','0 0 '+Math.round(width)+' '+Math.round(height));
+ const point=(el,side)=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:((side==='right'?r.right:r.left)-rect.left)/scale,y:(r.top-rect.top+r.height/2)/scale};};
+ const add=(id,from,to,owner,busId)=>{if(from&&to)entries.push({id,from,to,owner,busId,level:0,path:null});};
+ const findInput=el=>el?.querySelector?.('[data-flow-in]')||el;
+ const master=board.querySelector('#flowMaster');
+ for(const card of board.querySelectorAll('[data-flow-track]')){
+  const id=card.dataset.flowTrack,dest=card.dataset.flowRoute;
+  const target=dest==='master'?master:dest.startsWith('track:')?
+   Array.from(board.querySelectorAll('[data-flow-track]')).find(el=>el.dataset.flowTrack===dest.slice(6)):
+   Array.from(board.querySelectorAll('[data-flow-bus]')).find(el=>el.dataset.flowBus===dest.slice(4));
+  add(id+':out',point(card.querySelector('[data-flow-out]'),'right'),point(findInput(target),'left'),id,null);
+ }
+ for(const bus of board.querySelectorAll('[data-flow-bus]'))add('bus:'+bus.dataset.flowBus,point(bus,'right'),point(master,'left'),null,bus.dataset.flowBus);
+ const old=new Map(Array.from(svg.querySelectorAll('[data-flow-wire]')).map(el=>[el.dataset.flowWire,el]));
+ for(const entry of entries){let path=old.get(entry.id);if(!path){path=document.createElementNS('http://www.w3.org/2000/svg','path');path.dataset.flowWire=entry.id;path.classList.add('flow-wire');svg.appendChild(path);}entry.path=path;old.delete(entry.id);}
+ for(const path of old.values())path.remove();
+ const result={entries};flowGeometryCache.set(board,result);return result;
 }
 export function updateFlowWires(root,tracks,engine,animate=true,time=0){
-  const board=root?.querySelector('#flowBoard'),svg=root?.querySelector('#flowWires'),master=root?.querySelector('#flowMaster');
-  if(!board||!svg||!master)return;
-  const layout=getFlowGeometry(board,svg,master);
-  const byId=new Map(tracks.map(track=>[track.id,track]));
-  for(const entry of layout.entries){
-    const track=byId.get(entry.id);
-    if(!track)continue;
-    const audible=animate&&!track.muted;
-    // Smooth both transient attacks and decay; no playback UI rendering required.
-    const rms=audible?Math.max(0,Number(engine.getTrackMeter(track.id)?.rms)||0):0;
-    const target=audible?Math.min(1,Math.sqrt(rms)*3.2):0;
-    entry.level=audible?entry.level+(target-entry.level)*(target>entry.level?.43:.19):0;
-    const energy=entry.level;
-    const path=entry.path;
-    path.setAttribute('d',wireCurve(entry.x,entry.y,entry.mx,entry.my,energy,audible?time:0));
-    path.classList.toggle('flow-wire-off',!!track.muted);
-    path.style.setProperty('--flow-wire-color',audible?'#159dfb':(track.color||'#9da9ca'));
-    path.style.strokeWidth=audible?(3+energy*4.4).toFixed(2)+'px':'3px';
-    if(entry.glow)entry.glow.style.transform=audible&&energy>.025?'scale('+(1+energy*.16).toFixed(3)+')':'scale(1)';
-  }
+ const board=root?.querySelector('#flowBoard'),svg=root?.querySelector('#flowWires');if(!board||!svg)return;
+ const layout=getFlowGeometry(board,svg),byId=new Map(tracks.map(t=>[t.id,t])),trackMeters=new Map(),busMeters=new Map();
+ const trackMeter=id=>{
+  if(trackMeters.has(id))return trackMeters.get(id);
+  const track=byId.get(id),value=animate&&track&&!track.muted?engine.getTrackMeter?.(id):null;
+  trackMeters.set(id,value);return value;
+ };
+ const busMeter=id=>{
+  if(busMeters.has(id))return busMeters.get(id);
+  const value=animate?engine.getBusMeter?.(id):null;busMeters.set(id,value);return value;
+ };
+ for(const entry of layout.entries){
+  const track=byId.get(entry.owner),busId=entry.busId;
+  const meter=busId?busMeter(busId):track?trackMeter(track.id):null;
+  const rms=Number(meter?.rms)||0,target=animate?Math.min(1,Math.sqrt(Math.max(0,rms))*3):0;
+  entry.level+=(target-entry.level)*(target>entry.level?.35:.16);
+  entry.path.setAttribute('d',wireCurve(entry.from.x,entry.from.y,entry.to.x,entry.to.y,entry.level,animate?time:0));
+  entry.path.classList.toggle('flow-wire-off',!!track?.muted);
+  entry.path.style.setProperty('--flow-wire-color',busId?'#ff9b52':track?.type==='voice'?'#f36aa9':'#55c5e5');
+  entry.path.style.strokeWidth=(2.4+entry.level*3.5).toFixed(2)+'px';
+ }
+ for(const card of board.querySelectorAll('[data-flow-track]')){
+  const track=byId.get(card.dataset.flowTrack),meter=track?trackMeter(track.id):null,rms=Number(meter?.rms)||0;
+  const active=!!animate&&!track?.muted&&rms>.002;
+  card.classList.toggle('is-playing',active);
+  card.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));
+ }
+ for(const bus of board.querySelectorAll('[data-flow-bus]')){
+  const meter=busMeter(bus.dataset.flowBus),rms=Number(meter?.rms)||0;
+  bus.classList.toggle('is-playing',!!animate&&rms>.002);
+  bus.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));
+ }
+ const master=board.querySelector('#flowMaster'),meter=animate?engine.getMasterMeter?.():null,rms=Number(meter?.rms)||0;
+ if(master){master.classList.toggle('is-playing',!!animate&&rms>.002);master.style.setProperty('--flow-energy',String(Math.min(1,Math.sqrt(Math.max(0,rms))*3)));}
 }

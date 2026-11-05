@@ -3,6 +3,17 @@
  */
 export const PAD_COUNT=12;
 export const MAX_SAMPLE_SECONDS=30;
+/** Built-in non-destructive pad colors. Every value maps to a REAL WebAudio processor. */
+export const SAMPLE_FX=Object.freeze({
+ original:{name:'Original · sin FX',settings:{bypassEffects:true}},
+ velvet:{name:'Velvet cálido',settings:{clean:32,brightness:46,warmth:72,drive:8,space:15,echo:0}},
+ echo:{name:'Eco nocturno',settings:{clean:18,brightness:63,warmth:28,drive:2,echo:45,space:34}},
+ loFi:{name:'Cassette lo-fi',settings:{clean:65,brightness:23,warmth:75,drive:33,space:9}},
+ cartoon:{name:'Caricatura aguda',settings:{pitchShift:7,drive:14,brightness:89,warmth:8,autotune:26,retune:68}},
+ bass:{name:'Grave profundo',settings:{pitchShift:-6,drive:16,brightness:27,warmth:82,autotune:10,retune:35}}
+});
+export const sampleEffect=id=>SAMPLE_FX[id]||SAMPLE_FX.original;
+
 export const PAD_KEYS=Object.freeze(['1','2','3','4','5','6','7','8','9','0','-','=']);
 export function safePadName(name,index){
   return String(name||'Sample '+String(index+1).padStart(2,'0')).replace(/[\u0000-\u001f]/g,'').trim().slice(0,36)||'Sample '+(index+1);

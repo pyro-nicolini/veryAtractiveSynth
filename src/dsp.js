@@ -11,7 +11,7 @@ export const PRESETS = {
   dream: {label:'Sueño espacial',autotune:65,retune:50,clean:38,brightness:60,warmth:38,echo:32,space:68,drive:0},
   vintage: {label:'Radio vintage',autotune:0,retune:35,clean:28,brightness:33,warmth:68,echo:5,space:10,drive:25},
 };
-export function defaults() {return {autotune:0,retune:60,clean:25,brightness:50,warmth:20,echo:0,space:8,drive:0,volume:85,pan:0,fadeIn:0,fadeOut:0,trimStart:0,trimEnd:0,offset:0,key:0,scale:0,muted:false,solo:false,bypassEffects:false,fxBypass:{},tuneX:.16,tuneY:-1,tunePreset:'natural',preset:'natural'};}
+export function defaults() {return {autotune:0,retune:60,clean:25,brightness:50,warmth:20,echo:0,space:8,drive:0,volume:85,pan:0,fadeIn:0,fadeOut:0,trimStart:0,trimEnd:0,offset:0,key:0,scale:0,tuneNoteMask:null,muted:false,solo:false,bypassEffects:false,fxBypass:{},tuneX:.16,tuneY:-1,tunePreset:'natural',preset:'natural'};}
 export function clamp(value,min,max) {return Math.min(max,Math.max(min,Number(value)||0));}
 export function clock(seconds) { const s=Math.max(0,Math.floor(seconds||0)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 export function effectiveDuration(track) {

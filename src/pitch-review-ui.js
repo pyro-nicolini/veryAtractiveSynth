@@ -29,9 +29,9 @@ export function drawPitchWave(canvas,buffer,regions=[]){
  const w=Math.max(1,Math.round(box.width*dpr)),h=Math.max(1,Math.round(box.height*dpr));
  if(canvas.width!==w)canvas.width=w;if(canvas.height!==h)canvas.height=h;
  const ctx=canvas.getContext('2d');if(!ctx)return;
- ctx.clearRect(0,0,w,h);ctx.fillStyle='#e5edf8';ctx.fillRect(0,0,w,h);
+ ctx.clearRect(0,0,w,h);ctx.fillStyle='#13272c';ctx.fillRect(0,0,w,h);
  const source=buffer.getChannelData(0),perPixel=source.length/w;
- ctx.strokeStyle='#6a8dd0';ctx.lineWidth=Math.max(1,dpr);
+ ctx.strokeStyle='#7bdad4';ctx.lineWidth=Math.max(1,dpr);
  ctx.beginPath();
  for(let x=0;x<w;x+=2){
    const from=Math.floor(x*perPixel),to=Math.min(source.length,Math.max(from+1,Math.floor((x+2)*perPixel)));
@@ -41,5 +41,5 @@ export function drawPitchWave(canvas,buffer,regions=[]){
    ctx.moveTo(x,h/2-range);ctx.lineTo(x,h/2+range);
  }
  ctx.stroke();
- ctx.strokeStyle='#acb8c9';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();
+ ctx.strokeStyle='#49666a';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();
 }

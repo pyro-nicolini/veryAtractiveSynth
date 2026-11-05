@@ -1,11 +1,15 @@
-import {clamp,effectiveDuration,projectDuration,encodeWav} from './dsp.js';
+import {clamp,effectiveDuration,projectDuration,encodeWav,defaults} from './dsp.js';
+import {normaliseAutomation,sampleAutomation} from './automation.js';
 import {assembleRecording} from './recording-utils.js';
 import {decodeWav,isWav,decodeCaf,isCaf} from './audio-import.js';
 import {BUS_IDS,busForTrack,sanitiseBuses,meterStats} from './studio-mixer.js';
+import {loudnessStats} from './loudness.js';
 import {clipsOf,clipDuration,validLoop} from './track-clips.js';
 import {assembleSessionStereo} from './session-recording.js';
 import {loopBoundaryFades} from './loop-guard.js';
 import {clipSpeed} from './clip-edit.js';
+import {wireAudioGraphs} from './flow-routing.js';
+import {MASTER_FX_DEFAULTS,sanitiseMasterFx} from './master-fx.js';
 
 const WORKLET_URL = new URL('./worklets/voice-processor.js',import.meta.url);
 const CAPTURE_URL = new URL('./worklets/capture-processor.js',import.meta.url);
@@ -32,14 +36,45 @@ function impulse(ctx,length=1.8){
   }
   return buffer;
 }
-function makeMaster(ctx,destination,volume){
-  const gain=ctx.createGain();gain.gain.value=volume/100;
+function applyMasterFx(graph,settings,ctx){
+  const fx=sanitiseMasterFx(settings),now=ctx.currentTime||0,set=(param,value)=>param.setTargetAtTime(value,now,.02);
+  const off=fx.bypass;
+  set(graph.low.gain,off?0:fx.low);
+  set(graph.high.gain,off?0:fx.high);
+  const drive=off?0:fx.drive;
+  if(graph.lastDrive!==drive){graph.drive.curve=saturationCurve(drive);graph.lastDrive=drive;}
+  const compression=off?0:fx.compression;
+  set(graph.compressor.ratio,compression?1+compression/100*7:1);
+  set(graph.compressor.threshold,compression?-6-compression*.32:0);
+  set(graph.delayWet.gain,off?0:fx.delay/100*.24);
+  set(graph.reverbWet.gain,off?0:fx.reverb/100*.24);
+  graph.settings=fx;
+}
+function makeMaster(ctx,destination,masterVolume,settings=MASTER_FX_DEFAULTS){
+  // The input node is the stable destination for buses; the master fader
+  // lives after processing so moving it never changes drive/compression.
+  const gain=ctx.createGain();gain.gain.value=1;
+  const masterFader=ctx.createGain();masterFader.gain.value=masterVolume/100;
+  const low=ctx.createBiquadFilter();low.type='lowshelf';low.frequency.value=150;
+  const high=ctx.createBiquadFilter();high.type='highshelf';high.frequency.value=7000;
+  const drive=ctx.createWaveShaper();drive.oversample='2x';
+  const compressor=ctx.createDynamicsCompressor();compressor.knee.value=9;compressor.attack.value=.012;compressor.release.value=.18;
+  const dry=ctx.createGain(),delay=ctx.createDelay(1.5),delayWet=ctx.createGain(),feedback=ctx.createGain();
+  delay.delayTime.value=.24;feedback.gain.value=.18;
+  const delaySum=ctx.createGain(),convolver=ctx.createConvolver();convolver.buffer=impulse(ctx,2.1);
+  const reverbWet=ctx.createGain(),reverbSum=ctx.createGain();
   const limiter=ctx.createDynamicsCompressor();
   limiter.threshold.value=-3;limiter.knee.value=3;limiter.ratio.value=16;
   limiter.attack.value=.003;limiter.release.value=.14;
   const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.35;
-  gain.connect(limiter);limiter.connect(meter);meter.connect(destination);
-  return {gain,limiter,meter};
+  gain.connect(low);low.connect(high);high.connect(drive);drive.connect(compressor);
+  compressor.connect(dry);dry.connect(delaySum);
+  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(delaySum);delay.connect(feedback);feedback.connect(delay);
+  delaySum.connect(reverbSum);delaySum.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(reverbSum);
+  reverbSum.connect(limiter);limiter.connect(masterFader);masterFader.connect(meter);meter.connect(destination);
+  const graph={gain,masterFader,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,meter,
+    nodes:[gain,low,high,drive,compressor,dry,delay,delayWet,feedback,delaySum,convolver,reverbWet,reverbSum,limiter,masterFader,meter]};
+  applyMasterFx(graph,settings,ctx);return graph;
 }
 function makeBus(ctx,destination,percent){
   const gain=ctx.createGain(),meter=ctx.createAnalyser();
@@ -75,6 +110,16 @@ function setParams(graph,track,ctx){
   graph.voice.parameters.get('clean').setTargetAtTime(disabled.clean?0:clamp(track.clean,0,100)/100,now,.013);
   graph.voice.parameters.get('key').setValueAtTime(clamp(track.key,0,11),now);
   graph.voice.parameters.get('scale').setValueAtTime(clamp(track.scale,0,2),now);
+  const noteMask=Number.isInteger(track.tuneNoteMask)&&track.tuneNoteMask>0&&track.tuneNoteMask<=4095?track.tuneNoteMask:null;
+  if(graph.lastTuneNoteMask!==noteMask){graph.voice.port?.postMessage({type:'note-mask',mask:noteMask});graph.lastTuneNoteMask=noteMask;}
+}
+function scheduleTrackAutomation(graph,track,ctx,from,startCtx){
+  const points=normaliseAutomation(track?.automation?.pitchShift,-12,12),param=graph?.voice?.parameters?.get('shift');
+  const drivePoints=normaliseAutomation(track?.automation?.drive,0,100),driveParam=graph?.voice?.parameters?.get('drive');
+  if(!param&&!driveParam)return;
+  const duration=Math.max(0,projectDuration([track]));
+  if(param&&points.length){const initial=sampleAutomation(points,from,-12,12);param.cancelScheduledValues(startCtx);param.setValueAtTime(initial,startCtx);for(const point of points){if(point.time<=from||point.time>from+duration)continue;param.linearRampToValueAtTime(point.value,startCtx+point.time-from);}}
+  if(driveParam&&drivePoints.length){const initial=sampleAutomation(drivePoints,from,0,100);driveParam.cancelScheduledValues(startCtx);driveParam.setValueAtTime(initial,startCtx);for(const point of drivePoints){if(point.time<=from||point.time>from+duration)continue;driveParam.linearRampToValueAtTime(point.value,startCtx+point.time-from);}}
 }
 function createGraph(ctx,track,destination,ir){
   const input=ctx.createGain();
@@ -91,21 +136,34 @@ function createGraph(ctx,track,destination,ir){
   const delayFeedback=ctx.createGain();delayFeedback.gain.value=.27;delay.delayTime.value=.28;
   const convolver=ctx.createConvolver();convolver.buffer=ir;
   const reverbWet=ctx.createGain(),sum=ctx.createGain();
+  const delaySum=ctx.createGain(),reverbSum=ctx.createGain();
   const processedBus=ctx.createGain(),bypassBus=ctx.createGain();
   const pan=ctx.createStereoPanner(),volume=ctx.createGain();
   input.connect(voice);voice.connect(hp);hp.connect(lp);lp.connect(low);
   low.connect(high);high.connect(drive);drive.connect(compressor);
-  compressor.connect(dry);dry.connect(processedBus);
-  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(processedBus);
+  // Actual signal order: COMP → DELAY (dry/wet) → REVERB (dry/wet).
+  // Both FX stages remain non-destructive and zero-wet transparently bypasses.
+  compressor.connect(dry);dry.connect(delaySum);
+  compressor.connect(delay);delay.connect(delayWet);delayWet.connect(delaySum);
   delay.connect(delayFeedback);delayFeedback.connect(delay);
-  compressor.connect(convolver);convolver.connect(reverbWet);reverbWet.connect(processedBus);
+  delaySum.connect(reverbSum);delaySum.connect(convolver);
+  convolver.connect(reverbWet);reverbWet.connect(reverbSum);
+  reverbSum.connect(processedBus);
   input.connect(bypassBus);bypassBus.connect(sum);processedBus.connect(sum);
   const meter=ctx.createAnalyser();meter.fftSize=1024;meter.smoothingTimeConstant=.4;
   sum.connect(pan);pan.connect(volume);volume.connect(meter);meter.connect(destination);
   const graph={input,voice,hp,lp,low,high,drive,compressor,pan,volume,delayWet,reverbWet,processedBus,bypassBus,meter,meterData:new Float32Array(1024),
-    nodes:[input,voice,hp,lp,low,high,drive,compressor,dry,delay,delayWet,delayFeedback,convolver,reverbWet,sum,processedBus,bypassBus,pan,volume,meter]};
+    nodes:[input,voice,hp,lp,low,high,drive,compressor,dry,delay,delayWet,delayFeedback,delaySum,convolver,reverbWet,reverbSum,sum,processedBus,bypassBus,pan,volume,meter]};
   setParams(graph,track,ctx);
   return graph;
+}
+function createDryGraph(ctx,track,destination){
+  // A genuine no-FX render. No voice worklet, pitch regions, delay or reverb.
+  const input=ctx.createGain(),pan=ctx.createStereoPanner(),gain=ctx.createGain();
+  pan.pan.value=clamp(track.pan,-100,100)/100;
+  gain.gain.value=clamp(track.volume,0,100)/100;
+  input.connect(pan);pan.connect(gain);gain.connect(destination);
+  return {input};
 }
 function disposeGraph(graph){
   if(!graph)return;
@@ -187,7 +245,7 @@ function scheduleClip(ctx,track,graph,from,timeOrigin){
   return src;
 }
 export class AudioEngine {
-  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
+  constructor(){this.ctx=null;this.output=null;this.graphs=new Map();this.sources=[];this.playing=false;this.startCtxTime=0;this.from=0;this.duration=0;this.masterVolume=85;this.masterFx={...MASTER_FX_DEFAULTS};this.lastExportStats=null;this.live=null;this.mic=null;this.capture=null;this.metronomeEnabled=false;this.bpm=104;this.metroTimer=null;this.nextBeatTime=0;this.beatIndex=0;this.masterData=new Float32Array(1024);this.pitchListener=null;this.pitchTrackId=null;this.busSettings=sanitiseBuses();this.buses=new Map();this.sessionCapture=null;}
   async ready(){
     if(!this.ctx){
       const context=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
@@ -195,7 +253,7 @@ export class AudioEngine {
       await context.audioWorklet.addModule(WORKLET_URL);
       await context.audioWorklet.addModule(CAPTURE_URL);
       await context.audioWorklet.addModule(SESSION_URL);
-      this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume);
+      this.ctx=context;this.output=makeMaster(context,context.destination,this.masterVolume,this.masterFx);
     }
     if(this.ctx.state==='suspended')await this.ctx.resume();
     return this.ctx;
@@ -220,11 +278,16 @@ export class AudioEngine {
 
   setMaster(value){
     this.masterVolume=clamp(value,0,100);
-    if(this.output)this.output.gain.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
+    if(this.output)this.output.masterFader.gain.setTargetAtTime(this.masterVolume/100,this.ctx.currentTime,.02);
   }
   setBuses(settings){
     this.busSettings=sanitiseBuses(settings);
     for(const [id,bus] of this.buses)bus.gain.gain.setTargetAtTime(this.busSettings[id]/100,this.ctx.currentTime,.02);
+  }
+  setMasterFx(settings){
+    this.masterFx=sanitiseMasterFx(settings);
+    if(this.output&&this.ctx)applyMasterFx(this.output,this.masterFx,this.ctx);
+    return {...this.masterFx};
   }
   getTrackMeter(id){
     const graph=this.graphs.get(id);
@@ -262,7 +325,7 @@ export class AudioEngine {
     gain.gain.setValueAtTime(.0001,time);
     gain.gain.exponentialRampToValueAtTime(accent?.12:.08,time+.002);
     gain.gain.exponentialRampToValueAtTime(.0001,time+.055);
-    osc.connect(gain);gain.connect(this.output.gain);
+    osc.connect(gain);gain.connect(this.output.masterFader);
     osc.start(time);osc.stop(time+.065);
     osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch{}};
   }
@@ -307,15 +370,19 @@ export class AudioEngine {
     const solo=tracks.some(t=>t.solo);
     const ir=impulse(ctx);
     for(const id of BUS_IDS)this.buses.set(id,makeBus(ctx,this.output.gain,this.busSettings[id]));
+    // Allocate every processor before linking nodes: a track may feed another
+    // track's input, so destinations need to exist before sources are scheduled.
     for(const track of tracks){
-      // Keep muted sources scheduled at zero channel gain so a disconnected
-      // flow node can reconnect smoothly without resetting the timeline.
-      if(solo&&!track.solo)continue;
-      const segments=clipsOf(track).filter(clip=>clipDuration(clip)>=.002);
-      if(!segments.length)continue;
       const graph=createGraph(ctx,track,this.buses.get(busForTrack(track)).gain,ir);
       this.graphs.set(track.id,graph);
-      for(const clip of segments){
+    }
+    try{wireAudioGraphs(tracks,this.graphs,this.buses,this.output.gain);}
+    catch(error){this.stop();throw error;}
+    for(const track of tracks){
+      if(solo&&!track.solo)continue;
+      const graph=this.graphs.get(track.id);
+      scheduleTrackAutomation(graph,track,ctx,this.from,this.startCtxTime);
+      for(const clip of clipsOf(track).filter(c=>clipDuration(c)>=.002)){
         const source=scheduleClip(ctx,clip,graph,this.from,this.startCtxTime);
         if(source)this.sources.push(source);
       }
@@ -523,7 +590,20 @@ export class AudioEngine {
     }
   }
 
-  async exportMix(tracks,{depth=24,rate=48000,onlyId=null}={}){
+  /** Audition sample through the same processors used in WAV bounce. */
+  async previewSample(buffer,from,to,settings={}){
+    const ctx=await this.ready();
+    const track={...defaults(),...settings,volume:85,muted:false};
+    const graph=createGraph(ctx,track,this.output.gain,impulse(ctx));
+    const source=ctx.createBufferSource();
+    source.buffer=buffer;source.connect(graph.input);
+    source.onended=()=>{try{source.disconnect();}catch{}disposeGraph(graph);};
+    try{source.start(ctx.currentTime,from,to-from);}
+    catch(error){source.disconnect();disposeGraph(graph);throw error;}
+    return source;
+  }
+
+  async exportMix(tracks,{depth=24,rate=48000,onlyId=null,dry=false}={}){
     if(!tracks.length)throw Error('Primero agrega sonidos');
     const included=onlyId?tracks.filter(t=>t.id===onlyId):tracks;
     const active=included.filter(t=>!t.muted&&(!included.some(x=>x.solo)||t.solo));
@@ -531,22 +611,32 @@ export class AudioEngine {
     const duration=projectDuration(active);
     if(!duration)throw Error('No hay audio que exportar');
     if(duration>60*20)throw Error('El render local admite hasta 20 minutos por exportación');
-    const hasReverb=active.some(track=>Number(track.space)>0);
-    const hasDelay=active.some(track=>Number(track.echo)>0);
-    const tail=hasReverb?1.9:hasDelay?1.1:.08;
+    const hasReverb=!dry&&(active.some(track=>Number(track.space)>0)||this.masterFx.reverb>0&&!this.masterFx.bypass);
+    const hasDelay=!dry&&(active.some(track=>Number(track.echo)>0)||this.masterFx.delay>0&&!this.masterFx.bypass);
+    const tail=hasReverb?2.35:hasDelay?1.15:.08;
     // Account for the effects tail so the end is not truncated.
     const offline=new OfflineAudioContext(2,Math.ceil((duration+tail)*rate),rate);
-    if(!offline.audioWorklet)throw Error('Este navegador no permite aplicar afinación y limpieza durante la exportación. Usa Chrome o Edge actualizados.');
-    try{await offline.audioWorklet.addModule(WORKLET_URL);}
-    catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
-    const output=makeMaster(offline,offline.destination,this.masterVolume);
+    if(!dry){
+      if(!offline.audioWorklet)throw Error('Este navegador no permite aplicar efectos durante la exportación. Usa Chrome o Edge actualizados.');
+      try{await offline.audioWorklet.addModule(WORKLET_URL);}
+      catch{throw Error('No se pudo cargar el motor de efectos para exportar. Nada se exportó sin efectos.');}
+    }
+    const output=makeMaster(offline,offline.destination,this.masterVolume,dry?MASTER_FX_DEFAULTS:this.masterFx);
     const ir=impulse(offline);
     const exportBuses=new Map(BUS_IDS.map(id=>[id,makeBus(offline,output.gain,this.busSettings[id])]));
+    const graphs=new Map();
     for(const track of active){
-      const graph=createGraph(offline,track,exportBuses.get(busForTrack(track)).gain,ir);
-      for(const clip of clipsOf(track))scheduleClip(offline,clip,graph,0,0);
+      const target=exportBuses.get(busForTrack(track)).gain;
+      graphs.set(track.id,dry?createDryGraph(offline,track,target):createGraph(offline,track,target,ir));
+    }
+    if(!dry)wireAudioGraphs(active,graphs,exportBuses,output.gain);
+    for(const track of active){
+      const graph=graphs.get(track.id);
+      for(const clip of clipsOf(track))
+        scheduleClip(offline,dry?{...clip,pitchRegions:[],pitchShift:0}:clip,graph,0,0);
     }
     const rendered=await offline.startRendering();
+    this.lastExportStats=loudnessStats(rendered);
     return encodeWav(rendered,depth);
   }
 }

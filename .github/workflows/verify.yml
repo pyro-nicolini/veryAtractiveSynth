@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, DesignPhase]
   pull_request:
-    branches: [main, DesignPhase]
+    branches: [main, DesignPhase, feat/red-velvet-flow-export, feat/signal-flow-rework-v2]
 permissions:
   contents: read
 jobs:
@@ -19,6 +19,7 @@ jobs:
         run: |
           node --check server.js
           node --check src/app.js
+          node --check src/splash.js
           node --check src/engine.js
           node --check src/dsp.js
           node --check src/project-store.js
@@ -30,14 +31,17 @@ jobs:
           node --check src/session-recording.js
           node --check src/worklets/session-processor.js
           node --check src/fx-rack.js
+          node --check src/master-fx.js
           node --check src/studio-mixer.js
           node --check src/studio-mixer-ui.js
           node --check src/sample-bank.js
           node --check src/sample-pad-store.js
           node --check src/sample-deck.js
+          node --check src/sample-library.js
           node --check src/studio-library.js
           node --check src/library-ui.js
           node --check src/flow-studio.js
+          node --check src/flow-viewport.js
           node --check src/loop-guard.js
           node --check src/clip-edit.js
           node --check src/pitch-coach.js

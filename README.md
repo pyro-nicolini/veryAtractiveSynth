@@ -9,8 +9,34 @@
 - 🥁 **Crear música:** ritmos originales, varias pistas, volumen, mezcla y efectos.
 - ◫ **Sample Deck:** 12 pads de vidrio para cargar sonidos, cortarlos, nombrarlos, guardarlos y tocarlos en vivo. Cada pad tiene su minionda real.
 - ✂️ **Editar libremente:** mover, recortar, repetir, duplicar y cambiar la velocidad de clips; zoom en la línea de tiempo.
-- 🪐 **Flow Studio:** conecta/desconecta pistas y arrastra efectos.
+- 🔗 **Signal Flow:** conecta la salida de una pista con la entrada de otra, usa buses reales y arrastra procesadores o samples al editor.
 - 💾 **Exportar:** WAV, pistas separadas y proyectos editables `.vasproject`.
+
+## 🧭 Flow V3 · canvas libre y FX flotantes
+
+- **Pantalla completa desde FLOW:** el mapa ocupa el navegador como entorno de trabajo, no como una tarjeta dentro de la landing.
+- **Navegación:** arrastra el fondo para desplazarte; usa + / −, Ctrl + rueda o **Ajustar** para ver el grafo. El zoom del mapa es independiente del timeline.
+- **FX independientes:** pulsa FX en una voz o pista (o MASTER FX) para abrir una ventana flotante. Muévela por su encabezado, maximízala o ciérrala; los cables y nodos permanecen detrás.
+- **Parámetros reales por pista:** ajusta afinación, retune, limpieza, brillo, calidez, saturación, eco o espacio. El DSP sigue siendo no destructivo.
+- **Diseño más ligero:** una única superficie de grafo con barras compactas, mayor contraste y menos contenedores; los demás módulos mantienen su funcionalidad.
+- **Sin migración a React Flow:** el editor actual está implementado con JavaScript, CSS y SVG nativos. Se entregó interacción similar sin incorporar React ni reescribir el motor de audio.
+
+Checklist de validación para Codex: [docs/QA-FLOW-V3.md](docs/QA-FLOW-V3.md). La funcionalidad visual y auditiva requiere QA manual antes de aprobarla.
+
+## 🎛️ Signal Flow V2 · editor modular
+
+- **Canvas principal limpio:** VOICE SIGNAL y TRACK SIGNAL son las dos líneas de fuentes. Los buses de VOZ, MÚSICA y SAMPLES se muestran como destinos; FX RETURN solo aparece cuando se utiliza. Todos llegan a MASTER.
+- **FX como subnodos:** los efectos están cerrados dentro de cada tarjeta. Abre **FX** en una voz o pista para activar/desactivar sus procesadores sin convertirlos en nodos principales ni modificar el archivo original. Los presets guardados se aplican a la pista desde la que se abrieron.
+- **MASTER FX real:** EQ LOW/HIGH, DRIVE, COMP, DELAY y REVERB procesan la mezcla sumada. El mismo grafo se usa en reproducción y render WAV; BYPASS conserva los ajustes y el limitador de seguridad permanece activo. El fader MASTER actúa después de los efectos y del limitador, sin alterar su respuesta.
+- **Sample Desk fullscreen:** conserva los 12 pads y añade una biblioteca local en IndexedDB, con preview, insertar y eliminar. Cada sample guardado y cada pad permite elegir destino: SAMPLE BUS, pista seleccionada o MASTER. Arrastra el asa ♫ de cualquier pista al dock SAMPLE DESK para guardar una copia; el diálogo permite elegir audio ORIGINAL o CON FX (FX de pista + Master). La pista de origen nunca se modifica.
+- **Fullscreen Flow:** canvas ampliado y desplazable, nodos movibles, conectores IN/OUT, controles compactos de play/stop y volumen Master. Puedes conectar arrastrando un cable o seleccionando salida y entrada. Se bloquean los ciclos y las conexiones entre pistas de líneas distintas.
+- **Feedback y aprendizaje:** las ondas, cables y buses responden a analizadores reales; los estados idle/playing/muted son distinguibles. El canvas vacío enseña los tres pasos básicos y Master FX tiene ayuda contextual.
+- **Navegación simplificada:** abrir y guardar están agrupados en **PROYECTO**; Flow, Sample Desk, Mixer, Voice Lab y Exportar siguen accesibles. La dirección visual **Red Velvet** usa fondos vino profundos, superficies glassmorphism, controles rose-metal con volumen 3D CSS y acentos cian/magenta para distinguir señales, con contraste reforzado y menos contenedores.
+- **Compatibilidad:** el bus SAMPLES tiene nivel por defecto 100 en proyectos antiguos. Master FX se guarda en opciones del proyecto y en archivos portables. La biblioteca de samples y los presets FX permanecen locales a este navegador; no se suben al archivo de proyecto ni a servidores.
+
+Los tests automatizados de rutas, Master FX, subnodos, persistencia y sintaxis pasan en GitHub Actions. La escucha comparativa, el arrastre táctil y la comprobación visual final en Chrome/Edge siguen siendo QA manual antes de fusionar o desplegar.
+
+Checklist de aceptación y handoff para continuar con Codex: [docs/QA-SIGNAL-FLOW-V2.md](docs/QA-SIGNAL-FLOW-V2.md).
 
 ## 🚀 Instalar y ejecutar
 
@@ -62,13 +88,13 @@ Para detener el servidor, pulsa **Ctrl + C** en la ventana de Terminal que abri�
 
 1. Presiona **Grabar mi voz** → **PERMITIR MICRÓFONO** y acepta el permiso del navegador.
 2. Habla y comprueba que la onda y el medidor se muevan. Después pulsa **GRABAR**.
-3. Para usar el sampler, abre **SAMPLES**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**.
-4. Pulsa un pad para tocarlo; usa **Enviar a pistas** para colocarlo en la mezcla.
+3. Para usar el sampler, abre **SAMPLES**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**. Pulsa **Guardar en biblioteca** para conservar recortes adicionales.
+4. En **Signal Flow**, pulsa **ENCADENAR** o conecta puertos de salida y entrada. Arrastra tus samples desde el lateral o usa **Enviar a pistas**.
 5. Ajusta la canción y elige **EXPORTAR**.
 
 ## 🔒 Privacidad y límites
 
-Todos los sonidos, proyectos y samples se manejan **en tu dispositivo**. El Sample Deck se guarda en el almacenamiento local de **este navegador y dirección web**; por ahora los pads no están dentro del respaldo `.vasproject`. Exporta tus originales si cambias de equipo. El navegador debe conceder permisos para el micrófono; en internet necesitas HTTPS.
+Todos los sonidos, proyectos y samples se manejan **en tu dispositivo**. Los respaldos `.vasproject` incluyen los 12 pads y hasta 500 samples de la biblioteca. Al abrirlos puedes elegir si reemplazar los pads y si añadir los samples a la biblioteca existente; volver a importarlos crea duplicados. El respaldo está limitado a 550 MB. El almacenamiento local pertenece a este navegador y dirección web. El navegador debe conceder permisos para el micrófono; en internet necesitas HTTPS.
 
 El detector de notas y el autotune son **experimentales y monofónicos**; no sustituyen afinación de estudio. Las pruebas automatizadas no garantizan funcionamiento con todos los micrófonos y teléfonos.
 

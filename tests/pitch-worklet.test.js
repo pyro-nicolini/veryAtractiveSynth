@@ -52,3 +52,18 @@ test('silence reports no confident note rather than fictional target',()=>{
   }
   assert.ok(voice.events.some(x=>x.type==='pitch'&&x.voiced===false));
 });
+test('custom target mask changes the actual pitch correction target',()=>{
+  const voice=processor();
+  voice.port.onmessage({data:{type:'monitor',enabled:true}});
+  voice.port.onmessage({data:{type:'note-mask',mask:1<<7}});
+  const params={strength:[1],retune:[1],clean:[0],key:[0],scale:[2]};
+  for(let b=0;b<120;b++){
+    const left=new Float32Array(128),out=[new Float32Array(128),new Float32Array(128)];
+    for(let i=0;i<128;i++)left[i]=.7*Math.sin(2*Math.PI*369.994*(b*128+i)/48000);
+    voice.process([[left]],[out],params);
+  }
+  const voiced=voice.events.filter(x=>x.type==='pitch'&&x.voiced);
+  assert.ok(voiced.length>0);
+  assert.ok(voiced.every(x=>((x.target%12)+12)%12===7));
+  assert.ok(voice.targetRatio>1,'F sharp must shift upward toward G');
+});

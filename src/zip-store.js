@@ -17,7 +17,7 @@ function ensureEntryName(name){
 }
 export async function zipStore(entries){
   if(!entries.length)throw Error('No hay archivos para empaquetar');
-  if(entries.length>100)throw Error('Demasiadas pistas para guardar');
+  if(entries.length>1000)throw Error('Demasiados archivos de audio para guardar');
   const parts=[],central=[];let offset=0,centralLength=0;
   for(const entry of entries){
     const name=enc.encode(ensureEntryName(entry.name)),bytes=entry.data instanceof Uint8Array?entry.data:new Uint8Array(await entry.data.arrayBuffer());
@@ -56,7 +56,7 @@ export async function unzipStore(file,maxSize=550*1024*1024){
     const name=ensureEntryName(dec.decode(bytes.subarray(cursor+30,cursor+30+len)));
     const data=bytes.slice(start,end);
     if(crc32(data)!==crc)throw Error('El proyecto tiene datos dañados: '+name);
-    if(files.has(name)||files.size>=100)throw Error('Proyecto ZIP repetido o excesivo');
+    if(files.has(name)||files.size>=1000)throw Error('Proyecto ZIP repetido o excesivo');
     files.set(name,data);
     cursor=end;
   }

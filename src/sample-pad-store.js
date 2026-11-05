@@ -1,8 +1,8 @@
 /** Twelve reusable local-only samples. Independent IndexedDB from sessions. */
 const DB='vas-personal-samples',STORE='pads';
-export function storageRecord(buffer,name,from=0,to=buffer.duration){
+export function storageRecord(buffer,name,from=0,to=buffer.duration,fx='original'){
  if(!buffer||buffer.numberOfChannels<1||buffer.numberOfChannels>2||buffer.duration>30)throw Error('Sample demasiado largo');
- return {name:String(name||'Sample').slice(0,36),from,to,sampleRate:buffer.sampleRate,length:buffer.length,
+ return {name:String(name||'Sample').slice(0,36),from,to,fx:String(fx||'original').slice(0,20),sampleRate:buffer.sampleRate,length:buffer.length,
   channels:Array.from({length:buffer.numberOfChannels},(_,c)=>buffer.getChannelData(c).slice())};
 }
 export function reviveSample(record){
@@ -14,7 +14,7 @@ export function reviveSample(record){
   if(record.channels[i].length!==record.length)throw Error('Sample incompleto');
   audio.copyToChannel(record.channels[i],i);
  }
- return {name:String(record.name||'Sample').slice(0,36),buffer:audio,
+ return {name:String(record.name||'Sample').slice(0,36),fx:String(record.fx||'original').slice(0,20),buffer:audio,
   from:Math.max(0,Math.min(audio.duration,record.from||0)),
   to:Math.min(audio.duration,record.to||audio.duration)};
 }
@@ -32,24 +32,39 @@ export async function savePad(index,pad){
  const db=await open();
  return new Promise((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
-  if(pad)store.put(storageRecord(pad.buffer,pad.name,pad.from,pad.to),index);
+  if(pad)store.put(storageRecord(pad.buffer,pad.name,pad.from,pad.to,pad.fx),index);
   else store.delete(index);
   tx.oncomplete=()=>{db.close();resolve();};
   tx.onerror=()=>{db.close();reject(tx.error||Error('Error de almacenamiento'))};
  });
 }
-export async function loadPads(){
+export async function loadPads({strict=false}={}){
  const db=await open();
  return new Promise((resolve,reject)=>{
-  const pads=Array(12).fill(null),tx=db.transaction(STORE,'readonly'),store=tx.objectStore(STORE);
+  const pads=Array(12).fill(null),tx=db.transaction(STORE,'readonly'),store=tx.objectStore(STORE);let invalid=false;
   const req=store.openCursor();
   req.onsuccess=()=>{
    const cursor=req.result;if(!cursor)return;
    const key=cursor.key;
-   if(Number.isInteger(key)&&key>=0&&key<12){try{pads[key]=reviveSample(cursor.value);}catch{}}
+   if(Number.isInteger(key)&&key>=0&&key<12){try{pads[key]=reviveSample(cursor.value);}catch{invalid=true;}}
    cursor.continue();
   };
-  tx.oncomplete=()=>{db.close();resolve(pads);};
+  tx.oncomplete=()=>{db.close();if(strict&&invalid)reject(Error('No se pudo leer un pad guardado; revisa Sample Desk antes de respaldar'));else resolve(pads);};
   tx.onerror=()=>{db.close();reject(tx.error||Error('No se pudieron leer los samples'))};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Se canceló la lectura de samples'))};
+ });
+}
+
+/** Replace all pads in a single transaction, so a quota failure cannot leave a partial restore. */
+export async function replacePads(pads){
+ if(!Array.isArray(pads)||pads.length!==12)throw Error('Respaldo de pads inválido');
+ const records=pads.map(pad=>pad?storageRecord(pad.buffer,pad.name,pad.from,pad.to,pad.fx):null);
+ const db=await open();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);
+  for(let i=0;i<12;i++)if(records[i])store.put(records[i],i);else store.delete(i);
+  tx.oncomplete=()=>{db.close();resolve();};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('No se pudieron restaurar los pads'));};
+  tx.onerror=()=>{};
  });
 }

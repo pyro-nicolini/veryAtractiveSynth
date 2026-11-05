@@ -15,14 +15,14 @@ test('portable project keeps Tune Lab coordinates and real DSP knobs across roun
   buffer.getChannelData(0)[1]=.4;
   const track={...defaults(),id:'lead',name:'Voz principal',type:'voice',color:'#a5ff73',buffer};
   applyTunePoint(track,.48,.77,'user:Mi Voz Alien');
-  track.key=4;track.clean=61;track.volume=75;
+  track.key=4;track.clean=61;track.volume=75;track.tuneNoteMask=(1<<4)|(1<<7)|(1<<11);
   const original={...track};
   const blob=await exportProject([track],85,{bpm:130});
   assert.ok(blob.size>44);
   const restored=await importProject(blob,ctx);
   assert.equal(restored.tracks.length,1);
   const result=restored.tracks[0];
-  for(const key of ['tuneX','tuneY','tunePreset','autotune','retune','drive','brightness','warmth','clean','key','volume'])
+  for(const key of ['tuneX','tuneY','tunePreset','autotune','retune','drive','brightness','warmth','clean','key','tuneNoteMask','volume'])
     assert.equal(result[key],original[key],key);
   assert.equal(restored.options.bpm,130);
   assert.ok(Math.abs(result.buffer.getChannelData(0)[1]-.4)<.00001);

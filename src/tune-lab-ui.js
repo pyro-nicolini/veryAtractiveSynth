@@ -1,5 +1,7 @@
 import {TUNE_POINTS,normalizeTune,describeTune,tunePointFromManual,validSavedTune} from './tune-lab.js';
 import {VOICE_CHARACTERS} from './voice-characters.js';
+import {KEYS,SCALES} from './dsp.js';
+import {effectiveTuneNoteMask} from './tune-targets.js';
 const escapeHTML = value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const percent=value=>((value+1)*50).toFixed(2)+'%';
 const vertical=value=>((1-value)*50).toFixed(2)+'%';
@@ -34,6 +36,8 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
     ' style="left:'+percent(point.x)+';top:'+vertical(point.y)+'" title="'+escapeHTML(point.name)+'" aria-label="Probar '+escapeHTML(point.name)+'">'+
     '<span class="lab-anchor-dot">'+point.emoji+'</span><span class="lab-anchor-label">'+escapeHTML(point.name)+'</span></button>').join('');
   const chips=TUNE_POINTS.map(point=>'<button type="button" class="lab-preset" data-tune-preset="'+point.id+'">'+point.emoji+' '+escapeHTML(point.name)+'</button>').join('');
+  const mask=effectiveTuneNoteMask(track);
+  const noteButtons=KEYS.map((name,i)=>'<button type="button" class="android-note-key'+((mask&(1<<i))?' is-active':'')+'" data-tune-note="'+i+'" aria-pressed="'+!!(mask&(1<<i))+'" aria-label="'+escapeHTML(name)+' permitida">'+escapeHTML(name)+'</button>').join('');
   return '<section class="tune-lab" id="tuneLab">'+
     '<div class="lab-intro"><div><div class="section-overline">EXPERIMENTAL / LOCAL AUDIO</div>'+
     '<p>Juega con el nodo en vivo: canta con un micrófono y auriculares, o transforma una pista mientras suena.</p></div>'+
@@ -59,6 +63,11 @@ export function tuneLabMarkup(track,userPresets=[],mode='track',hasTrack=true){
     '<button type="button" class="lab-action" data-action="tune-ab">'+(track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL')+'</button>'+
     '<button type="button" class="lab-action" data-action="tune-surprise">✦ SORPRÉNDEME</button>'+
     '<button type="button" class="lab-action lab-session-record" data-action="session-record" aria-pressed="false">● GRABAR LO QUE ESCUCHO</button></div>'+
+    '<section class="android-note-matrix" aria-label="Notas objetivo del autotune"><div class="android-note-head"><div><small>VOICE ENGINE / TARGET MATRIX</small><strong>Notas permitidas</strong><p>La voz se afina hacia la nota iluminada más cercana.</p></div><span id="tuneNoteCount" aria-live="polite">'+countNotes(mask)+' / 12 ACTIVAS</span></div>'+
+      '<div class="android-note-config"><label for="labTuneKey">TONALIDAD <select id="labTuneKey" data-tune-key="key">'+KEYS.map((name,i)=>'<option value="'+i+'"'+(track.key===i?' selected':'')+'>'+escapeHTML(name)+'</option>').join('')+'</select></label>'+
+      '<label for="labTuneScale">ESCALA <select id="labTuneScale" data-tune-key="scale">'+SCALES.map((name,i)=>'<option value="'+i+'"'+(track.scale===i?' selected':'')+'>'+escapeHTML(name)+'</option>').join('')+'</select></label>'+
+      '<button type="button" class="lab-action" data-action="tune-notes-reset">↺ USAR ESCALA</button></div>'+
+      '<div class="android-note-keys" role="group" aria-label="Activar o excluir notas">'+noteButtons+'</div><p class="android-note-hint" id="tuneNoteMode">'+(track.tuneNoteMask?'MODO PERSONALIZADO':'SIGUIENDO TONALIDAD Y ESCALA')+'</p></section>'+
     '<div class="lab-top-axis"><span>↑ MÁS INTENSO</span><span>Y / FUERZA DE AFINACIÓN</span></div>'+
     '<div class="lab-pad" id="tunePad" role="group" tabindex="0" aria-label="Explorar autotune por coordenadas. Flechas izquierda y derecha cambian lo natural o robótico; arriba y abajo cambian intensidad." aria-describedby="labHint">'+
     '<div class="lab-grid"></div><div class="lab-axis-h"></div><div class="lab-axis-v"></div>'+
@@ -116,4 +125,15 @@ export function updateTuneLabView(root,track){
   });
   const ab=root.querySelector('[data-action="tune-ab"]');
   if(ab){ab.textContent=track.bypassEffects?'↪ VOLVER A EFECTOS':'◉ A/B ORIGINAL';ab.setAttribute('aria-pressed',String(!!track.bypassEffects));}
+  const mask=effectiveTuneNoteMask(track);
+  root.querySelectorAll('[data-tune-note]').forEach(button=>{
+    const active=!!(mask&(1<<Number(button.dataset.tuneNote)));
+    button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));
+  });
+  put('#tuneNoteCount',countNotes(mask)+' / 12 ACTIVAS');
+  put('#tuneNoteMode',track.tuneNoteMask?'MODO PERSONALIZADO':'SIGUIENDO TONALIDAD Y ESCALA');
+  for(const [id,value] of [['#labTuneKey',track.key],['#labTuneScale',track.scale]]){
+    const select=root.querySelector(id);if(select&&document.activeElement!==select)select.value=String(value);
+  }
 }
+function countNotes(mask){let count=0;for(let i=0;i<12;i++)count+=(mask>>i)&1;return count;}

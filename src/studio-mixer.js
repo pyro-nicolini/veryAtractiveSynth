@@ -1,7 +1,7 @@
 /** Mixer routing and gain conversion. All values are private project metadata. */
-export const BUS_IDS=Object.freeze(['music','vocals','fx']);
-export const BUS_LABELS=Object.freeze({music:'MÚSICA',vocals:'VOCES',fx:'EFECTOS'});
-export const DEFAULT_BUSES=Object.freeze({music:100,vocals:100,fx:100});
+export const BUS_IDS=Object.freeze(['music','vocals','samples','fx']);
+export const BUS_LABELS=Object.freeze({music:'MÚSICA',vocals:'VOCES',samples:'SAMPLES',fx:'EFECTOS'});
+export const DEFAULT_BUSES=Object.freeze({music:100,vocals:100,samples:100,fx:100});
 export function busForTrack(track){
   return BUS_IDS.includes(track?.bus)?track.bus:(track?.type==='voice'?'vocals':'music');
 }

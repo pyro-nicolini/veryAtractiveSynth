@@ -1,5 +1,6 @@
 /** Offline, original procedural groove library. No copyrighted samples or network assets. */
 import {clamp} from './dsp.js';
+import {clipDuration} from './track-clips.js';
 export const GROOVES=Object.freeze([
   {id:'pop',name:'Pop luminoso',category:'Pop',bpm:112,bars:8,kick:[0,2],snare:[1,3],hat:2,bass:0.42,icon:'☀'},
   {id:'house',name:'House flotante',category:'Electrónica',bpm:124,bars:8,kick:[0,1,2,3],snare:[1,3],hat:2,bass:0.5,icon:'✦'},
@@ -91,21 +92,23 @@ export function applyAutoTransition(track,clipId,id,bpm=104){
   const clips=Array.isArray(track.clips)?track.clips:[track];
   const target=clips.find(c=>c.id===clipId)||clips[0];
   if(!target)throw Error('Elige un clip primero');
-  const length=Math.max(.02,(target.loop?.repeats?((target.loop.to-target.loop.from)*target.loop.repeats):
-     (target.buffer.duration-(target.trimStart||0)-(target.trimEnd||0))));
+  const length=clipDuration(target);
+  if(length<.02)throw Error('El clip es demasiado corto para aplicar la transición');
   const beat=60/clamp(bpm,40,240),fade=Math.min(length/2,beat);
   if(id==='reset'){target.fadeIn=0;target.fadeOut=0;}
   if(id==='in'){target.fadeIn=fade;target.fadeOut=0;}
   if(id==='out'){target.fadeIn=0;target.fadeOut=fade;}
   if(id==='both'){target.fadeIn=fade*.5;target.fadeOut=fade*.5;}
   if(id==='cross'){
-    const next=clips.filter(c=>c!==target&&c.offset>=target.offset).sort((a,b)=>a.offset-b.offset)[0];
+    const targetOffset=Math.max(0,Number(target.offset)||0);
+    const next=clips.filter(c=>c!==target&&(Number(c.offset)||0)>=targetOffset).sort((a,b)=>(Number(a.offset)||0)-(Number(b.offset)||0))[0];
     if(!next)throw Error('Añade otro clip a la pista para crear un cruce');
-    const nextLen=Math.max(.02,next.buffer.duration-(next.trimStart||0)-(next.trimEnd||0));
+    const nextLen=clipDuration(next);
+    if(nextLen<.02)throw Error('El siguiente clip es demasiado corto para crear un cruce');
     const overlap=Math.min(fade,length*.45,nextLen*.45);
     target.fadeOut=overlap;
     next.fadeIn=overlap;
-    next.offset=Math.max(0,(target.offset||0)+length-overlap);
+    next.offset=targetOffset+length-overlap;
   }
   return target;
 }
