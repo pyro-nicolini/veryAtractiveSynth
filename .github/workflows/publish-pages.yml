@@ -1,8 +1,8 @@
-name: Publish Very Atractive Synth (DesignPhase)
+name: Publish Very Atractive Synth (main)
 
 on:
   push:
-    branches: [DesignPhase]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout DesignPhase
+      - name: Checkout main
         uses: actions/checkout@v4
       - name: Set up Node 22
         uses: actions/setup-node@v4

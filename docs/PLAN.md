@@ -262,4 +262,4 @@ El motor de afinación y los filtros iniciales NO equivalen a restauración por 
 10. Testear bajo HTTPS en teléfono, sin permisos, offline y con almacenamiento insuficiente.
 11. Medir tiempo a primera creación, CPU y latencia; registrar issues antes de aprobar merge.
 
-**Mantener main intacta. Publicar DesignPhase solo cuando el QA pase.**
+**Actualización 2026-11-05:** el usuario autorizó promover el rediseño Android Synth a `main`. La publicación automática de GitHub Pages se ejecuta desde `main` después de las pruebas y el build.

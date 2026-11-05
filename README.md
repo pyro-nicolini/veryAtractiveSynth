@@ -88,8 +88,8 @@ Para detener el servidor, pulsa **Ctrl + C** en la ventana de Terminal que abri�
 
 1. Presiona **Grabar mi voz** → **PERMITIR MICRÓFONO** y acepta el permiso del navegador.
 2. Habla y comprueba que la onda y el medidor se muevan. Después pulsa **GRABAR**.
-3. Para usar el sampler, abre **SAMPLES**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**. Pulsa **Guardar en biblioteca** para conservar recortes adicionales.
-4. En **Signal Flow**, pulsa **ENCADENAR** o conecta puertos de salida y entrada. Arrastra tus samples desde el lateral o usa **Enviar a pistas**.
+3. Para usar el sampler, abre **SAMPLE DESK**, pulsa ✎ en un pad, carga audio o corta desde la pista seleccionada y pulsa **Guardar pad**. Pulsa **Guardar en biblioteca** para conservar recortes adicionales.
+4. En **Signal Flow**, pulsa **AUTO CONECTAR** o conecta puertos de salida y entrada. Arrastra tus samples desde el lateral o usa **Enviar a pistas**.
 5. Ajusta la canción y elige **EXPORTAR**.
 
 ## 🔒 Privacidad y límites
